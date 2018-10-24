@@ -32,11 +32,12 @@ export class Parser {
 
   parse(
       source: string, url: string, parseExpansionForms: boolean = false,
-      interpolationConfig: InterpolationConfig = DEFAULT_INTERPOLATION_CONFIG): ParseTreeResult {
+      interpolationConfig: InterpolationConfig = DEFAULT_INTERPOLATION_CONFIG,
+      canSelfClose = false): ParseTreeResult {
     const tokensAndErrors =
-        lex.tokenize(source, url, this.getTagDefinition, parseExpansionForms, interpolationConfig);
+        lex.tokenize(source, url, this.getTagDefinition, parseExpansionForms, interpolationConfig, canSelfClose);
 
-    const treeAndErrors = new _TreeBuilder(tokensAndErrors.tokens, this.getTagDefinition).build();
+    const treeAndErrors = new _TreeBuilder(tokensAndErrors.tokens, this.getTagDefinition, canSelfClose).build();
 
     return new ParseTreeResult(
         treeAndErrors.rootNodes,
@@ -55,7 +56,8 @@ class _TreeBuilder {
   private _elementStack: html.Element[] = [];
 
   constructor(
-      private tokens: lex.Token[], private getTagDefinition: (tagName: string) => TagDefinition) {
+      private tokens: lex.Token[], private getTagDefinition: (tagName: string) => TagDefinition,
+      private canSelfClose: boolean) {
     this._advance();
   }
 
@@ -78,6 +80,8 @@ class _TreeBuilder {
         this._consumeText(this._advance());
       } else if (this._peek.type === lex.TokenType.EXPANSION_FORM_START) {
         this._consumeExpansion(this._advance());
+      } else if (this._peek.type === lex.TokenType.DOC_TYPE_START) {
+        this._consumeDocType(this._advance());
       } else {
         // Skip all other tokens...
         this._advance();
@@ -104,15 +108,29 @@ class _TreeBuilder {
   }
 
   private _consumeCdata(startToken: lex.Token) {
-    this._consumeText(this._advance());
-    this._advanceIf(lex.TokenType.CDATA_END);
+    const text = this._advance();
+    const value = this._getText(text);
+    const endToken = this._advanceIf(lex.TokenType.CDATA_END);
+    this._addToParent(new html.CDATA(value, new ParseSourceSpan(
+        startToken.sourceSpan.start, (endToken || text).sourceSpan.end)));
   }
 
-  private _consumeComment(token: lex.Token) {
+  private _consumeComment(startToken: lex.Token) {
     const text = this._advanceIf(lex.TokenType.RAW_TEXT);
-    this._advanceIf(lex.TokenType.COMMENT_END);
+    const endToken = this._advanceIf(lex.TokenType.COMMENT_END);
     const value = text != null ? text.parts[0].trim() : null;
-    this._addToParent(new html.Comment(value, token.sourceSpan));
+    const sourceSpan = new ParseSourceSpan(
+        startToken.sourceSpan.start, (endToken || text || startToken).sourceSpan.end);
+    this._addToParent(new html.Comment(value, sourceSpan));
+  }
+
+  private _consumeDocType(startToken: lex.Token) {
+    const text = this._advanceIf(lex.TokenType.RAW_TEXT);
+    const endToken = this._advanceIf(lex.TokenType.DOC_TYPE_END);
+    const value = text != null ? text.parts[0].trim() : null;
+    const sourceSpan = new ParseSourceSpan(
+        startToken.sourceSpan.start, (endToken || text || startToken).sourceSpan.end);
+    this._addToParent(new html.DocType(value, sourceSpan));
   }
 
   private _consumeExpansion(token: lex.Token) {
@@ -161,7 +179,7 @@ class _TreeBuilder {
     exp.push(new lex.Token(lex.TokenType.EOF, [], end.sourceSpan));
 
     // parse everything in between { and }
-    const parsedExp = new _TreeBuilder(exp, this.getTagDefinition).build();
+    const parsedExp = new _TreeBuilder(exp, this.getTagDefinition, this.canSelfClose).build();
     if (parsedExp.errors.length > 0) {
       this._errors = this._errors.concat(<TreeError[]>parsedExp.errors);
       return null;
@@ -215,7 +233,7 @@ class _TreeBuilder {
     }
   }
 
-  private _consumeText(token: lex.Token) {
+  private _getText(token: lex.Token) {
     let text = token.parts[0];
     if (text.length > 0 && text[0] == '\n') {
       const parent = this._getParentElement();
@@ -224,7 +242,11 @@ class _TreeBuilder {
         text = text.substring(1);
       }
     }
+    return text;
+  }
 
+  private _consumeText(token: lex.Token) {
+    const text = this._getText(token);
     if (text.length > 0) {
       this._addToParent(new html.Text(text, token.sourceSpan));
     }
@@ -252,7 +274,7 @@ class _TreeBuilder {
       this._advance();
       selfClosing = true;
       const tagDef = this.getTagDefinition(fullName);
-      if (!(tagDef.canSelfClose || getNsPrefix(fullName) !== null || tagDef.isVoid)) {
+      if (!(this.canSelfClose || tagDef.canSelfClose || getNsPrefix(fullName) !== null || tagDef.isVoid)) {
         this._errors.push(TreeError.create(
             fullName, startTagToken.sourceSpan,
             `Only void and foreign elements can be self closed "${startTagToken.parts[1]}"`));
@@ -263,7 +285,8 @@ class _TreeBuilder {
     }
     const end = this._peek.sourceSpan.start;
     const span = new ParseSourceSpan(startTagToken.sourceSpan.start, end);
-    const el = new html.Element(fullName, attrs, [], span, span, undefined);
+    const nameSpan = new ParseSourceSpan(startTagToken.sourceSpan.start.moveBy(1), startTagToken.sourceSpan.end);
+    const el = new html.Element(fullName, attrs, [], span, span, undefined, nameSpan);
     this._pushElement(el);
     if (selfClosing) {
       this._popElement(fullName);
@@ -313,7 +336,8 @@ class _TreeBuilder {
   private _popElement(fullName: string): boolean {
     for (let stackIndex = this._elementStack.length - 1; stackIndex >= 0; stackIndex--) {
       const el = this._elementStack[stackIndex];
-      if (el.name == fullName) {
+      const isForeignElement = getNsPrefix(el.name);
+      if (isForeignElement ? el.name == fullName : el.name.toLowerCase() == fullName.toLowerCase()) {
         this._elementStack.splice(stackIndex, this._elementStack.length - stackIndex);
         return true;
       }
@@ -337,7 +361,7 @@ class _TreeBuilder {
       valueSpan = valueToken.sourceSpan;
     }
     return new html.Attribute(
-        fullName, value, new ParseSourceSpan(attrName.sourceSpan.start, end), valueSpan);
+        fullName, value, new ParseSourceSpan(attrName.sourceSpan.start, end), valueSpan, attrName.sourceSpan);
   }
 
   private _getParentElement(): html.Element|null {

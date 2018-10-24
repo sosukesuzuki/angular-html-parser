@@ -26,7 +26,8 @@ export enum TokenType {
   CDATA_END,
   ATTR_NAME,
   ATTR_VALUE,
-  DOC_TYPE,
+  DOC_TYPE_START,
+  DOC_TYPE_END,
   EXPANSION_FORM_START,
   EXPANSION_CASE_VALUE,
   EXPANSION_CASE_EXP_START,
@@ -52,10 +53,11 @@ export class TokenizeResult {
 export function tokenize(
     source: string, url: string, getTagDefinition: (tagName: string) => TagDefinition,
     tokenizeExpansionForms: boolean = false,
-    interpolationConfig: InterpolationConfig = DEFAULT_INTERPOLATION_CONFIG): TokenizeResult {
+    interpolationConfig: InterpolationConfig = DEFAULT_INTERPOLATION_CONFIG,
+    canSelfClose = false): TokenizeResult {
   return new _Tokenizer(
              new ParseSourceFile(source, url), getTagDefinition, tokenizeExpansionForms,
-             interpolationConfig)
+             interpolationConfig, canSelfClose)
       .tokenize();
 }
 
@@ -103,7 +105,8 @@ class _Tokenizer {
   constructor(
       private _file: ParseSourceFile, private _getTagDefinition: (tagName: string) => TagDefinition,
       private _tokenizeIcu: boolean,
-      private _interpolationConfig: InterpolationConfig = DEFAULT_INTERPOLATION_CONFIG) {
+      private _interpolationConfig: InterpolationConfig = DEFAULT_INTERPOLATION_CONFIG,
+      private canSelfClose = false) {
     this._input = _file.content;
     this._length = _file.content.length;
     this._advance();
@@ -288,6 +291,13 @@ class _Tokenizer {
     }
   }
 
+  private _requireStrCaseInsensitive(chars: string) {
+    const location = this._getLocation();
+    if (!this._attemptStrCaseInsensitive(chars)) {
+      throw this._createError(_unexpectedCharacterErrorMsg(this._peek), this._getSpan(location));
+    }
+  }
+
   private _attemptCharCodeUntilFn(predicate: (code: number) => boolean) {
     while (!predicate(this._peek)) {
       this._advance();
@@ -396,10 +406,13 @@ class _Tokenizer {
   }
 
   private _consumeDocType(start: ParseLocation) {
-    this._beginToken(TokenType.DOC_TYPE, start);
-    this._attemptUntilChar(chars.$GT);
-    this._advance();
-    this._endToken([this._input.substring(start.offset + 2, this._index - 1)]);
+    this._beginToken(TokenType.DOC_TYPE_START, start);
+    this._requireStrCaseInsensitive('DOCTYPE');
+    this._endToken([]);
+    this._attemptCharCodeUntilFn(isNotWhitespace);
+    const textToken = this._consumeRawText(false, chars.$GT, () => true);
+    this._beginToken(TokenType.DOC_TYPE_END, textToken.sourceSpan.end);
+    this._endToken([]);
   }
 
   private _consumePrefixAndName(): string[] {
@@ -455,6 +468,10 @@ class _Tokenizer {
       }
 
       throw e;
+    }
+
+    if (this.canSelfClose && this.tokens[this.tokens.length - 1].type === TokenType.TAG_OPEN_END_VOID) {
+      return;
     }
 
     const contentTokenType = this._getTagDefinition(tagName).contentType;

@@ -79,7 +79,20 @@ export class WhitespaceVisitor implements html.Visitor {
     return null;
   }
 
+  visitCdata(cdata: html.CDATA, context: any): any {
+    const isNotBlank = cdata.value.match(NO_WS_REGEXP);
+
+    if (isNotBlank) {
+      return new html.CDATA(
+          replaceNgsp(cdata.value).replace(WS_REPLACE_REGEXP, ' '), cdata.sourceSpan);
+    }
+
+    return null;
+  }
+
   visitComment(comment: html.Comment, context: any): any { return comment; }
+
+  visitDocType(docType: html.DocType, context: any): any { return docType; }
 
   visitExpansion(expansion: html.Expansion, context: any): any { return expansion; }
 
