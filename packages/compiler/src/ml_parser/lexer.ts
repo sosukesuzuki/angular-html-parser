@@ -27,7 +27,8 @@ export enum TokenType {
   ATTR_NAME,
   ATTR_QUOTE,
   ATTR_VALUE,
-  DOC_TYPE,
+  DOC_TYPE_START,
+  DOC_TYPE_END,
   EXPANSION_FORM_START,
   EXPANSION_CASE_VALUE,
   EXPANSION_CASE_EXP_START,
@@ -101,6 +102,8 @@ export interface TokenizeOptions {
    * included in source-map segments.  A common example is whitespace.
    */
   leadingTriviaChars?: string[];
+
+  canSelfClose?: boolean;
 }
 
 export function tokenize(
@@ -130,6 +133,7 @@ class _Tokenizer {
   private _tokenizeIcu: boolean;
   private _interpolationConfig: InterpolationConfig;
   private _leadingTriviaCodePoints: number[]|undefined;
+  private _canSelfClose: boolean;
   private _currentTokenStart: CharacterCursor|null = null;
   private _currentTokenType: TokenType|null = null;
   private _expansionCaseStack: TokenType[] = [];
@@ -149,6 +153,7 @@ class _Tokenizer {
     this._interpolationConfig = options.interpolationConfig || DEFAULT_INTERPOLATION_CONFIG;
     this._leadingTriviaCodePoints =
         options.leadingTriviaChars && options.leadingTriviaChars.map(c => c.codePointAt(0) || 0);
+    this._canSelfClose = options.canSelfClose || false;
     const range =
         options.range || {endPos: _file.content.length, startPos: 0, startLine: 0, startCol: 0};
     this._cursor = options.escapedString ? new EscapedCharacterCursor(_file, range) :
@@ -332,6 +337,13 @@ class _Tokenizer {
     }
   }
 
+  private _requireStrCaseInsensitive(chars: string) {
+    const location = this._cursor.clone();
+    if (!this._attemptStrCaseInsensitive(chars)) {
+      throw this._createError(_unexpectedCharacterErrorMsg(this._cursor.peek()), this._cursor.getSpan(location));
+    }
+  }
+
   private _attemptCharCodeUntilFn(predicate: (code: number) => boolean) {
     while (!predicate(this._cursor.peek())) {
       this._cursor.advance();
@@ -439,12 +451,14 @@ class _Tokenizer {
   }
 
   private _consumeDocType(start: CharacterCursor) {
-    this._beginToken(TokenType.DOC_TYPE, start);
-    const contentStart = this._cursor.clone();
-    this._attemptUntilChar(chars.$GT);
-    const content = this._cursor.getChars(contentStart);
+    this._beginToken(TokenType.DOC_TYPE_START, start);
+    this._requireStrCaseInsensitive('DOCTYPE');
+    this._endToken([]);
+    this._attemptCharCodeUntilFn(isNotWhitespace);
+    const textToken = this._consumeRawText(false, () => this._cursor.peek() === chars.$GT);
+    this._beginToken(TokenType.DOC_TYPE_END);
     this._cursor.advance();
-    this._endToken([content]);
+    this._endToken([]);
   }
 
   private _consumePrefixAndName(): string[] {
@@ -506,6 +520,10 @@ class _Tokenizer {
       }
 
       throw e;
+    }
+
+    if (this._canSelfClose && this.tokens[this.tokens.length - 1].type === TokenType.TAG_OPEN_END_VOID) {
+      return;
     }
 
     const contentTokenType = this._getTagDefinition(tagName).contentType;

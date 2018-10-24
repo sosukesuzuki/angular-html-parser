@@ -20,6 +20,11 @@ export class Text implements Node {
   visit(visitor: Visitor, context: any): any { return visitor.visitText(this, context); }
 }
 
+export class CDATA implements Node {
+  constructor(public value: string, public sourceSpan: ParseSourceSpan) {}
+  visit(visitor: Visitor, context: any): any { return visitor.visitCdata(this, context); }
+}
+
 export class Expansion implements Node {
   constructor(
       public switchValue: string, public type: string, public cases: ExpansionCase[],
@@ -39,7 +44,7 @@ export class ExpansionCase implements Node {
 export class Attribute implements Node {
   constructor(
       public name: string, public value: string, public sourceSpan: ParseSourceSpan,
-      public valueSpan?: ParseSourceSpan, public i18n?: I18nAST) {}
+      public valueSpan: ParseSourceSpan|null = null, public nameSpan: ParseSourceSpan|null = null, public i18n: I18nAST|null = null) {}
   visit(visitor: Visitor, context: any): any { return visitor.visitAttribute(this, context); }
 }
 
@@ -47,13 +52,18 @@ export class Element implements Node {
   constructor(
       public name: string, public attrs: Attribute[], public children: Node[],
       public sourceSpan: ParseSourceSpan, public startSourceSpan: ParseSourceSpan|null = null,
-      public endSourceSpan: ParseSourceSpan|null = null, public i18n?: I18nAST) {}
+      public endSourceSpan: ParseSourceSpan|null = null, public nameSpan: ParseSourceSpan|null = null, public i18n: I18nAST|null = null) {}
   visit(visitor: Visitor, context: any): any { return visitor.visitElement(this, context); }
 }
 
 export class Comment implements Node {
   constructor(public value: string|null, public sourceSpan: ParseSourceSpan) {}
   visit(visitor: Visitor, context: any): any { return visitor.visitComment(this, context); }
+}
+
+export class DocType implements Node {
+  constructor(public value: string|null, public sourceSpan: ParseSourceSpan) {}
+  visit(visitor: Visitor, context: any): any { return visitor.visitDocType(this, context); }
 }
 
 export interface Visitor {
@@ -64,7 +74,9 @@ export interface Visitor {
   visitElement(element: Element, context: any): any;
   visitAttribute(attribute: Attribute, context: any): any;
   visitText(text: Text, context: any): any;
+  visitCdata(text: Text, context: any): any;
   visitComment(comment: Comment, context: any): any;
+  visitDocType(docType: DocType, context: any): any;
   visitExpansion(expansion: Expansion, context: any): any;
   visitExpansionCase(expansionCase: ExpansionCase, context: any): any;
 }
@@ -96,7 +108,9 @@ export class RecursiveVisitor implements Visitor {
 
   visitAttribute(ast: Attribute, context: any): any {}
   visitText(ast: Text, context: any): any {}
+  visitCdata(ast: CDATA, context: any): any {}
   visitComment(ast: Comment, context: any): any {}
+  visitDocType(ast: DocType, context: any): any {}
 
   visitExpansion(ast: Expansion, context: any): any {
     return this.visitChildren(context, visit => { visit(ast.cases); });
