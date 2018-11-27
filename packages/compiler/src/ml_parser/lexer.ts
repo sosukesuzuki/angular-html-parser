@@ -104,6 +104,7 @@ export interface TokenizeOptions {
   leadingTriviaChars?: string[];
 
   canSelfClose?: boolean;
+  allowHtmComponentClosingTags?: boolean;
 }
 
 export function tokenize(
@@ -134,6 +135,7 @@ class _Tokenizer {
   private _interpolationConfig: InterpolationConfig;
   private _leadingTriviaCodePoints: number[]|undefined;
   private _canSelfClose: boolean;
+  private _allowHtmComponentClosingTags: boolean;
   private _currentTokenStart: CharacterCursor|null = null;
   private _currentTokenType: TokenType|null = null;
   private _expansionCaseStack: TokenType[] = [];
@@ -154,6 +156,7 @@ class _Tokenizer {
     this._leadingTriviaCodePoints =
         options.leadingTriviaChars && options.leadingTriviaChars.map(c => c.codePointAt(0) || 0);
     this._canSelfClose = options.canSelfClose || false;
+    this._allowHtmComponentClosingTags = options.allowHtmComponentClosingTags || false;
     const range =
         options.range || {endPos: _file.content.length, startPos: 0, startLine: 0, startCol: 0};
     this._cursor = options.escapedString ? new EscapedCharacterCursor(_file, range) :
@@ -617,10 +620,18 @@ class _Tokenizer {
   private _consumeTagClose(start: CharacterCursor) {
     this._beginToken(TokenType.TAG_CLOSE, start);
     this._attemptCharCodeUntilFn(isNotWhitespace);
-    const prefixAndName = this._consumePrefixAndName();
-    this._attemptCharCodeUntilFn(isNotWhitespace);
-    this._requireCharCode(chars.$GT);
-    this._endToken(prefixAndName);
+
+    // https://github.com/developit/htm
+    if (this._allowHtmComponentClosingTags && this._attemptCharCode(chars.$SLASH)) {
+      this._attemptCharCodeUntilFn(isNotWhitespace);
+      this._requireCharCode(chars.$GT);
+      this._endToken([]);
+    } else {
+      const prefixAndName = this._consumePrefixAndName();
+      this._attemptCharCodeUntilFn(isNotWhitespace);
+      this._requireCharCode(chars.$GT);
+      this._endToken(prefixAndName);
+    }
   }
 
   private _consumeExpansionFormStart() {

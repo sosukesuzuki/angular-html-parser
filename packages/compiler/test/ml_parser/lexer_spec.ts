@@ -449,6 +449,13 @@ import {ParseLocation, ParseSourceFile, ParseSourceSpan} from '../../src/parse_u
           [lex.TokenType.TAG_CLOSE, 'Unexpected character "EOF"', '0:6']
         ]);
       });
+
+      it('should allow htm component tag close if enabled', () => {
+        expect(tokenizeAndHumanizeParts('</ / >', {allowHtmComponentClosingTags: true})).toEqual([
+          [lex.TokenType.TAG_CLOSE],
+          [lex.TokenType.EOF],
+        ]);
+      });
     });
 
     describe('entities', () => {

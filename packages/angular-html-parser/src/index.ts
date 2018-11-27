@@ -9,10 +9,14 @@ const getParser = () => {
   return parser;
 };
 
-export function parse(input: string, { canSelfClose = false } = {}) {
+export function parse(
+  input: string,
+  { canSelfClose = false, allowHtmComponentClosingTags = false } = {}
+) {
   return getParser().parse(input, "angular-html-parser", {
     tokenizeExpansionForms: false,
     interpolationConfig: undefined,
-    canSelfClose
+    canSelfClose,
+    allowHtmComponentClosingTags
   });
 }
