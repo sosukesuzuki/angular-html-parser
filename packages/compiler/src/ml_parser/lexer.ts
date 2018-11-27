@@ -179,17 +179,25 @@ class _Tokenizer {
       try {
         if (this._attemptCharCode(chars.$LT)) {
           if (this._attemptCharCode(chars.$BANG)) {
-            if (this._attemptCharCode(chars.$LBRACKET)) {
+            if (this._attemptStr('[CDATA[')) {
               this._consumeCdata(start);
-            } else if (this._attemptCharCode(chars.$MINUS)) {
+            } else if (this._attemptStr('--')) {
               this._consumeComment(start);
-            } else {
+            } else if (this._attemptStrCaseInsensitive('doctype')) {
               this._consumeDocType(start);
+            } else {
+              this._consumeBogusComment(start);
             }
           } else if (this._attemptCharCode(chars.$SLASH)) {
             this._consumeTagClose(start);
           } else {
-            this._consumeTagOpen(start);
+            const savedPos = this._cursor.clone();
+            if (this._attemptCharCode(chars.$QUESTION)) {
+              this._cursor = savedPos;
+              this._consumeBogusComment(start);
+            } else {
+              this._consumeTagOpen(start);
+            }
           }
         } else if (!(this._tokenizeIcu && this._tokenizeExpansionForm())) {
           this._consumeText();
@@ -432,7 +440,6 @@ class _Tokenizer {
 
   private _consumeComment(start: CharacterCursor) {
     this._beginToken(TokenType.COMMENT_START, start);
-    this._requireCharCode(chars.$MINUS);
     this._endToken([]);
     this._consumeRawText(false, () => this._attemptStr('-->'));
     this._beginToken(TokenType.COMMENT_END);
@@ -440,9 +447,18 @@ class _Tokenizer {
     this._endToken([]);
   }
 
+  // https://www.w3.org/TR/html5/syntax.html#bogus-comment-state
+  private _consumeBogusComment(start: CharacterCursor) {
+    this._beginToken(TokenType.COMMENT_START, start);
+    this._endToken([]);
+    this._consumeRawText(false, () => this._cursor.peek() === chars.$GT);
+    this._beginToken(TokenType.COMMENT_END);
+    this._cursor.advance();
+    this._endToken([]);
+  }
+
   private _consumeCdata(start: CharacterCursor) {
     this._beginToken(TokenType.CDATA_START, start);
-    this._requireStr('CDATA[');
     this._endToken([]);
     this._consumeRawText(false, () => this._attemptStr(']]>'));
     this._beginToken(TokenType.CDATA_END);
@@ -452,10 +468,8 @@ class _Tokenizer {
 
   private _consumeDocType(start: CharacterCursor) {
     this._beginToken(TokenType.DOC_TYPE_START, start);
-    this._requireStrCaseInsensitive('DOCTYPE');
     this._endToken([]);
-    this._attemptCharCodeUntilFn(isNotWhitespace);
-    const textToken = this._consumeRawText(false, () => this._cursor.peek() === chars.$GT);
+    this._consumeRawText(false, () => this._cursor.peek() === chars.$GT);
     this._beginToken(TokenType.DOC_TYPE_END);
     this._cursor.advance();
     this._endToken([]);
