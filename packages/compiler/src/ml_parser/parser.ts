@@ -29,12 +29,14 @@ export class ParseTreeResult {
 export class Parser {
   constructor(public getTagDefinition: (tagName: string) => TagDefinition) {}
 
-  parse(source: string, url: string, options?: lex.TokenizeOptions): ParseTreeResult {
-    const tokensAndErrors = lex.tokenize(source, url, this.getTagDefinition, options);
+  parse(source: string, url: string, options?: lex.TokenizeOptions, isTagNameCaseSensitive = false): ParseTreeResult {
+    const getTagDefinition = isTagNameCaseSensitive ? this.getTagDefinition : (tagName: string) => this.getTagDefinition(tagName.toLowerCase());
+    
+    const tokensAndErrors = lex.tokenize(source, url, getTagDefinition, options);
 
     const canSelfClose = (options && options.canSelfClose) || false;
     const allowHtmComponentClosingTags = (options && options.allowHtmComponentClosingTags) || false;
-    const treeAndErrors = new _TreeBuilder(tokensAndErrors.tokens, this.getTagDefinition, canSelfClose, allowHtmComponentClosingTags).build();
+    const treeAndErrors = new _TreeBuilder(tokensAndErrors.tokens, getTagDefinition, canSelfClose, allowHtmComponentClosingTags, isTagNameCaseSensitive).build();
 
     return new ParseTreeResult(
         treeAndErrors.rootNodes,
@@ -54,7 +56,7 @@ class _TreeBuilder {
 
   constructor(
       private tokens: lex.Token[], private getTagDefinition: (tagName: string) => TagDefinition,
-      private canSelfClose: boolean, private allowHtmComponentClosingTags: boolean) {
+      private canSelfClose: boolean, private allowHtmComponentClosingTags: boolean, private isTagNameCaseSensitive: boolean) {
     this._advance();
   }
 
@@ -176,7 +178,8 @@ class _TreeBuilder {
     exp.push(new lex.Token(lex.TokenType.EOF, [], end.sourceSpan));
 
     // parse everything in between { and }
-    const parsedExp = new _TreeBuilder(exp, this.getTagDefinition, this.canSelfClose, this.allowHtmComponentClosingTags).build();
+    const parsedExp = new _TreeBuilder(exp, this.getTagDefinition,
+      this.canSelfClose, this.allowHtmComponentClosingTags, this.isTagNameCaseSensitive).build();
     if (parsedExp.errors.length > 0) {
       this._errors = this._errors.concat(<TreeError[]>parsedExp.errors);
       return null;
