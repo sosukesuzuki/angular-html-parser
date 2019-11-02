@@ -4,7 +4,7 @@
   "description": "A HTML parser extracted from Angular with some modifications",
   "main": "lib/angular-html-parser/src/index.js",
   "types": "lib/angular-html-parser/src/index.d.ts",
-  "repository": "https://github.com/ikatyang/angular-html-parser/blob/master/packages/angular-html-parser",
+  "repository": "https://github.com/ikatyang/angular-html-parser",
   "homepage": "https://github.com/ikatyang/angular-html-parser/blob/master/packages/angular-html-parser#readme",
   "author": {
     "name": "Ika",
