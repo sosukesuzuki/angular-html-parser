@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {ParseError, ParseSourceSpan} from '../parse_util';
+import {ParseError, ParseSourceSpan, ParseLocation} from '../parse_util';
 
 import * as html from './ast';
 import * as lex from './lexer';
@@ -350,8 +350,10 @@ class _TreeBuilder {
     let end = attrName.sourceSpan.end;
     let value = '';
     let valueSpan: ParseSourceSpan = undefined !;
+    let quoteStart: ParseLocation = undefined !;
     if (this._peek.type === lex.TokenType.ATTR_QUOTE) {
-      this._advance();
+      const quoteToken = this._advance();
+      quoteStart = quoteToken.sourceSpan.start;
     }
     if (this._peek.type === lex.TokenType.ATTR_VALUE) {
       const valueToken = this._advance();
@@ -362,6 +364,7 @@ class _TreeBuilder {
     if (this._peek.type === lex.TokenType.ATTR_QUOTE) {
       const quoteToken = this._advance();
       end = quoteToken.sourceSpan.end;
+      valueSpan = new ParseSourceSpan(quoteStart, end);
     }
     return new html.Attribute(
         fullName, value, new ParseSourceSpan(attrName.sourceSpan.start, end), valueSpan, attrName.sourceSpan);

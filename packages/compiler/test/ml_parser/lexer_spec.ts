@@ -688,6 +688,16 @@ import {ParseLocation, ParseSourceFile, ParseSourceSpan} from '../../src/parse_u
         ]);
       });
 
+      it('should accept closing tags with prefix', () => {
+        expect(tokenizeAndHumanizeParts(`<html:script>a</html:script>`)).toEqual([
+          [lex.TokenType.TAG_OPEN_START, 'html', 'script'],
+          [lex.TokenType.TAG_OPEN_END],
+          [lex.TokenType.RAW_TEXT, 'a'],
+          [lex.TokenType.TAG_CLOSE, 'html', 'script'],
+          [lex.TokenType.EOF],
+        ]);
+      });
+
       it('should store the locations', () => {
         expect(tokenizeAndHumanizeSourceSpans(`<script>a</script>`)).toEqual([
           [lex.TokenType.TAG_OPEN_START, '<script'],
