@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -8,7 +8,7 @@
 
 /* tslint:disable:no-console  */
 import {Component, Host, NgModule} from '@angular/core';
-import {AbstractControl, FormBuilder, FormGroup, FormGroupDirective, ReactiveFormsModule, Validators} from '@angular/forms';
+import {AbstractControl, FormBuilder, FormGroup, FormGroupDirective, ReactiveFormsModule, UntypedFormBuilder, UntypedFormGroup, Validators} from '@angular/forms';
 import {BrowserModule} from '@angular/platform-browser';
 import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
 
@@ -52,7 +52,9 @@ export class ShowError {
   controlPath: string;
   errorTypes: string[];
 
-  constructor(@Host() formDir: FormGroupDirective) { this.formDir = formDir; }
+  constructor(@Host() formDir: FormGroupDirective) {
+    this.formDir = formDir;
+  }
 
   get errorMessage(): string {
     const form: FormGroup = this.formDir.form;
@@ -137,10 +139,10 @@ export class ShowError {
   `
 })
 export class ReactiveForms {
-  form: FormGroup;
+  form: UntypedFormGroup;
   countries = ['US', 'Canada'];
 
-  constructor(fb: FormBuilder) {
+  constructor(fb: UntypedFormBuilder) {
     this.form = fb.group({
       'firstName': ['', Validators.required],
       'middleName': [''],

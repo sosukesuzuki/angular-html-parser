@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -9,7 +9,7 @@ import {getLView, getSelectedIndex} from '../state';
 import {NO_CHANGE} from '../tokens';
 
 import {interpolation1, interpolation2, interpolation3, interpolation4, interpolation5, interpolation6, interpolation7, interpolation8, interpolationV} from './interpolation';
-import {TsickleIssue1009, textBindingInternal} from './shared';
+import {textBindingInternal} from './shared';
 
 
 /**
@@ -32,7 +32,7 @@ import {TsickleIssue1009, textBindingInternal} from './shared';
  * @see textInterpolateV
  * @codeGenApi
  */
-export function ɵɵtextInterpolate(v0: any): TsickleIssue1009 {
+export function ɵɵtextInterpolate(v0: any): typeof ɵɵtextInterpolate {
   ɵɵtextInterpolate1('', v0, '');
   return ɵɵtextInterpolate;
 }
@@ -57,12 +57,12 @@ export function ɵɵtextInterpolate(v0: any): TsickleIssue1009 {
  * @see textInterpolateV
  * @codeGenApi
  */
-export function ɵɵtextInterpolate1(prefix: string, v0: any, suffix: string): TsickleIssue1009 {
-  const index = getSelectedIndex();
+export function ɵɵtextInterpolate1(
+    prefix: string, v0: any, suffix: string): typeof ɵɵtextInterpolate1 {
   const lView = getLView();
   const interpolated = interpolation1(lView, prefix, v0, suffix);
   if (interpolated !== NO_CHANGE) {
-    textBindingInternal(lView, index, interpolated as string);
+    textBindingInternal(lView, getSelectedIndex(), interpolated as string);
   }
   return ɵɵtextInterpolate1;
 }
@@ -87,12 +87,11 @@ export function ɵɵtextInterpolate1(prefix: string, v0: any, suffix: string): T
  * @codeGenApi
  */
 export function ɵɵtextInterpolate2(
-    prefix: string, v0: any, i0: string, v1: any, suffix: string): TsickleIssue1009 {
-  const index = getSelectedIndex();
+    prefix: string, v0: any, i0: string, v1: any, suffix: string): typeof ɵɵtextInterpolate2 {
   const lView = getLView();
   const interpolated = interpolation2(lView, prefix, v0, i0, v1, suffix);
   if (interpolated !== NO_CHANGE) {
-    textBindingInternal(lView, index, interpolated as string);
+    textBindingInternal(lView, getSelectedIndex(), interpolated as string);
   }
   return ɵɵtextInterpolate2;
 }
@@ -119,12 +118,11 @@ export function ɵɵtextInterpolate2(
  */
 export function ɵɵtextInterpolate3(
     prefix: string, v0: any, i0: string, v1: any, i1: string, v2: any,
-    suffix: string): TsickleIssue1009 {
-  const index = getSelectedIndex();
+    suffix: string): typeof ɵɵtextInterpolate3 {
   const lView = getLView();
   const interpolated = interpolation3(lView, prefix, v0, i0, v1, i1, v2, suffix);
   if (interpolated !== NO_CHANGE) {
-    textBindingInternal(lView, index, interpolated as string);
+    textBindingInternal(lView, getSelectedIndex(), interpolated as string);
   }
   return ɵɵtextInterpolate3;
 }
@@ -151,12 +149,11 @@ export function ɵɵtextInterpolate3(
  */
 export function ɵɵtextInterpolate4(
     prefix: string, v0: any, i0: string, v1: any, i1: string, v2: any, i2: string, v3: any,
-    suffix: string): TsickleIssue1009 {
-  const index = getSelectedIndex();
+    suffix: string): typeof ɵɵtextInterpolate4 {
   const lView = getLView();
   const interpolated = interpolation4(lView, prefix, v0, i0, v1, i1, v2, i2, v3, suffix);
   if (interpolated !== NO_CHANGE) {
-    textBindingInternal(lView, index, interpolated as string);
+    textBindingInternal(lView, getSelectedIndex(), interpolated as string);
   }
   return ɵɵtextInterpolate4;
 }
@@ -183,12 +180,11 @@ export function ɵɵtextInterpolate4(
  */
 export function ɵɵtextInterpolate5(
     prefix: string, v0: any, i0: string, v1: any, i1: string, v2: any, i2: string, v3: any,
-    i3: string, v4: any, suffix: string): TsickleIssue1009 {
-  const index = getSelectedIndex();
+    i3: string, v4: any, suffix: string): typeof ɵɵtextInterpolate5 {
   const lView = getLView();
   const interpolated = interpolation5(lView, prefix, v0, i0, v1, i1, v2, i2, v3, i3, v4, suffix);
   if (interpolated !== NO_CHANGE) {
-    textBindingInternal(lView, index, interpolated as string);
+    textBindingInternal(lView, getSelectedIndex(), interpolated as string);
   }
   return ɵɵtextInterpolate5;
 }
@@ -217,13 +213,12 @@ export function ɵɵtextInterpolate5(
  */
 export function ɵɵtextInterpolate6(
     prefix: string, v0: any, i0: string, v1: any, i1: string, v2: any, i2: string, v3: any,
-    i3: string, v4: any, i4: string, v5: any, suffix: string): TsickleIssue1009 {
-  const index = getSelectedIndex();
+    i3: string, v4: any, i4: string, v5: any, suffix: string): typeof ɵɵtextInterpolate6 {
   const lView = getLView();
   const interpolated =
       interpolation6(lView, prefix, v0, i0, v1, i1, v2, i2, v3, i3, v4, i4, v5, suffix);
   if (interpolated !== NO_CHANGE) {
-    textBindingInternal(lView, index, interpolated as string);
+    textBindingInternal(lView, getSelectedIndex(), interpolated as string);
   }
   return ɵɵtextInterpolate6;
 }
@@ -251,13 +246,12 @@ export function ɵɵtextInterpolate6(
 export function ɵɵtextInterpolate7(
     prefix: string, v0: any, i0: string, v1: any, i1: string, v2: any, i2: string, v3: any,
     i3: string, v4: any, i4: string, v5: any, i5: string, v6: any,
-    suffix: string): TsickleIssue1009 {
-  const index = getSelectedIndex();
+    suffix: string): typeof ɵɵtextInterpolate7 {
   const lView = getLView();
   const interpolated =
       interpolation7(lView, prefix, v0, i0, v1, i1, v2, i2, v3, i3, v4, i4, v5, i5, v6, suffix);
   if (interpolated !== NO_CHANGE) {
-    textBindingInternal(lView, index, interpolated as string);
+    textBindingInternal(lView, getSelectedIndex(), interpolated as string);
   }
   return ɵɵtextInterpolate7;
 }
@@ -285,13 +279,12 @@ export function ɵɵtextInterpolate7(
 export function ɵɵtextInterpolate8(
     prefix: string, v0: any, i0: string, v1: any, i1: string, v2: any, i2: string, v3: any,
     i3: string, v4: any, i4: string, v5: any, i5: string, v6: any, i6: string, v7: any,
-    suffix: string): TsickleIssue1009 {
-  const index = getSelectedIndex();
+    suffix: string): typeof ɵɵtextInterpolate8 {
   const lView = getLView();
   const interpolated = interpolation8(
       lView, prefix, v0, i0, v1, i1, v2, i2, v3, i3, v4, i4, v5, i5, v6, i6, v7, suffix);
   if (interpolated !== NO_CHANGE) {
-    textBindingInternal(lView, index, interpolated as string);
+    textBindingInternal(lView, getSelectedIndex(), interpolated as string);
   }
   return ɵɵtextInterpolate8;
 }
@@ -313,19 +306,18 @@ export function ɵɵtextInterpolate8(
  *  'suffix']);
  * ```
  *.
- * @param values The a collection of values and the strings in between those values, beginning with
+ * @param values The collection of values and the strings in between those values, beginning with
  * a string prefix and ending with a string suffix.
  * (e.g. `['prefix', value0, '-', value1, '-', value2, ..., value99, 'suffix']`)
  *
  * @returns itself, so that it may be chained.
  * @codeGenApi
  */
-export function ɵɵtextInterpolateV(values: any[]): TsickleIssue1009 {
-  const index = getSelectedIndex();
+export function ɵɵtextInterpolateV(values: any[]): typeof ɵɵtextInterpolateV {
   const lView = getLView();
   const interpolated = interpolationV(lView, values);
   if (interpolated !== NO_CHANGE) {
-    textBindingInternal(lView, index, interpolated as string);
+    textBindingInternal(lView, getSelectedIndex(), interpolated as string);
   }
   return ɵɵtextInterpolateV;
 }

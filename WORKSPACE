@@ -1,155 +1,173 @@
 workspace(
     name = "angular",
-    managed_directories = {"@npm": ["node_modules"]},
+    managed_directories = {
+        "@npm": ["node_modules"],
+        "@aio_npm": ["aio/node_modules"],
+    },
 )
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-# Uncomment for local bazel rules development
-#local_repository(
-#    name = "build_bazel_rules_nodejs",
-#    path = "../rules_nodejs",
-#)
-#local_repository(
-#    name = "npm_bazel_typescript",
-#    path = "../rules_typescript",
-#)
+# Add a patch fix for rules_webtesting v0.3.5 required for enabling runfiles on Windows.
+# TODO: Remove the http_archive for this transitive dependency when a release is cut
+# for https://github.com/bazelbuild/rules_webtesting/commit/581b1557e382f93419da6a03b91a45c2ac9a9ec8
+# and the version is updated in rules_nodejs.
+http_archive(
+    name = "io_bazel_rules_webtesting",
+    patch_args = ["-p1"],
+    patches = [
+        "//:tools/bazel-repo-patches/rules_webtesting__windows_runfiles_fix.patch",
+    ],
+    sha256 = "e9abb7658b6a129740c0b3ef6f5a2370864e102a5ba5ffca2cea565829ed825a",
+    urls = ["https://github.com/bazelbuild/rules_webtesting/releases/download/0.3.5/rules_webtesting.tar.gz"],
+)
 
-# Fetch rules_nodejs so we can install our npm dependencies
 http_archive(
     name = "build_bazel_rules_nodejs",
-    patch_args = ["-p1"],
-    # Patch https://github.com/bazelbuild/rules_nodejs/pull/903
-    patches = ["//tools:rollup_bundle_commonjs_ignoreGlobal.patch"],
-    sha256 = "7c4a690268be97c96f04d505224ec4cb1ae53c2c2b68be495c9bd2634296a5cd",
-    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/0.34.0/rules_nodejs-0.34.0.tar.gz"],
+    sha256 = "c78216f5be5d451a42275b0b7dc809fb9347e2b04a68f68bad620a2b01f5c774",
+    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/5.5.2/rules_nodejs-5.5.2.tar.gz"],
 )
 
-# Check the bazel version and download npm dependencies
-load("@build_bazel_rules_nodejs//:defs.bzl", "check_bazel_version", "check_rules_nodejs_version", "node_repositories", "yarn_install")
+load("@build_bazel_rules_nodejs//:repositories.bzl", "build_bazel_rules_nodejs_dependencies")
 
-# Bazel version must be at least the following version because:
-#   - 0.26.0 managed_directories feature added which is required for nodejs rules 0.30.0
-#   - 0.27.0 has a fix for managed_directories after `rm -rf node_modules`
-check_bazel_version(
-    message = """
-You no longer need to install Bazel on your machine.
-Angular has a dependency on the @bazel/bazel package which supplies it.
-Try running `yarn bazel` instead.
-    (If you did run that, check that you've got a fresh `yarn install`)
+build_bazel_rules_nodejs_dependencies()
 
-""",
-    minimum_bazel_version = "0.27.0",
+# The PKG rules are needed to build tar packages for integration tests. The builtin
+# rule in `@bazel_tools` is not Windows compatible and outdated.
+http_archive(
+    name = "rules_pkg",
+    sha256 = "62eeb544ff1ef41d786e329e1536c1d541bb9bcad27ae984d57f18f314018e66",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_pkg/releases/download/0.6.0/rules_pkg-0.6.0.tar.gz",
+        "https://github.com/bazelbuild/rules_pkg/releases/download/0.6.0/rules_pkg-0.6.0.tar.gz",
+    ],
 )
 
-# The NodeJS rules version must be at least the following version because:
-#   - 0.15.2 Re-introduced the prod_only attribute on yarn_install
-#   - 0.15.3 Includes a fix for the `jasmine_node_test` rule ignoring target tags
-#   - 0.16.8 Supports npm installed bazel workspaces
-#   - 0.26.0 Fix for data files in yarn_install and npm_install
-#   - 0.27.12 Adds NodeModuleSources provider for transtive npm deps support
-#   - 0.30.0 yarn_install now uses symlinked node_modules with new managed directories Bazel 0.26.0 feature
-#   - 0.31.1 entry_point attribute of nodejs_binary & rollup_bundle is now a label
-#   - 0.32.0 yarn_install and npm_install no longer puts build files under symlinked node_modules
-#   - 0.32.1 remove override of @bazel/tsetse & exclude typescript lib declarations in node_module_library transitive_declarations
-#   - 0.32.2 resolves bug in @bazel/hide-bazel-files postinstall step
-#   - 0.34.0 introduces protractor rule
-check_rules_nodejs_version(minimum_version_string = "0.34.0")
-
-# Setup the Node.js toolchain
-node_repositories(
-    node_repositories = {
-        "10.16.0-darwin_amd64": ("node-v10.16.0-darwin-x64.tar.gz", "node-v10.16.0-darwin-x64", "6c009df1b724026d84ae9a838c5b382662e30f6c5563a0995532f2bece39fa9c"),
-        "10.16.0-linux_amd64": ("node-v10.16.0-linux-x64.tar.xz", "node-v10.16.0-linux-x64", "1827f5b99084740234de0c506f4dd2202a696ed60f76059696747c34339b9d48"),
-        "10.16.0-windows_amd64": ("node-v10.16.0-win-x64.zip", "node-v10.16.0-win-x64", "aa22cb357f0fb54ccbc06b19b60e37eefea5d7dd9940912675d3ed988bf9a059"),
-    },
-    node_version = "10.16.0",
-    package_json = ["//:package.json"],
-    yarn_repositories = {
-        "1.17.3": ("yarn-v1.17.3.tar.gz", "yarn-v1.17.3", "e3835194409f1b3afa1c62ca82f561f1c29d26580c9e220c36866317e043c6f3"),
-    },
-    # yarn 1.13.0 under Bazel has a regression on Windows that causes build errors on rebuilds:
-    # ```
-    # ERROR: Source forest creation failed: C:/.../fyuc5c3n/execroot/angular/external (Directory not empty)
-    # ```
-    # See https://github.com/angular/angular/pull/29431 for more information.
-    # It possible that versions of yarn past 1.13.0 do not have this issue, however, before
-    # advancing this version we need to test manually on Windows that the above error does not
-    # happen as the issue is not caught by CI.
-    yarn_version = "1.17.3",
+# Fetch Aspect lib for utilities like write_source_files
+http_archive(
+    name = "aspect_bazel_lib",
+    sha256 = "5f5f1237601d41d61608ad0b9541614935839232940010f9e62163c3e53dc1b7",
+    strip_prefix = "bazel-lib-0.5.0",
+    url = "https://github.com/aspect-build/bazel-lib/archive/refs/tags/v0.5.0.tar.gz",
 )
+
+# Setup the Node.js toolchain.
+load("@rules_nodejs//nodejs:repositories.bzl", "nodejs_register_toolchains")
+
+nodejs_register_toolchains(
+    name = "nodejs",
+    node_version = "16.10.0",
+)
+
+# Download npm dependencies.
+load("@build_bazel_rules_nodejs//:index.bzl", "yarn_install")
+load("//integration:npm_package_archives.bzl", "npm_package_archives")
 
 yarn_install(
     name = "npm",
+    # Note that we add the postinstall scripts here so that the dependencies are re-installed
+    # when the postinstall patches are modified.
+    data = [
+        "//:.yarn/releases/yarn-1.22.17.cjs",
+        "//:.yarnrc",
+        "//:scripts/puppeteer-chromedriver-versions.js",
+        "//:scripts/webdriver-manager-update.js",
+        "//tools:postinstall-patches.js",
+    ],
+    # Currently disabled due to:
+    #  1. Missing Windows support currently.
+    #  2. Incompatibilites with the `ts_library` rule.
+    exports_directories_only = False,
+    manual_build_file_contents = npm_package_archives(),
     package_json = "//:package.json",
+    # We prefer to symlink the `node_modules` to only maintain a single install.
+    # See https://github.com/angular/dev-infra/pull/446#issuecomment-1059820287 for details.
+    symlink_node_modules = True,
+    yarn = "//:.yarn/releases/yarn-1.22.17.cjs",
     yarn_lock = "//:yarn.lock",
 )
 
-# Install all bazel dependencies of the @npm npm packages
-load("@npm//:install_bazel_dependencies.bzl", "install_bazel_dependencies")
+yarn_install(
+    name = "aio_npm",
+    # Note that we add the postinstall scripts here so that the dependencies are re-installed
+    # when the postinstall patches are modified.
+    data = [
+        "//:.yarn/releases/yarn-1.22.17.cjs",
+        "//:.yarnrc",
+        "//aio:tools/cli-patches/patch.js",
+    ],
+    # Currently disabled due to:
+    #  1. Missing Windows support currently.
+    #  2. Incompatibilites with the `ts_library` rule.
+    exports_directories_only = False,
+    manual_build_file_contents = npm_package_archives(),
+    package_json = "//aio:package.json",
+    # We prefer to symlink the `node_modules` to only maintain a single install.
+    # See https://github.com/angular/dev-infra/pull/446#issuecomment-1059820287 for details.
+    symlink_node_modules = True,
+    yarn = "//:.yarn/releases/yarn-1.22.17.cjs",
+    yarn_lock = "//aio:yarn.lock",
+)
 
-install_bazel_dependencies()
+load("@aspect_bazel_lib//lib:repositories.bzl", "aspect_bazel_lib_dependencies")
 
-# Load angular dependencies
-load("//packages/bazel:package.bzl", "rules_angular_dev_dependencies")
-
-rules_angular_dev_dependencies()
+aspect_bazel_lib_dependencies()
 
 # Load protractor dependencies
-load("@npm_bazel_protractor//:package.bzl", "npm_bazel_protractor_dependencies")
+load("@npm//@bazel/protractor:package.bzl", "npm_bazel_protractor_dependencies")
 
 npm_bazel_protractor_dependencies()
-
-# Load karma dependencies
-load("@npm_bazel_karma//:package.bzl", "rules_karma_dependencies")
-
-rules_karma_dependencies()
 
 # Setup the rules_webtesting toolchain
 load("@io_bazel_rules_webtesting//web:repositories.bzl", "web_test_repositories")
 
 web_test_repositories()
 
-# Temporary work-around for https://github.com/angular/angular/issues/28681
-# TODO(gregmagolan): go back to @io_bazel_rules_webtesting browser_repositories
-load("//:browser_repositories.bzl", "browser_repositories")
+load("@npm//@angular/build-tooling/bazel/browsers:browser_repositories.bzl", "browser_repositories")
 
 browser_repositories()
 
-# Setup the rules_typescript tooolchain
-load("@npm_bazel_typescript//:index.bzl", "ts_setup_workspace")
+load("@build_bazel_rules_nodejs//toolchains/esbuild:esbuild_repositories.bzl", "esbuild_repositories")
 
-ts_setup_workspace()
+esbuild_repositories(
+    npm_repository = "npm",
+)
+
+load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
+
+rules_pkg_dependencies()
+
+load("//packages/common/locales/generate-locales-tool:cldr-data.bzl", "cldr_json_data_repository", "cldr_xml_data_repository")
+
+cldr_major_version = "41"
+
+cldr_json_data_repository(
+    name = "cldr_json_data",
+    urls = {
+        "https://github.com/unicode-org/cldr-json/releases/download/%s.0.0/cldr-%s.0.0-json-full.zip" % (cldr_major_version, cldr_major_version): "649b76647269e32b1b0a5f7b6eed52e9e63a1581f1afdcf4f6771e49c9713614",
+    },
+)
+
+cldr_xml_data_repository(
+    name = "cldr_xml_data",
+    urls = {
+        "https://github.com/unicode-org/cldr/releases/download/release-%s/cldr-common-%s.0.zip" % (cldr_major_version, cldr_major_version): "823c6170c41e2de2c229574e8a436332d25f1c9723409867fe721e00bc92d853",
+    },
+)
+
+# sass rules
+http_archive(
+    name = "io_bazel_rules_sass",
+    sha256 = "a5ff47737667d644dba00af5444b6723fd5ddae2db80ee2f1e202bf0ccfcd4ef",
+    strip_prefix = "rules_sass-f3874ae3ddbdab73a0a0e7bc14909d498c464ad9",
+    urls = [
+        "https://github.com/bazelbuild/rules_sass/archive/f3874ae3ddbdab73a0a0e7bc14909d498c464ad9.zip",
+    ],
+)
 
 # Setup the rules_sass toolchain
 load("@io_bazel_rules_sass//sass:sass_repositories.bzl", "sass_repositories")
 
-sass_repositories()
-
-# Setup the skydoc toolchain
-load("@io_bazel_skydoc//skylark:skylark.bzl", "skydoc_repositories")
-
-skydoc_repositories()
-
-load("@bazel_toolchains//rules:environments.bzl", "clang_env")
-load("@bazel_toolchains//rules:rbe_repo.bzl", "rbe_autoconfig")
-
-rbe_autoconfig(
-    name = "rbe_ubuntu1604_angular",
-    # Need to specify a base container digest in order to ensure that we can use the checked-in
-    # platform configurations for the "ubuntu16_04" image. Otherwise the autoconfig rule would
-    # need to pull the image and run it in order determine the toolchain configuration. See:
-    # https://github.com/bazelbuild/bazel-toolchains/blob/0.27.0/configs/ubuntu16_04_clang/versions.bzl
-    base_container_digest = "sha256:94d7d8552902d228c32c8c148cc13f0effc2b4837757a6e95b73fdc5c5e4b07b",
-    # Note that if you change the `digest`, you might also need to update the
-    # `base_container_digest` to make sure marketplace.gcr.io/google/rbe-ubuntu16-04-webtest:<digest>
-    # and marketplace.gcr.io/google/rbe-ubuntu16-04:<base_container_digest> have
-    # the same Clang and JDK installed. Clang is needed because of the dependency on
-    # @com_google_protobuf. Java is needed for the Bazel's test executor Java tool.
-    digest = "sha256:76e2e4a894f9ffbea0a0cb2fbde741b5d223d40f265dbb9bca78655430173990",
-    env = clang_env(),
-    registry = "marketplace.gcr.io",
-    # We can't use the default "ubuntu16_04" RBE image provided by the autoconfig because we need
-    # a specific Linux kernel that comes with "libx11" in order to run headless browser tests.
-    repository = "google/rbe-ubuntu16-04-webtest",
+sass_repositories(
+    yarn_script = "//:.yarn/releases/yarn-1.22.17.cjs",
 )

@@ -1,8 +1,8 @@
 // #docregion
 import { Component, OnInit } from '@angular/core';
 
-import { AdService }         from './ad.service';
-import { AdItem }            from './ad-item';
+import { AdService } from './ad.service';
+import { AdItem } from './ad-item';
 
 @Component({
   selector: 'app-root',
@@ -13,7 +13,7 @@ import { AdItem }            from './ad-item';
   `
 })
 export class AppComponent implements OnInit {
-  ads: AdItem[];
+  ads: AdItem[] = [];
 
   constructor(private adService: AdService) {}
 

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -61,6 +61,7 @@ export function createTsConfig(options: TsConfigOptions) {
       'target': options.target,
       // we have to set this as the default tsconfig is made of es6 mode
       'es5Mode': true,
+      'devmode': true,
       'manifest': createManifestPath(options),
       'compilationTargetSrc': options.compilationTargetSrc,
       // Override this property from the real tsconfig we read

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -35,11 +35,11 @@ export class RegressionSlopeValidator extends Validator {
     super();
   }
 
-  describe(): {[key: string]: any} {
+  override describe(): {[key: string]: any} {
     return {'sampleSize': this._sampleSize, 'regressionSlopeMetric': this._metric};
   }
 
-  validate(completeSample: MeasureValues[]): MeasureValues[]|null {
+  override validate(completeSample: MeasureValues[]): MeasureValues[]|null {
     if (completeSample.length >= this._sampleSize) {
       const latestSample =
           completeSample.slice(completeSample.length - this._sampleSize, completeSample.length);

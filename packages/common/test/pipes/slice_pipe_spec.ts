@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -8,7 +8,7 @@
 
 import {CommonModule, SlicePipe} from '@angular/common';
 import {Component} from '@angular/core';
-import {TestBed, async} from '@angular/core/testing';
+import {TestBed, waitForAsync} from '@angular/core/testing';
 import {expect} from '@angular/platform-browser/testing/src/matchers';
 
 {
@@ -24,24 +24,32 @@ import {expect} from '@angular/platform-browser/testing/src/matchers';
     });
 
     describe('supports', () => {
-      it('should support strings', () => { expect(() => pipe.transform(str, 0)).not.toThrow(); });
-      it('should support lists', () => { expect(() => pipe.transform(list, 0)).not.toThrow(); });
-      it('should support readonly lists',
-         () => { expect(() => pipe.transform(list as ReadonlyArray<number>, 0)).not.toThrow(); });
+      it('should support strings', () => {
+        expect(() => pipe.transform(str, 0)).not.toThrow();
+      });
+      it('should support lists', () => {
+        expect(() => pipe.transform(list, 0)).not.toThrow();
+      });
+      it('should support readonly lists', () => {
+        expect(() => pipe.transform(list as ReadonlyArray<number>, 0)).not.toThrow();
+      });
 
       it('should not support other objects',
          // this would not compile
          // so we cast as `any` to check that it throws for unsupported objects
-         () => { expect(() => pipe.transform({} as any, 0)).toThrow(); });
+         () => {
+           expect(() => pipe.transform({} as any, 0)).toThrow();
+         });
     });
 
     describe('transform', () => {
+      it('should return null if the value is null', () => {
+        expect(pipe.transform(null, 1)).toBe(null);
+      });
 
-      it('should return null if the value is null',
-         () => { expect(pipe.transform(null, 1)).toBe(null); });
-
-      it('should return undefined if the value is undefined',
-         () => { expect(pipe.transform(undefined, 1)).toBe(undefined); });
+      it('should return null if the value is undefined', () => {
+        expect(pipe.transform(undefined, 1)).toBe(null);
+      });
 
       it('should return all items after START index when START is positive and END is omitted',
          () => {
@@ -85,11 +93,9 @@ import {expect} from '@angular/platform-browser/testing/src/matchers';
         expect(pipe.transform(list, 2)).toEqual([3, 4, 5]);
         expect(list).toEqual([1, 2, 3, 4, 5]);
       });
-
     });
 
     describe('integration', () => {
-
       @Component({selector: 'test-comp', template: '{{(data | slice:1).join(",") }}'})
       class TestComp {
         data: any;
@@ -99,7 +105,7 @@ import {expect} from '@angular/platform-browser/testing/src/matchers';
         TestBed.configureTestingModule({declarations: [TestComp], imports: [CommonModule]});
       });
 
-      it('should work with mutable arrays', async(() => {
+      it('should work with mutable arrays', waitForAsync(() => {
            const fixture = TestBed.createComponent(TestComp);
            const mutable: number[] = [1, 2];
            fixture.componentInstance.data = mutable;
@@ -110,6 +116,24 @@ import {expect} from '@angular/platform-browser/testing/src/matchers';
            fixture.detectChanges();
            expect(fixture.nativeElement).toHaveText('2,3');
          }));
+    });
+
+    it('should be available as a standalone pipe', () => {
+      @Component({
+        selector: 'test-component',
+        imports: [SlicePipe],
+        template: '{{ title | slice:0:5 }}',
+        standalone: true,
+      })
+      class TestComponent {
+        title = 'Hello World!';
+      }
+
+      const fixture = TestBed.createComponent(TestComponent);
+      fixture.detectChanges();
+
+      const content = fixture.nativeElement.textContent;
+      expect(content).toBe('Hello');
     });
   });
 }

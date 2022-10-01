@@ -1,4 +1,4 @@
-load("//tools:defaults.bzl", "npm_package", "ts_library")
+load("//tools:defaults.bzl", "ng_package", "ts_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -18,15 +18,19 @@ ts_library(
     ],
 )
 
-npm_package(
+ng_package(
     name = "npm_package",
     srcs = [
         "README.md",
         "package.json",
     ],
+    externals = [
+        "@angular/core",
+        "reflect-metadata",
+    ],
     # Do not add more to this list.
     # Dependencies on the full npm_package cause long re-builds.
-    visibility = ["//visibility:private"],
+    visibility = ["//integration:__subpackages__"],
     deps = [
         ":benchpress",
     ],

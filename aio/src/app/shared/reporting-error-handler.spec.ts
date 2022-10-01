@@ -1,28 +1,29 @@
-import { ErrorHandler, ReflectiveInjector } from '@angular/core';
+import { ErrorHandler, Injector, VERSION } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { WindowToken } from 'app/shared/window';
 import { AppModule } from 'app/app.module';
 
 import { ReportingErrorHandler } from './reporting-error-handler';
+import { AnalyticsService } from './analytics.service';
 
 describe('ReportingErrorHandler service', () => {
   let handler: ReportingErrorHandler;
   let superHandler: jasmine.Spy;
-  let onerrorSpy: jasmine.Spy;
+  let reportErrorSpy: jasmine.Spy;
 
   beforeEach(() => {
-    onerrorSpy = jasmine.createSpy('onerror');
     superHandler = spyOn(ErrorHandler.prototype, 'handleError');
+    reportErrorSpy = jasmine.createSpy('analytics report error');
 
-    const injector = ReflectiveInjector.resolveAndCreate([
-      { provide: ErrorHandler, useClass: ReportingErrorHandler },
-      { provide: WindowToken, useFactory: () => ({ onerror: onerrorSpy }) }
-    ]);
-    handler = injector.get(ErrorHandler);
+    const injector = Injector.create({providers: [
+      { provide: AnalyticsService, useValue: {reportError: reportErrorSpy} },
+      { provide: ErrorHandler, useClass: ReportingErrorHandler, deps: [AnalyticsService] },
+    ]});
+
+    handler = injector.get(ErrorHandler) as unknown as ReportingErrorHandler;
   });
 
   it('should be registered on the AppModule', () => {
-    handler = TestBed.configureTestingModule({ imports: [AppModule] }).get(ErrorHandler);
+    handler = TestBed.configureTestingModule({ imports: [AppModule] }).inject(ErrorHandler) as any;
     expect(handler).toEqual(jasmine.any(ReportingErrorHandler));
   });
 
@@ -38,27 +39,79 @@ describe('ReportingErrorHandler service', () => {
       superHandler.and.throwError('super handler error');
       handler.handleError(error);
 
-      expect(onerrorSpy).toHaveBeenCalledTimes(2);
+      expect(reportErrorSpy).toHaveBeenCalledTimes(2);
 
       // Error from super handler is reported first
-      expect(onerrorSpy.calls.argsFor(0)[0]).toEqual('super handler error');
-      expect(onerrorSpy.calls.argsFor(0)[4]).toEqual(jasmine.any(Error));
+      expect(reportErrorSpy.calls.argsFor(0)[0]).toEqual(
+        jasmine.stringContaining('super handler error\n'));
 
       // Then error from initial exception
-      expect(onerrorSpy.calls.argsFor(1)[0]).toEqual('initial error');
-      expect(onerrorSpy.calls.argsFor(1)[4]).toEqual(error);
+      expect(reportErrorSpy.calls.argsFor(1)[0]).toEqual(
+        jasmine.stringContaining(`[v${VERSION.full}] initial error\n`));
     });
 
-    it('should send an error object to window.onerror', () => {
+    it('should augment an error object with version info', () => {
+      const originalMessage = 'this is an error message';
+      const error = new Error(originalMessage);
+
+      expect(error.message).toBe(originalMessage);
+      // NOTE:
+      // Intentionally not checking `error.stack` here, because accessing it causes the property to
+      // be computed and may affect the observed behavior of `handleError()`.
+
+      handler.handleError(error);
+
+      expect(error.message).toBe(`[v${VERSION.full}] ${originalMessage}`);
+      if (error.stack) {
+        const expected = `Error: [v${VERSION.full}] ${originalMessage}`;
+        const actual = error.stack.split('\n', 1)[0];
+        expect(actual.startsWith(expected))
+            .withContext(`Expected '${actual}' to start with '${expected}'.`)
+            .toBeTrue();
+      }
+    });
+
+    it('should send an error object to analytics', () => {
       const error = new Error('this is an error message');
       handler.handleError(error);
-      expect(onerrorSpy).toHaveBeenCalledWith(error.message, undefined, undefined, undefined, error);
+      expect(reportErrorSpy).toHaveBeenCalledWith(
+          jasmine.stringContaining('this is an error message\n'));
     });
 
-    it('should send an error string to window.onerror', () => {
+    it('should send a non-error object to analytics', () => {
+      const error = {reason: 'this is an error message'};
+      handler.handleError(error);
+      expect(reportErrorSpy).toHaveBeenCalledWith(JSON.stringify(error));
+    });
+
+    it('should send a non-error object with circular references to analytics', () => {
+      const error = {
+        reason: 'this is an error message',
+        get self() { return this; },
+        toString() { return `{reason: ${this.reason}}`; },
+      };
+      handler.handleError(error);
+      expect(reportErrorSpy).toHaveBeenCalledWith('{reason: this is an error message}');
+    });
+
+    it('should send an error string to analytics (prefixed with version info)', () => {
       const error = 'this is an error message';
       handler.handleError(error);
-      expect(onerrorSpy).toHaveBeenCalledWith(error);
+      expect(reportErrorSpy).toHaveBeenCalledWith(`[v${VERSION.full}] ${error}`);
+    });
+
+    it('should send a non-object, non-string error stringified to analytics', () => {
+      handler.handleError(404);
+      handler.handleError(false);
+      handler.handleError(null);
+      handler.handleError(undefined);
+
+      expect(reportErrorSpy.calls.allArgs()).toEqual([
+        ['404'],
+        ['false'],
+        ['null'],
+        ['undefined'],
+      ]);
     });
   });
 });

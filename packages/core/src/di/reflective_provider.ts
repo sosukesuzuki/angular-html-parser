@@ -1,24 +1,24 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
 import {Type} from '../interface/type';
-import {reflector} from '../reflection/reflection';
 
 import {resolveForwardRef} from './forward_ref';
 import {InjectionToken} from './injection_token';
 import {ClassProvider, ExistingProvider, FactoryProvider, Provider, TypeProvider, ValueProvider} from './interface/provider';
+import {getReflect} from './jit/util';
 import {Inject, Optional, Self, SkipSelf} from './metadata';
 import {invalidProviderError, mixingMultiProvidersWithRegularProvidersError, noAnnotationError} from './reflective_errors';
 import {ReflectiveKey} from './reflective_key';
 
 
 interface NormalizedProvider extends TypeProvider, ValueProvider, ClassProvider, ExistingProvider,
-    FactoryProvider {}
+                                     FactoryProvider {}
 
 /**
  * `Dependency` is used by the framework to extend DI.
@@ -107,7 +107,7 @@ function resolveReflectiveFactory(provider: NormalizedProvider): ResolvedReflect
   let resolvedDeps: ReflectiveDependency[];
   if (provider.useClass) {
     const useClass = resolveForwardRef(provider.useClass);
-    factoryFn = reflector.factory(useClass);
+    factoryFn = getReflect().factory(useClass);
     resolvedDeps = _dependenciesFor(useClass);
   } else if (provider.useExisting) {
     factoryFn = (aliasInstance: any) => aliasInstance;
@@ -184,12 +184,12 @@ function _normalizeProviders(
     providers: Provider[], res: NormalizedProvider[]): NormalizedProvider[] {
   providers.forEach(b => {
     if (b instanceof Type) {
-      res.push({ provide: b, useClass: b } as NormalizedProvider);
+      res.push({provide: b, useClass: b} as NormalizedProvider);
 
     } else if (b && typeof b == 'object' && (b as any).provide !== undefined) {
       res.push(b as NormalizedProvider);
 
-    } else if (b instanceof Array) {
+    } else if (Array.isArray(b)) {
       _normalizeProviders(b, res);
 
     } else {
@@ -211,7 +211,7 @@ export function constructDependencies(
 }
 
 function _dependenciesFor(typeOrFunc: any): ReflectiveDependency[] {
-  const params = reflector.parameters(typeOrFunc);
+  const params = getReflect().parameters(typeOrFunc);
 
   if (!params) return [];
   if (params.some(p => p == null)) {
@@ -221,7 +221,7 @@ function _dependenciesFor(typeOrFunc: any): ReflectiveDependency[] {
 }
 
 function _extractToken(
-    typeOrFunc: any, metadata: any[] | any, params: any[][]): ReflectiveDependency {
+    typeOrFunc: any, metadata: any[]|any, params: any[][]): ReflectiveDependency {
   let token: any = null;
   let optional = false;
 
@@ -264,6 +264,6 @@ function _extractToken(
 }
 
 function _createDependency(
-    token: any, optional: boolean, visibility: Self | SkipSelf | null): ReflectiveDependency {
+    token: any, optional: boolean, visibility: Self|SkipSelf|null): ReflectiveDependency {
   return new ReflectiveDependency(ReflectiveKey.get(token), optional, visibility);
 }

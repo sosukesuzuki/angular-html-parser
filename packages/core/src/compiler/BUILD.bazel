@@ -1,4 +1,4 @@
-load("//tools:defaults.bzl", "ts_library")
+load("//tools:defaults.bzl", "ts_library", "tsec_test")
 
 package(default_visibility = [
     "//packages/compiler/test:__pkg__",
@@ -16,4 +16,10 @@ ts_library(
     deps = [
         "//packages/core/src/util",
     ],
+)
+
+tsec_test(
+    name = "tsec_test",
+    target = "compiler",
+    tsconfig = "//packages:tsec_config",
 )

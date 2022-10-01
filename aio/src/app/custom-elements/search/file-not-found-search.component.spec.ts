@@ -7,7 +7,13 @@ import { SearchResults } from 'app/search/interfaces';
 import { SearchResultsComponent } from 'app/shared/search-results/search-results.component';
 import { SearchService } from 'app/search/search.service';
 import { FileNotFoundSearchComponent } from './file-not-found-search.component';
+import { Component } from '@angular/core';
 
+@Component({
+  selector: 'mat-icon',
+  template: '',
+})
+class MockMatIcon {}
 
 describe('FileNotFoundSearchComponent', () => {
   let fixture: ComponentFixture<FileNotFoundSearchComponent>;
@@ -17,7 +23,7 @@ describe('FileNotFoundSearchComponent', () => {
   beforeEach(() => {
 
     TestBed.configureTestingModule({
-      declarations: [ FileNotFoundSearchComponent, SearchResultsComponent ],
+      declarations: [ FileNotFoundSearchComponent, SearchResultsComponent, MockMatIcon ],
       providers: [
         { provide: LocationService, useValue: new MockLocationService('base/initial-url?some-query') },
         SearchService
@@ -25,7 +31,7 @@ describe('FileNotFoundSearchComponent', () => {
     });
 
     fixture = TestBed.createComponent(FileNotFoundSearchComponent);
-    searchService = TestBed.get(SearchService);
+    searchService = TestBed.inject(SearchService);
     searchResultSubject = new Subject<SearchResults>();
     spyOn(searchService, 'search').and.callFake(() => searchResultSubject.asObservable());
     fixture.detectChanges();

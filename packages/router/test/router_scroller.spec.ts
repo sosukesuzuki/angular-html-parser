@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -14,6 +14,7 @@ import {filter, switchMap} from 'rxjs/operators';
 import {Scroll} from '../src/events';
 import {RouterScroller} from '../src/router_scroller';
 
+// TODO: add tests that exercise the `withInMemoryScrolling` feature of the provideRouter function
 describe('RouterScroller', () => {
   it('defaults to disabled', () => {
     const events = new Subject<RouterEvent>();
@@ -128,7 +129,9 @@ describe('RouterScroller', () => {
                      }, 1000);
                      return r;
                    }))
-             .subscribe((e: Scroll) => { viewportScroller.scrollToPosition(e.position); });
+             .subscribe((e: Scroll) => {
+               viewportScroller.scrollToPosition(e.position);
+             });
 
          events.next(new NavigationStart(1, '/a'));
          events.next(new NavigationEnd(1, '/a', '/a'));
@@ -158,8 +161,8 @@ describe('RouterScroller', () => {
 
 
   function createRouterScroller({scrollPositionRestoration, anchorScrolling}: {
-    scrollPositionRestoration: 'disabled' | 'enabled' | 'top',
-    anchorScrolling: 'disabled' | 'enabled'
+    scrollPositionRestoration: 'disabled'|'enabled'|'top',
+    anchorScrolling: 'disabled'|'enabled'
   }) {
     const events = new Subject<RouterEvent>();
     const router = <any>{

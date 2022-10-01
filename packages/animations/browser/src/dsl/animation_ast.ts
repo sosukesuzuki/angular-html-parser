@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import {AnimateTimings, AnimationMetadataType, AnimationOptions, ɵStyleData} from '@angular/animations';
+import {AnimateTimings, AnimationMetadataType, AnimationOptions, ɵStyleDataMap} from '@angular/animations';
 
 const EMPTY_ANIMATION_OPTIONS: AnimationOptions = {};
 
@@ -46,8 +46,8 @@ export interface StateAst extends Ast<AnimationMetadataType.State> {
 }
 
 export interface TransitionAst extends Ast<AnimationMetadataType.Transition> {
-  matchers: ((fromState: string, toState: string, element: any, params: {[key: string]:
-                                                                             any}) => boolean)[];
+  matchers: Array<(
+      (fromState: string, toState: string, element: any, params: {[key: string]: any}) => boolean)>;
   animation: Ast<AnimationMetadataType>;
   queryCount: number;
   depCount: number;
@@ -67,14 +67,16 @@ export interface AnimateAst extends Ast<AnimationMetadataType.Animate> {
 }
 
 export interface StyleAst extends Ast<AnimationMetadataType.Style> {
-  styles: (ɵStyleData|string)[];
+  styles: Array<(ɵStyleDataMap | string)>;
   easing: string|null;
   offset: number|null;
   containsDynamicStyles: boolean;
   isEmptyStep?: boolean;
 }
 
-export interface KeyframesAst extends Ast<AnimationMetadataType.Keyframes> { styles: StyleAst[]; }
+export interface KeyframesAst extends Ast<AnimationMetadataType.Keyframes> {
+  styles: StyleAst[];
+}
 
 export interface ReferenceAst extends Ast<AnimationMetadataType.Reference> {
   animation: Ast<AnimationMetadataType>;

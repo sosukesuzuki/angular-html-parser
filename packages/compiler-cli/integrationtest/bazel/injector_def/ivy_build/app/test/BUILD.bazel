@@ -10,9 +10,6 @@ ts_library(
             "**/*.ts",
         ],
     ),
-    tags = [
-        "ivy-only",
-    ],
     deps = [
         "//packages/compiler-cli/integrationtest/bazel/injector_def/ivy_build/app",
         "//packages/core",
@@ -22,12 +19,8 @@ ts_library(
 
 jasmine_node_test(
     name = "test",
-    bootstrap = ["angular/tools/testing/init_node_spec.js"],
-    tags = [
-        "ivy-only",
-    ],
+    bootstrap = ["//tools/testing:node_es2015"],
     deps = [
         ":test_lib",
-        "//tools/testing:node",
     ],
 )

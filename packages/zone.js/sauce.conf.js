@@ -38,24 +38,6 @@ module.exports = function(config, ignoredLaunchers) {
     // 'SL_IOS9': {base: 'SauceLabs', browserName: 'iphone', platform: 'OS X 10.10', version:
     // '9.3'},
     'SL_IOS10': {base: 'SauceLabs', browserName: 'iphone', platform: 'OS X 10.10', version: '10.3'},
-    'SL_IE9': {
-      base: 'SauceLabs',
-      browserName: 'internet explorer',
-      platform: 'Windows 2008',
-      version: '9'
-    },
-    'SL_IE10': {
-      base: 'SauceLabs',
-      browserName: 'internet explorer',
-      platform: 'Windows 2012',
-      version: '10'
-    },
-    'SL_IE11': {
-      base: 'SauceLabs',
-      browserName: 'internet explorer',
-      platform: 'Windows 10',
-      version: '11'
-    },
     'SL_MSEDGE': {
       base: 'SauceLabs',
       browserName: 'MicrosoftEdge',
@@ -107,7 +89,11 @@ module.exports = function(config, ignoredLaunchers) {
     customLaunchers = basicLaunchers;
   } else {
     Object.keys(basicLaunchers).forEach(function(key) {
-      if (ignoredLaunchers.filter(function(ignore) { return ignore === key; }).length === 0) {
+      if (ignoredLaunchers
+              .filter(function(ignore) {
+                return ignore === key;
+              })
+              .length === 0) {
         customLaunchers[key] = basicLaunchers[key];
       }
     });

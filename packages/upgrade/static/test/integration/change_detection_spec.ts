@@ -1,16 +1,16 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {Component, Directive, ElementRef, Injector, Input, NgModule, NgZone, SimpleChanges, destroyPlatform} from '@angular/core';
-import {async} from '@angular/core/testing';
+import {Component, destroyPlatform, Directive, ElementRef, Injector, Input, NgModule, NgZone, SimpleChanges} from '@angular/core';
+import {waitForAsync} from '@angular/core/testing';
 import {BrowserModule} from '@angular/platform-browser';
 import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
-import {UpgradeComponent, UpgradeModule, downgradeComponent} from '@angular/upgrade/static';
+import {downgradeComponent, UpgradeComponent, UpgradeModule} from '@angular/upgrade/static';
 
 import * as angular from '../../../src/common/src/angular1';
 import {html, withEachNg1Version} from '../../../src/common/test/helpers/common_test_helpers';
@@ -22,18 +22,14 @@ withEachNg1Version(() => {
     beforeEach(() => destroyPlatform());
     afterEach(() => destroyPlatform());
 
-    it('should not break if a $digest is already in progress', async(() => {
+    it('should not break if a $digest is already in progress', waitForAsync(() => {
          const element = html('<my-app></my-app>');
 
          @Component({selector: 'my-app', template: ''})
          class AppComponent {
          }
 
-         @NgModule({
-           declarations: [AppComponent],
-           entryComponents: [AppComponent],
-           imports: [BrowserModule, UpgradeModule]
-         })
+         @NgModule({declarations: [AppComponent], imports: [BrowserModule, UpgradeModule]})
          class Ng2Module {
            ngDoBootstrap() {}
          }
@@ -77,7 +73,7 @@ withEachNg1Version(() => {
          });
        }));
 
-    it('should interleave scope and component expressions', async(() => {
+    it('should interleave scope and component expressions', waitForAsync(() => {
          const log: string[] = [];
          const l = (value: string) => {
            log.push(value);
@@ -108,7 +104,6 @@ withEachNg1Version(() => {
 
          @NgModule({
            declarations: [Ng1aComponent, Ng1bComponent, Ng2Component],
-           entryComponents: [Ng2Component],
            imports: [BrowserModule, UpgradeModule]
          })
          class Ng2Module {
@@ -132,14 +127,16 @@ withEachNg1Version(() => {
          });
        }));
 
-    it('should propagate changes to a downgraded component inside the ngZone', async(() => {
+    it('should propagate changes to a downgraded component inside the ngZone', waitForAsync(() => {
          const element = html('<my-app></my-app>');
          let appComponent: AppComponent;
 
          @Component({selector: 'my-app', template: '<my-child [value]="value"></my-child>'})
          class AppComponent {
            value?: number;
-           constructor() { appComponent = this; }
+           constructor() {
+             appComponent = this;
+           }
          }
 
          @Component({
@@ -149,15 +146,18 @@ withEachNg1Version(() => {
          class ChildComponent {
            valueFromPromise?: number;
            @Input()
-           set value(v: number) { expect(NgZone.isInAngularZone()).toBe(true); }
+           set value(v: number) {
+             expect(NgZone.isInAngularZone()).toBe(true);
+           }
 
            constructor(private zone: NgZone) {}
 
            ngOnChanges(changes: SimpleChanges) {
              if (changes['value'].isFirstChange()) return;
 
-             this.zone.onMicrotaskEmpty.subscribe(
-                 () => { expect(element.textContent).toEqual('5'); });
+             this.zone.onMicrotaskEmpty.subscribe(() => {
+               expect(element.textContent).toEqual('5');
+             });
 
              // Create a micro-task to update the value to be rendered asynchronously.
              Promise.resolve().then(() => this.valueFromPromise = changes['value'].currentValue);
@@ -166,7 +166,6 @@ withEachNg1Version(() => {
 
          @NgModule({
            declarations: [AppComponent, ChildComponent],
-           entryComponents: [AppComponent],
            imports: [BrowserModule, UpgradeModule]
          })
          class Ng2Module {

@@ -18,10 +18,11 @@ import { UpgradeComponent } from '@angular/upgrade/static';
 import { Hero } from '../hero';
 
 @Directive({
+  // eslint-disable-next-line @angular-eslint/directive-selector
   selector: 'hero-detail'
 })
 export class HeroDetailDirective extends UpgradeComponent {
-  @Input() hero: Hero;
+  @Input() hero!: Hero;
 
   constructor(elementRef: ElementRef, injector: Injector) {
     super('heroDetail', elementRef, injector);

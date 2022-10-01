@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -11,7 +11,6 @@ import {BrowserDetection} from '../testing/src/browser_util';
 
 {
   describe('BrowserDetection', () => {
-
     const browsers = [
       {
         name: 'Chrome',
@@ -19,7 +18,6 @@ import {BrowserDetection} from '../testing/src/browser_util';
         isFirefox: false,
         isAndroid: false,
         isEdge: false,
-        isIE: false,
         isWebkit: true,
         isIOS7: false,
         isSlow: false,
@@ -32,7 +30,6 @@ import {BrowserDetection} from '../testing/src/browser_util';
         isFirefox: false,
         isAndroid: false,
         isEdge: false,
-        isIE: false,
         isWebkit: true,
         isIOS7: false,
         isSlow: false,
@@ -45,62 +42,9 @@ import {BrowserDetection} from '../testing/src/browser_util';
         isFirefox: true,
         isAndroid: false,
         isEdge: false,
-        isIE: false,
         isWebkit: false,
         isIOS7: false,
         isSlow: false,
-        isChromeDesktop: false,
-        isOldChrome: false
-      },
-      {
-        name: 'IE9',
-        ua: 'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0; SLCC2; .NET CLR 2.0.50727)',
-        isFirefox: false,
-        isAndroid: false,
-        isEdge: false,
-        isIE: true,
-        isWebkit: false,
-        isIOS7: false,
-        isSlow: true,
-        isChromeDesktop: false,
-        isOldChrome: false
-      },
-      {
-        name: 'IE10',
-        ua: 'Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; WOW64; Trident/6.0; .NET4.0E; .NET4.0C)',
-        isFirefox: false,
-        isAndroid: false,
-        isEdge: false,
-        isIE: true,
-        isWebkit: false,
-        isIOS7: false,
-        isSlow: true,
-        isChromeDesktop: false,
-        isOldChrome: false
-      },
-      {
-        name: 'IE11',
-        ua: 'Mozilla/5.0 (Windows NT 6.3; WOW64; Trident/7.0; .NET4.0E; .NET4.0C; rv:11.0) like Gecko',
-        isFirefox: false,
-        isAndroid: false,
-        isEdge: false,
-        isIE: true,
-        isWebkit: false,
-        isIOS7: false,
-        isSlow: true,
-        isChromeDesktop: false,
-        isOldChrome: false
-      },
-      {
-        name: 'IEMobile',
-        ua: 'Mozilla/5.0 (Mobile; Windows Phone 8.1; Android 4.0; ARM; Trident/7.0; Touch; rv:11.0; IEMobile/11.0; NOKIA; Lumia 520) like iPhone OS 7_0_3 Mac OS X AppleWebKit/537 (KHTML, like Gecko) Mobile Safari/537',
-        isFirefox: false,
-        isAndroid: false,
-        isEdge: false,
-        isIE: true,
-        isWebkit: false,
-        isIOS7: false,
-        isSlow: true,
         isChromeDesktop: false,
         isOldChrome: false
       },
@@ -110,7 +54,6 @@ import {BrowserDetection} from '../testing/src/browser_util';
         isFirefox: false,
         isAndroid: false,
         isEdge: true,
-        isIE: false,
         isWebkit: false,
         isIOS7: false,
         isSlow: false,
@@ -123,7 +66,6 @@ import {BrowserDetection} from '../testing/src/browser_util';
         isFirefox: false,
         isAndroid: true,
         isEdge: false,
-        isIE: false,
         isWebkit: true,
         isIOS7: false,
         isSlow: true,
@@ -136,7 +78,6 @@ import {BrowserDetection} from '../testing/src/browser_util';
         isFirefox: false,
         isAndroid: true,
         isEdge: false,
-        isIE: false,
         isWebkit: true,
         isIOS7: false,
         isSlow: true,
@@ -149,7 +90,6 @@ import {BrowserDetection} from '../testing/src/browser_util';
         isFirefox: false,
         isAndroid: true,
         isEdge: false,
-        isIE: false,
         isWebkit: true,
         isIOS7: false,
         isSlow: true,
@@ -162,7 +102,6 @@ import {BrowserDetection} from '../testing/src/browser_util';
         isFirefox: false,
         isAndroid: false,
         isEdge: false,
-        isIE: false,
         isWebkit: true,
         isIOS7: false,
         isSlow: false,
@@ -175,7 +114,6 @@ import {BrowserDetection} from '../testing/src/browser_util';
         isFirefox: false,
         isAndroid: false,
         isEdge: false,
-        isIE: false,
         isWebkit: true,
         isIOS7: false,
         isSlow: false,
@@ -188,7 +126,6 @@ import {BrowserDetection} from '../testing/src/browser_util';
         isFirefox: false,
         isAndroid: false,
         isEdge: false,
-        isIE: false,
         isWebkit: true,
         isIOS7: false,
         isSlow: false,
@@ -201,7 +138,6 @@ import {BrowserDetection} from '../testing/src/browser_util';
         isFirefox: false,
         isAndroid: false,
         isEdge: false,
-        isIE: false,
         isWebkit: true,
         isIOS7: true,
         isSlow: true,
@@ -214,7 +150,6 @@ import {BrowserDetection} from '../testing/src/browser_util';
         isFirefox: false,
         isAndroid: false,
         isEdge: false,
-        isIE: false,
         isWebkit: true,
         isIOS7: false,
         isSlow: false,
@@ -224,12 +159,11 @@ import {BrowserDetection} from '../testing/src/browser_util';
     ];
 
     browsers.forEach((browser: {[key: string]: any}) => {
-      it(`should detect ${browser[ 'name']}`, () => {
+      it(`should detect ${browser['name']}`, () => {
         const bd = new BrowserDetection(<string>browser['ua']);
         expect(bd.isFirefox).toBe(browser['isFirefox']);
         expect(bd.isAndroid).toBe(browser['isAndroid']);
         expect(bd.isEdge).toBe(browser['isEdge']);
-        expect(bd.isIE).toBe(browser['isIE']);
         expect(bd.isWebkit).toBe(browser['isWebkit']);
         expect(bd.isIOS7).toBe(browser['isIOS7']);
         expect(bd.isSlow).toBe(browser['isSlow']);

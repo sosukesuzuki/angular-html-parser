@@ -4,11 +4,11 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 @Component({
   selector: 'toh-hero-button',
-  template: `<button>{{label}}</button>`
+  template: `<button type="button">{{label}}</button>`
 })
 export class HeroButtonComponent {
   // Pointless aliases
-  @Output('changeEvent') change = new EventEmitter<any>();
+  @Output('heroChangeEvent') heroChange = new EventEmitter<any>();
   @Input('labelAttribute') label: string;
 }
 // #enddocregion example

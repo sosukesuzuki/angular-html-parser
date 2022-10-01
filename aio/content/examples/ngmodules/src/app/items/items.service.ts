@@ -1,7 +1,7 @@
 import { Injectable, OnDestroy } from '@angular/core';
 
 import { Observable, of } from 'rxjs';
-import { delay }      from 'rxjs/operators';
+import { delay } from 'rxjs/operators';
 
 export class Item {
   constructor(public id: number, public name: string) { }
@@ -28,7 +28,7 @@ export class ItemService implements OnDestroy {
   }
 
   getItem(id: number | string): Observable<Item> {
-    const item$ = of(ITEMS.find(item => item.id === +id));
+    const item$ = of(ITEMS.find(item => item.id === +id)!);
     return item$.pipe(delay(FETCH_LATENCY));
   }
 }

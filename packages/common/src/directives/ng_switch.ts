@@ -1,12 +1,14 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {Directive, DoCheck, Host, Input, TemplateRef, ViewContainerRef} from '@angular/core';
+import {Directive, DoCheck, Host, Input, Optional, TemplateRef, ViewContainerRef, ɵRuntimeError as RuntimeError} from '@angular/core';
+
+import {RuntimeErrorCode} from '../errors';
 
 export class SwitchView {
   private _created = false;
@@ -36,9 +38,7 @@ export class SwitchView {
 /**
  * @ngModule CommonModule
  *
- * @description A structural directive that adds or removes templates (displaying or hiding views)
- * when the next match expression matches the switch expression.
- *
+ * @description
  * The `[ngSwitch]` directive on a container specifies an expression to match against.
  * The expressions to match are provided by `ngSwitchCase` directives on views within the container.
  * - Every view that matches is rendered.
@@ -101,10 +101,13 @@ export class SwitchView {
  * @see [Structural Directives](guide/structural-directives)
  *
  */
-@Directive({selector: '[ngSwitch]'})
+@Directive({
+  selector: '[ngSwitch]',
+  standalone: true,
+})
 export class NgSwitch {
   // TODO(issue/24571): remove '!'.
-  private _defaultViews !: SwitchView[];
+  private _defaultViews!: SwitchView[];
   private _defaultUsed = false;
   private _caseCount = 0;
   private _lastCaseCheckIndex = 0;
@@ -120,7 +123,9 @@ export class NgSwitch {
   }
 
   /** @internal */
-  _addCase(): number { return this._caseCount++; }
+  _addCase(): number {
+    return this._caseCount++;
+  }
 
   /** @internal */
   _addDefault(view: SwitchView) {
@@ -187,26 +192,35 @@ export class NgSwitch {
  * @see `NgSwitchDefault`
  *
  */
-@Directive({selector: '[ngSwitchCase]'})
+@Directive({
+  selector: '[ngSwitchCase]',
+  standalone: true,
+})
 export class NgSwitchCase implements DoCheck {
   private _view: SwitchView;
   /**
    * Stores the HTML template to be selected on match.
    */
-  @Input()
-  ngSwitchCase: any;
+  @Input() ngSwitchCase: any;
 
   constructor(
       viewContainer: ViewContainerRef, templateRef: TemplateRef<Object>,
-      @Host() private ngSwitch: NgSwitch) {
+      @Optional() @Host() private ngSwitch: NgSwitch) {
+    if ((typeof ngDevMode === 'undefined' || ngDevMode) && !ngSwitch) {
+      throwNgSwitchProviderNotFoundError('ngSwitchCase', 'NgSwitchCase');
+    }
+
     ngSwitch._addCase();
     this._view = new SwitchView(viewContainer, templateRef);
   }
 
   /**
    * Performs case matching. For internal use only.
+   * @nodoc
    */
-  ngDoCheck() { this._view.enforceState(this.ngSwitch._matchCase(this.ngSwitchCase)); }
+  ngDoCheck() {
+    this._view.enforceState(this.ngSwitch._matchCase(this.ngSwitchCase));
+  }
 }
 
 /**
@@ -223,11 +237,27 @@ export class NgSwitchCase implements DoCheck {
  * @see `NgSwitchCase`
  *
  */
-@Directive({selector: '[ngSwitchDefault]'})
+@Directive({
+  selector: '[ngSwitchDefault]',
+  standalone: true,
+})
 export class NgSwitchDefault {
   constructor(
       viewContainer: ViewContainerRef, templateRef: TemplateRef<Object>,
-      @Host() ngSwitch: NgSwitch) {
+      @Optional() @Host() ngSwitch: NgSwitch) {
+    if ((typeof ngDevMode === 'undefined' || ngDevMode) && !ngSwitch) {
+      throwNgSwitchProviderNotFoundError('ngSwitchDefault', 'NgSwitchDefault');
+    }
+
     ngSwitch._addDefault(new SwitchView(viewContainer, templateRef));
   }
+}
+
+function throwNgSwitchProviderNotFoundError(attrName: string, directiveName: string): never {
+  throw new RuntimeError(
+      RuntimeErrorCode.PARENT_NG_SWITCH_NOT_FOUND,
+      `An element with the "${attrName}" attribute ` +
+          `(matching the "${
+              directiveName}" directive) must be located inside an element with the "ngSwitch" attribute ` +
+          `(matching "NgSwitch" directive)`);
 }

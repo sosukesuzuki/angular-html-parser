@@ -1,14 +1,16 @@
-package(default_visibility = ["//visibility:public"])
-
 load("//tools:defaults.bzl", "ts_library")
+
+package(default_visibility = ["//visibility:public"])
 
 ts_library(
     name = "file_system",
     srcs = ["index.ts"] + glob([
-        "src/*.ts",
+        "src/**/*.ts",
     ]),
     deps = [
-        "//packages:types",
+        # Allows for the `import.meta.url` constant to be used. This is
+        # a temporary interop until devmode is switched to ESM.
+        "//packages/compiler-cli:import_meta_url_types",
         "@npm//@types/node",
         "@npm//typescript",
     ],

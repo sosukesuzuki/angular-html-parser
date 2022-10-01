@@ -1,17 +1,16 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
 import {Filesystem} from '@angular/service-worker/config';
+import * as fs from 'fs';
+import * as path from 'path';
 
 import {sha1Binary} from './sha1';
-
-const fs = require('fs');
-const path = require('path');
 
 export class NodeFilesystem implements Filesystem {
   constructor(private base: string) {}
@@ -26,7 +25,7 @@ export class NodeFilesystem implements Filesystem {
     return entries.filter((entry: any) => entry.stats.isDirectory())
         .map((entry: any) => path.posix.join(_path, entry.entry))
         .reduce(
-            async(list: Promise<string[]>, subdir: string) =>
+            async (list: Promise<string[]>, subdir: string) =>
                 (await list).concat(await this.list(subdir)),
             Promise.resolve(files));
   }
@@ -47,5 +46,7 @@ export class NodeFilesystem implements Filesystem {
     fs.writeFileSync(file, contents);
   }
 
-  private canonical(_path: string): string { return path.posix.join(this.base, _path); }
+  private canonical(_path: string): string {
+    return path.posix.join(this.base, _path);
+  }
 }

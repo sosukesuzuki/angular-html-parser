@@ -1,13 +1,12 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
 import {CssSelector, SelectorMatcher} from '@angular/compiler/src/selector';
-import {getDOM} from '@angular/platform-browser/src/dom/dom_adapter';
 import {el} from '@angular/platform-browser/testing/src/browser_util';
 
 {
@@ -17,13 +16,16 @@ import {el} from '@angular/platform-browser/testing/src/browser_util';
     let s1: any[], s2: any[], s3: any[], s4: any[];
     let matched: any[];
 
-    function reset() { matched = []; }
+    function reset() {
+      matched = [];
+    }
 
     beforeEach(() => {
       reset();
-      s1 = s2 = s3 = s4 = null !;
-      selectableCollector =
-          (selector: CssSelector, context: any) => { matched.push(selector, context); };
+      s1 = s2 = s3 = s4 = null!;
+      selectableCollector = (selector: CssSelector, context: any) => {
+        matched.push(selector, context);
+      };
       matcher = new SelectorMatcher();
     });
 
@@ -123,12 +125,73 @@ import {el} from '@angular/platform-browser/testing/src/browser_util';
       expect(matched).toEqual([s1[0], 1]);
     });
 
+    it('should support "$" in attribute names', () => {
+      matcher.addSelectables(s1 = CssSelector.parse('[someAttr\\$]'), 1);
+
+      expect(matcher.match(getSelectorFor({attrs: [['someAttr', '']]}), selectableCollector))
+          .toEqual(false);
+      expect(matched).toEqual([]);
+      reset();
+
+      expect(matcher.match(getSelectorFor({attrs: [['someAttr$', '']]}), selectableCollector))
+          .toEqual(true);
+      expect(matched).toEqual([s1[0], 1]);
+      reset();
+
+      matcher.addSelectables(s1 = CssSelector.parse('[some\\$attr]'), 1);
+
+      expect(matcher.match(getSelectorFor({attrs: [['someattr', '']]}), selectableCollector))
+          .toEqual(false);
+      expect(matched).toEqual([]);
+
+      expect(matcher.match(getSelectorFor({attrs: [['some$attr', '']]}), selectableCollector))
+          .toEqual(true);
+      expect(matched).toEqual([s1[0], 1]);
+      reset();
+
+      matcher.addSelectables(s1 = CssSelector.parse('[\\$someAttr]'), 1);
+
+      expect(matcher.match(getSelectorFor({attrs: [['someAttr', '']]}), selectableCollector))
+          .toEqual(false);
+      expect(matched).toEqual([]);
+
+      expect(matcher.match(getSelectorFor({attrs: [['$someAttr', '']]}), selectableCollector))
+          .toEqual(true);
+      expect(matched).toEqual([s1[0], 1]);
+      reset();
+
+      matcher.addSelectables(s1 = CssSelector.parse('[some-\\$Attr]'), 1);
+      matcher.addSelectables(s2 = CssSelector.parse('[some-\\$Attr][some-\\$-attr]'), 2);
+
+      expect(matcher.match(getSelectorFor({attrs: [['some\\$Attr', '']]}), selectableCollector))
+          .toEqual(false);
+      expect(matched).toEqual([]);
+
+      expect(matcher.match(
+                 getSelectorFor({attrs: [['some-$-attr', 'someValue'], ['some-$Attr', '']]}),
+                 selectableCollector))
+          .toEqual(true);
+      expect(matched).toEqual([s1[0], 1, s2[0], 2]);
+      reset();
+
+
+      expect(matcher.match(getSelectorFor({attrs: [['someattr$', '']]}), selectableCollector))
+          .toEqual(false);
+      expect(matched).toEqual([]);
+
+      expect(matcher.match(
+                 getSelectorFor({attrs: [['some-simple-attr', '']]}), selectableCollector))
+          .toEqual(false);
+      expect(matched).toEqual([]);
+      reset();
+    });
+
     it('should select by attr name only once if the value is from the DOM', () => {
       matcher.addSelectables(s1 = CssSelector.parse('[some-decor]'), 1);
 
       const elementSelector = new CssSelector();
       const element = el('<div attr></div>');
-      const empty = getDOM().getAttribute(element, 'attr') !;
+      const empty = element.getAttribute('attr')!;
       elementSelector.addAttribute('some-decor', empty);
       matcher.match(elementSelector, selectableCollector);
       expect(matched).toEqual([s1[0], 1]);
@@ -304,6 +367,35 @@ import {el} from '@angular/platform-browser/testing/src/browser_util';
       expect(cssSelector.toString()).toEqual('sometag');
     });
 
+    it('should detect attr names with escaped $', () => {
+      let cssSelector = CssSelector.parse('[attrname\\$]')[0];
+      expect(cssSelector.attrs).toEqual(['attrname$', '']);
+      expect(cssSelector.toString()).toEqual('[attrname\\$]');
+
+      cssSelector = CssSelector.parse('[\\$attrname]')[0];
+      expect(cssSelector.attrs).toEqual(['$attrname', '']);
+      expect(cssSelector.toString()).toEqual('[\\$attrname]');
+
+      cssSelector = CssSelector.parse('[foo\\$bar]')[0];
+      expect(cssSelector.attrs).toEqual(['foo$bar', '']);
+      expect(cssSelector.toString()).toEqual('[foo\\$bar]');
+    });
+
+    it('should error on attr names with unescaped $', () => {
+      expect(() => CssSelector.parse('[attrname$]'))
+          .toThrowError(
+              'Error in attribute selector "attrname$". Unescaped "$" is not supported. Please escape with "\\$".');
+      expect(() => CssSelector.parse('[$attrname]'))
+          .toThrowError(
+              'Error in attribute selector "$attrname". Unescaped "$" is not supported. Please escape with "\\$".');
+      expect(() => CssSelector.parse('[foo$bar]'))
+          .toThrowError(
+              'Error in attribute selector "foo$bar". Unescaped "$" is not supported. Please escape with "\\$".');
+      expect(() => CssSelector.parse('[foo\\$bar$]'))
+          .toThrowError(
+              'Error in attribute selector "foo\\$bar$". Unescaped "$" is not supported. Please escape with "\\$".');
+    });
+
     it('should detect class names', () => {
       const cssSelector = CssSelector.parse('.someClass')[0];
       expect(cssSelector.classNames).toEqual(['someclass']);
@@ -328,6 +420,12 @@ import {el} from '@angular/platform-browser/testing/src/browser_util';
       const cssSelector = CssSelector.parse('[attrname="attrvalue"]')[0];
       expect(cssSelector.attrs).toEqual(['attrname', 'attrvalue']);
       expect(cssSelector.toString()).toEqual('[attrname=attrvalue]');
+    });
+
+    it('should detect #some-value syntax and treat as attribute', () => {
+      const cssSelector = CssSelector.parse('#some-value')[0];
+      expect(cssSelector.attrs).toEqual(['id', 'some-value']);
+      expect(cssSelector.toString()).toEqual('[id=some-value]');
     });
 
     it('should detect attr values with single quotes', () => {
@@ -381,7 +479,7 @@ import {el} from '@angular/platform-browser/testing/src/browser_util';
     it('should throw when nested :not', () => {
       expect(() => {
         CssSelector.parse('sometag:not(:not([attrname=attrvalue].someclass))')[0];
-      }).toThrowError('Nesting :not is not allowed in a selector');
+      }).toThrowError('Nesting :not in a selector is not allowed');
     });
 
     it('should throw when multiple selectors in :not', () => {
@@ -452,9 +550,13 @@ function getSelectorFor(
   const selector = new CssSelector();
   selector.setElement(tag);
 
-  attrs.forEach(nameValue => { selector.addAttribute(nameValue[0], nameValue[1]); });
+  attrs.forEach(nameValue => {
+    selector.addAttribute(nameValue[0], nameValue[1]);
+  });
 
-  classes.trim().split(/\s+/g).forEach(cName => { selector.addClassName(cName); });
+  classes.trim().split(/\s+/g).forEach(cName => {
+    selector.addClassName(cName);
+  });
 
   return selector;
 }

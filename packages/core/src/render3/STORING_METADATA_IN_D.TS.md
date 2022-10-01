@@ -13,16 +13,16 @@ Here is an abbreviated example of breakage of tree-shake-ability.
 })
 export class TooltipDirective {
   // ngtsc generates this:
-  static ngDirectiveDef = ɵɵdefineDirective(...);
+  static ɵdir = ɵɵdefineDirective(...);
 }
 
 @Component({
-  selector: 'my-app',
+  selector: 'app-root',
   template: 'Hello World!'
 })
 class MyAppComponent {
   // ngtsc generates this:
-  static ngDirectiveDef = ɵɵdefineComponent({
+  static ɵdir = ɵɵdefineComponent({
     ...
     directives: [
       // BREAKS TREE-SHAKING!!!
@@ -41,7 +41,7 @@ class MyAppComponent {
 })
 class MyAppModule {
     // ngtsc generates this:
-  static ngDirectiveDef = ɵɵdefineNgModule(...);
+  static ɵmod = ɵɵdefineNgModule(...);
 }
 ```
 
@@ -52,6 +52,6 @@ We store the information in the `.d.ts` file like so.
 
 ```typescript
 class TooltipDirective {
-  static ngDirectiveDef: DirectiveDefWithMeta<TooltipDirective, '[tooltip]', '', {}, {}, []>
+  static ɵdir: DirectiveDeclaration<TooltipDirective, '[tooltip]', '', {}, {}, []>
 }
 ```

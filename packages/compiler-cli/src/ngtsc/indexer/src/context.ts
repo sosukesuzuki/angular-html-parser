@@ -1,21 +1,22 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
 import {BoundTarget, DirectiveMeta, ParseSourceFile} from '@angular/compiler';
+
 import {Reference} from '../../imports';
 import {ClassDeclaration} from '../../reflection';
 
 export interface ComponentMeta extends DirectiveMeta {
   ref: Reference<ClassDeclaration>;
   /**
-   * Unparsed selector of the directive.
+   * Unparsed selector of the directive, or null if the directive does not have a selector.
    */
-  selector: string;
+  selector: string|null;
 }
 
 /**
@@ -45,7 +46,7 @@ export interface ComponentInfo {
 }
 
 /**
- * A context for storing indexing infromation about components of a program.
+ * A context for storing indexing information about components of a program.
  *
  * An `IndexingContext` collects component and template analysis information from
  * `DecoratorHandler`s and exposes them to be indexed.
@@ -56,5 +57,7 @@ export class IndexingContext {
   /**
    * Adds a component to the context.
    */
-  addComponent(info: ComponentInfo) { this.components.add(info); }
+  addComponent(info: ComponentInfo) {
+    this.components.add(info);
+  }
 }

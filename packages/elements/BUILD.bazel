@@ -1,4 +1,4 @@
-load("//tools:defaults.bzl", "ng_module", "ng_package")
+load("//tools:defaults.bzl", "api_golden_test_npm_package", "ng_module", "ng_package")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -19,21 +19,24 @@ ng_module(
 
 ng_package(
     name = "npm_package",
-    srcs = glob([
-        "**/*.externs.js",
-        "**/package.json",
-    ]),
-    entry_point = ":index.ts",
-    packages = [
-        "//packages/elements/schematics:npm_package",
-    ],
+    srcs = ["package.json"],
     tags = [
         "release-with-framework",
     ],
     # Do not add more to this list.
     # Dependencies on the full npm_package cause long re-builds.
-    visibility = ["//visibility:private"],
+    visibility = ["//integration:__subpackages__"],
     deps = [
         ":elements",
     ],
+)
+
+api_golden_test_npm_package(
+    name = "elements_api",
+    data = [
+        ":npm_package",
+        "//goldens:public-api",
+    ],
+    golden_dir = "angular/goldens/public-api/elements",
+    npm_package = "angular/packages/elements/npm_package",
 )

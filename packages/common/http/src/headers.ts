@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -24,7 +24,7 @@ export class HttpHeaders {
    * Internal map of lowercase header names to values.
    */
   // TODO(issue/24571): remove '!'.
-  private headers !: Map<string, string[]>;
+  private headers!: Map<string, string[]>;
 
 
   /**
@@ -36,7 +36,7 @@ export class HttpHeaders {
   /**
    * Complete the lazy initialization of this object (needed before reading).
    */
-  private lazyInit !: HttpHeaders | Function | null;
+  private lazyInit!: HttpHeaders|Function|null;
 
   /**
    * Queued updates to be materialized the next initialization.
@@ -59,7 +59,7 @@ export class HttpHeaders {
             const value = line.slice(index + 1).trim();
             this.maybeSetNormalizedName(name, key);
             if (this.headers.has(key)) {
-              this.headers.get(key) !.push(value);
+              this.headers.get(key)!.push(value);
             } else {
               this.headers.set(key, [value]);
             }
@@ -68,6 +68,9 @@ export class HttpHeaders {
       };
     } else {
       this.lazyInit = () => {
+        if (typeof ngDevMode === 'undefined' || ngDevMode) {
+          assertValidHeaders(headers);
+        }
         this.headers = new Map<string, string[]>();
         Object.keys(headers).forEach(name => {
           let values: string|string[] = headers[name];
@@ -139,8 +142,8 @@ export class HttpHeaders {
    * Appends a new value to the existing set of values for a header
    * and returns them in a clone of the original instance.
    *
-   * @param name The header name for which to append the value or values.
-   * @param value The new value or array of values.
+   * @param name The header name for which to append the values.
+   * @param value The value to append.
    *
    * @returns A clone of the HTTP headers object with the value appended to the given header.
    */
@@ -154,7 +157,7 @@ export class HttpHeaders {
    * in the returned object.
    *
    * @param name The header name.
-   * @param value The value or values to set or overide for the given header.
+   * @param value The value or values to set or override for the given header.
    *
    * @returns A clone of the HTTP headers object with the newly set header value.
    */
@@ -169,7 +172,7 @@ export class HttpHeaders {
    *
    * @returns A clone of the HTTP headers object with the given value deleted.
    */
-  delete (name: string, value?: string|string[]): HttpHeaders {
+  delete(name: string, value?: string|string[]): HttpHeaders {
     return this.clone({name, value, op: 'd'});
   }
 
@@ -197,8 +200,8 @@ export class HttpHeaders {
   private copyFrom(other: HttpHeaders) {
     other.init();
     Array.from(other.headers.keys()).forEach(key => {
-      this.headers.set(key, other.headers.get(key) !);
-      this.normalizedNames.set(key, other.normalizedNames.get(key) !);
+      this.headers.set(key, other.headers.get(key)!);
+      this.normalizedNames.set(key, other.normalizedNames.get(key)!);
     });
   }
 
@@ -215,7 +218,7 @@ export class HttpHeaders {
     switch (update.op) {
       case 'a':
       case 's':
-        let value = update.value !;
+        let value = update.value!;
         if (typeof value === 'string') {
           value = [value];
         }
@@ -255,6 +258,22 @@ export class HttpHeaders {
   forEach(fn: (name: string, values: string[]) => void) {
     this.init();
     Array.from(this.normalizedNames.keys())
-        .forEach(key => fn(this.normalizedNames.get(key) !, this.headers.get(key) !));
+        .forEach(key => fn(this.normalizedNames.get(key)!, this.headers.get(key)!));
+  }
+}
+
+/**
+ * Verifies that the headers object has the right shape: the values
+ * must be either strings or arrays. Throws an error if an invalid
+ * header value is present.
+ */
+function assertValidHeaders(headers: Record<string, unknown>):
+    asserts headers is Record<string, string|string[]> {
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value !== 'string' && !Array.isArray(value)) {
+      throw new Error(
+          `Unexpected value of the \`${key}\` header provided. ` +
+          `Expecting either a string or an array, but got: \`${value}\`.`);
+    }
   }
 }

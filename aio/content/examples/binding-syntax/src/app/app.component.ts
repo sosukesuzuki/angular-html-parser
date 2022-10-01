@@ -8,7 +8,7 @@ import { Component, ViewChild, ElementRef } from '@angular/core';
 })
 export class AppComponent {
 
-  @ViewChild('bindingInput', { static: false }) bindingInput: ElementRef;
+  @ViewChild('bindingInput') bindingInput!: ElementRef;
 
   isUnchanged = true;
 
@@ -26,7 +26,7 @@ export class AppComponent {
 
   toggleDisabled(): any {
 
-    let testButton = <HTMLInputElement> document.getElementById('testButton');
+    const testButton = document.getElementById('testButton') as HTMLInputElement;
     testButton.disabled = !testButton.disabled;
     console.warn(testButton.disabled);
   }

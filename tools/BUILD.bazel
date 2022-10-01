@@ -1,10 +1,10 @@
-package(default_visibility = ["//visibility:public"])
+load("//tools:defaults.bzl", "ts_config")
 
-load("@npm_bazel_typescript//:index.bzl", "ts_config")
+package(default_visibility = ["//visibility:public"])
 
 exports_files([
     "tsconfig.json",
-    "jasmine-seed-generator.js",
+    "postinstall-patches.js",
 ])
 
 ts_config(
@@ -21,6 +21,10 @@ platform(
         properties: {
             name: "dockerAddCapabilities"
             value: "SYS_ADMIN"
+        }
+        properties: {
+            name: "dockerNetwork"
+            value: "standard"
         }
         properties: {
             name: "Pool"

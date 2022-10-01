@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -13,7 +13,9 @@ const wtfMock = global.wtfMock;
 describe('XMLHttpRequest', function() {
   let testZone: Zone;
 
-  beforeEach(() => { testZone = Zone.current.fork({name: 'test'}); });
+  beforeEach(() => {
+    testZone = Zone.current.fork({name: 'test'});
+  });
 
   it('should intercept XHRs and treat them as MacroTasks', function(done) {
     let req: XMLHttpRequest;
@@ -30,7 +32,9 @@ describe('XMLHttpRequest', function() {
     testZoneWithWtf.run(() => {
       req = new XMLHttpRequest();
       const logs: string[] = [];
-      req.onload = () => { logs.push('onload'); };
+      req.onload = () => {
+        logs.push('onload');
+      };
       onStable = function() {
         expect(wtfMock.log[wtfMock.log.length - 2])
             .toEqual('> Zone:invokeTask:XMLHttpRequest.send("<root>::ProxyZone::WTF::TestZone")');
@@ -96,7 +100,86 @@ describe('XMLHttpRequest', function() {
       req.open('get', '/', true);
     });
 
-    req !.send();
+    req!.send();
+  });
+
+  it('should run onload listeners before internal readystatechange', function(done) {
+    const logs: string[] = [];
+    const xhrZone = Zone.current.fork({
+      name: 'xhr',
+      onInvokeTask: (delegate, curr, target, task, applyThis, applyArgs) => {
+        logs.push('invokeTask ' + task.source);
+        return delegate.invokeTask(target, task, applyThis, applyArgs);
+      }
+    });
+
+    xhrZone.run(function() {
+      const req = new XMLHttpRequest();
+      req.onload = function() {
+        logs.push('onload');
+        (window as any)[Zone.__symbol__('setTimeout')](() => {
+          expect(logs).toEqual([
+            'invokeTask XMLHttpRequest.addEventListener:load', 'onload',
+            'invokeTask XMLHttpRequest.send'
+          ])
+          done();
+        });
+      };
+      req.open('get', '/', true);
+      req.send();
+    });
+  });
+
+  it('should invoke xhr task even onload listener throw error', function(done) {
+    const oriWindowError = window.onerror;
+    const logs: string[] = [];
+    window.onerror = function(err: any) {
+      logs.push(err);
+    };
+    try {
+      const xhrZone = Zone.current.fork({
+        name: 'xhr',
+        onInvokeTask: (delegate, curr, target, task, applyThis, applyArgs) => {
+          logs.push('invokeTask ' + task.source);
+          return delegate.invokeTask(target, task, applyThis, applyArgs);
+        },
+        onHasTask: (delegate, curr, target, hasTaskState) => {
+          if (hasTaskState.change === 'macroTask') {
+            logs.push('hasTask ' + hasTaskState.macroTask);
+          }
+          return delegate.hasTask(target, hasTaskState);
+        }
+      });
+
+      xhrZone.run(function() {
+        const req = new XMLHttpRequest();
+        req.onload = function() {
+          logs.push('onload');
+          throw new Error('test');
+        };
+        const unhandledRejection = (e: PromiseRejectionEvent) => {
+          fail('should not be here');
+        };
+        window.addEventListener('unhandledrejection', unhandledRejection);
+        req.addEventListener('load', () => {
+          logs.push('onload1');
+          (window as any)[Zone.__symbol__('setTimeout')](() => {
+            expect(logs).toEqual([
+              'hasTask true', 'invokeTask XMLHttpRequest.addEventListener:load', 'onload',
+              'invokeTask XMLHttpRequest.addEventListener:load', 'onload1',
+              'invokeTask XMLHttpRequest.send', 'hasTask false', 'Uncaught Error: test'
+            ]);
+            window.removeEventListener('unhandledrejection', unhandledRejection);
+            window.onerror = oriWindowError;
+            done();
+          });
+        });
+        req.open('get', '/', true);
+        req.send();
+      });
+    } catch (e: any) {
+      window.onerror = oriWindowError;
+    }
   });
 
   it('should return null when access ontimeout first time without error', function() {
@@ -104,7 +187,9 @@ describe('XMLHttpRequest', function() {
     expect(req.ontimeout).toBe(null);
   });
 
-  const supportsOnProgress = function() { return 'onprogress' in (new XMLHttpRequest()); };
+  const supportsOnProgress = function() {
+    return 'onprogress' in (new XMLHttpRequest());
+  };
 
   (<any>supportsOnProgress).message = 'XMLHttpRequest.onprogress';
 
@@ -122,7 +207,7 @@ describe('XMLHttpRequest', function() {
                  req.open('get', '/', true);
                });
 
-               req !.send();
+               req!.send();
              });
 
              it('should allow canceling of an XMLHttpRequest', function(done) {
@@ -132,13 +217,14 @@ describe('XMLHttpRequest', function() {
 
                const trackingTestZone = Zone.current.fork({
                  name: 'tracking test zone',
-                 onHasTask: (delegate: ZoneDelegate, current: Zone, target: Zone,
-                             hasTaskState: HasTaskState) => {
-                   if (hasTaskState.change == 'macroTask') {
-                     pending = hasTaskState.macroTask;
-                   }
-                   delegate.hasTask(target, hasTaskState);
-                 }
+                 onHasTask:
+                     (delegate: ZoneDelegate, current: Zone, target: Zone,
+                      hasTaskState: HasTaskState) => {
+                       if (hasTaskState.change == 'macroTask') {
+                         pending = hasTaskState.macroTask;
+                       }
+                       delegate.hasTask(target, hasTaskState);
+                     }
                });
 
                trackingTestZone.run(function() {
@@ -194,7 +280,7 @@ describe('XMLHttpRequest', function() {
       expect(req.responseType).toBe('document');
     } catch (e) {
       // Android browser: using this setter throws, this should be preserved
-      expect(e.message).toBe('INVALID_STATE_ERR: DOM Exception 11');
+      expect((e as Error).message).toBe('INVALID_STATE_ERR: DOM Exception 11');
     }
   });
 
@@ -234,8 +320,12 @@ describe('XMLHttpRequest', function() {
          req.onload = function() {
            req.onload = null as any;
            req.open('get', '/', true);
-           req.onload = function() { done(); };
-           expect(() => { req.send(); }).not.toThrow();
+           req.onload = function() {
+             done();
+           };
+           expect(() => {
+             req.send();
+           }).not.toThrow();
          };
        });
      });
@@ -244,16 +334,54 @@ describe('XMLHttpRequest', function() {
      function(done) {
        testZone.run(function() {
          const req = new XMLHttpRequest();
+
          req.open('get', '/', true);
          req.send();
-         req.addEventListener('readystatechange', function(ev) {
+
+         let count = 0;
+         const listener = function(ev: any) {
            if (req.readyState >= 2) {
-             expect(() => { req.abort(); }).not.toThrow();
-             done();
+             const isInitial = count++ === 0;
+
+             expect(() => {
+               // this triggers a synchronous dispatch of the state change event.
+               req.abort();
+             }).not.toThrow();
+
+             req.removeEventListener('readystatechange', listener);
+
+             if (isInitial) {
+               done();
+             }
            }
-         });
+         };
+         req.addEventListener('readystatechange', listener);
        });
      });
+
+  it('should close xhr request if error happened when connect', function(done) {
+    const logs: boolean[] = [];
+    Zone.current
+        .fork({
+          name: 'xhr',
+          onHasTask:
+              (delegate: ZoneDelegate, curr: Zone, target: Zone, taskState: HasTaskState) => {
+                if (taskState.change === 'macroTask') {
+                  logs.push(taskState.macroTask);
+                }
+                return delegate.hasTask(target, taskState);
+              }
+        })
+        .run(function() {
+          const req = new XMLHttpRequest();
+          req.open('get', 'http://notexists.url', true);
+          req.send();
+          req.addEventListener('error', () => {
+            expect(logs).toEqual([true, false]);
+            done();
+          });
+        });
+  });
 
   it('should trigger readystatechange if xhr request trigger cors error', (done) => {
     const req = new XMLHttpRequest();
@@ -374,7 +502,9 @@ describe('XMLHttpRequest', function() {
            }
          };
          expect(req.onreadystatechange).toBe(listener);
-         req.onreadystatechange = function() { return listener.call(this); };
+         req.onreadystatechange = function() {
+           return listener.call(this);
+         };
          req.send();
        });
      }));

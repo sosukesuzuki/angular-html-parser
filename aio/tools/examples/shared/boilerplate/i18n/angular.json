@@ -5,14 +5,25 @@
   "projects": {
     "angular.io-example": {
       "projectType": "application",
-      "schematics": {},
+      "schematics": {
+        "@schematics/angular:application": {
+          "strict": true
+        }
+      },
       "root": "",
       "sourceRoot": "src",
       "prefix": "app",
+      "i18n": {
+        "sourceLocale": "en-US",
+        "locales": {
+          "fr": "src/locale/messages.fr.xlf"
+        }
+      },
       "architect": {
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
+            "localize": true,
             "outputPath": "dist",
             "index": "src/index.html",
             "main": "src/main.ts",
@@ -29,74 +40,56 @@
           },
           "configurations": {
             "production": {
-              "fileReplacements": [
-                {
-                  "replace": "src/environments/environment.ts",
-                  "with": "src/environments/environment.prod.ts"
-                }
-              ],
-              "optimization": true,
-              "outputHashing": "all",
-              "sourceMap": false,
-              "extractCss": true,
-              "namedChunks": false,
-              "aot": true,
-              "extractLicenses": true,
-              "vendorChunk": false,
-              "buildOptimizer": true,
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "2mb",
-                  "maximumError": "5mb"
+                  "maximumWarning": "500kb",
+                  "maximumError": "1mb"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "2kb",
+                  "maximumError": "4kb"
                 }
-              ]
-            },
-            "production-fr": {
+              ],
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",
                   "with": "src/environments/environment.prod.ts"
                 }
               ],
-              "optimization": true,
-              "outputHashing": "all",
-              "sourceMap": false,
-              "extractCss": true,
-              "namedChunks": false,
-              "aot": true,
-              "extractLicenses": true,
-              "vendorChunk": false,
-              "buildOptimizer": true,
-              "outputPath": "dist/my-project-fr/",
-              "i18nFile": "src/locale/messages.fr.xlf",
-              "i18nFormat": "xlf",
-              "i18nLocale": "fr",
-              "i18nMissingTranslation": "error"
+              "outputHashing": "all"
+            },
+            "development": {
+              "buildOptimizer": false,
+              "optimization": false,
+              "vendorChunk": true,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "namedChunks": true
             },
             "fr": {
-              "aot": true,
-              "outputPath": "dist/my-project-fr/",
-              "i18nFile": "src/locale/messages.fr.xlf",
-              "i18nFormat": "xlf",
-              "i18nLocale": "fr",
-              "i18nMissingTranslation": "error"
+              "localize": [
+                "fr"
+              ]
             }
-          }
+          },
+          "defaultConfiguration": "production"
         },
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
-          "options": {
-            "browserTarget": "angular.io-example:build"
-          },
           "configurations": {
             "production": {
               "browserTarget": "angular.io-example:build:production"
             },
+            "development": {
+              "browserTarget": "angular.io-example:build:development"
+            },
             "fr": {
               "browserTarget": "angular.io-example:build:fr"
             }
-          }
+          },
+          "defaultConfiguration": "development"
         },
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n",
@@ -121,19 +114,6 @@
             "scripts": []
           }
         },
-        "lint": {
-          "builder": "@angular-devkit/build-angular:tslint",
-          "options": {
-            "tsConfig": [
-              "tsconfig.app.json",
-              "tsconfig.spec.json",
-              "e2e/tsconfig.json"
-            ],
-            "exclude": [
-              "**/node_modules/**"
-            ]
-          }
-        },
         "e2e": {
           "builder": "@angular-devkit/build-angular:protractor",
           "options": {
@@ -148,6 +128,4 @@
         }
       }
     }
-  },
-  "defaultProject": "angular.io-example"
-}
+  }

@@ -1,7 +1,7 @@
-import { NO_ERRORS_SCHEMA }          from '@angular/core';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { AboutComponent }     from './about.component';
+import { AboutComponent } from './about.component';
 import { HighlightDirective } from '../shared/highlight.directive';
 
 let fixture: ComponentFixture<AboutComponent>;
@@ -10,8 +10,8 @@ describe('AboutComponent (highlightDirective)', () => {
   // #docregion tests
   beforeEach(() => {
     fixture = TestBed.configureTestingModule({
-      declarations: [ AboutComponent, HighlightDirective],
-      schemas:      [ NO_ERRORS_SCHEMA ]
+      declarations: [ AboutComponent, HighlightDirective ],
+      schemas:      [ CUSTOM_ELEMENTS_SCHEMA ]
     })
     .createComponent(AboutComponent);
     fixture.detectChanges(); // initial binding

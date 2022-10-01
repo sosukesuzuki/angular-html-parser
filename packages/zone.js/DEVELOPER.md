@@ -34,23 +34,10 @@ Before Commit
 
 Please make sure you pass all following checks before commit
 
-- gulp lint (tslint)
-- gulp format:enforce (clang-format)
-- gulp promisetest (promise a+ test)
-- yarn test (karma browser test)
-- gulp test-node (node test)
-
-You can run
-
-`yarn ci`
-
-to do all those checks for you.
-You can also add the script into your git pre-commit hook
-
-```
-echo -e 'exec npm run ci' > .git/hooks/pre-commit
-chmod u+x .git/hooks/pre-commit
-```
+- yarn gulp lint (tslint)
+- yarn gulp format (clang-format)
+- yarn promisetest (promise a+ test)
+- yarn bazel test //packages/zone.js/... (all tests)
 
 Webdriver Test
 --------------
@@ -80,28 +67,56 @@ yarn webdriver-sauce-test
 Releasing
 ---------
 
-For example, the current version is `0.9.1`, and we want to release a new version `0.10.0`.
+Releasing `zone.js` is a two step process.
 
-- create a new tag in `angular` repo. The `tag` must be `zone.js-<version>`, so in this example we need to create the tag `zone.js-0.10.0`.
+1. Create a PR which updates the changelog, and get it merged using normal merge process.
+2. Once the PR is merged check out the merge SHA of the PR and release `zone.js` from that SHA and tag it.
 
-```
-$ TAG=zone.js-0.10.0
-$ git tag $TAG
-```
-
-- Create PR to update `changelog` of zone.js, we need to define the previous tag which will be the current version.
+#### 1. Creating a PR for release
 
 ```
-$ export PREVIOUS_ZONE_TAG=zone.js-0.9.1
-$ yarn gulp changelog:zonejs
+rm -rf node_modules && yarn install
+export PREVIOUS_ZONE_TAG=`git tag -l 'zone.js-0.11.*' | tail -n1`
+export VERSION=`(cd packages/zone.js; npm version patch --no-git-tag-version)`
+export VERSION=${VERSION#v}
+export TAG="zone.js-${VERSION}"
+echo "Releasing zone.js version ${TAG}. Last release was ${PREVIOUS_ZONE_TAG}."
+yarn gulp changelog:zonejs
 ```
 
-- deploy to npm
+Inspect the `packages/zone.js/CHANGELOG.md` for any issues and than commit it with this command.
 
-To make a `dry-run`, run the following commands.
+Create a dry run build to make sure everything is ready.
+
 ```
-$ VERSION=<version>
-$ yarn bazel --output_base=$(mktemp -d) run //packages/zone.js:npm_package.pack --workspace_status_command="echo BUILD_SCM_VERSION $VERSION"
+yarn bazel --output_base=$(mktemp -d) run //packages/zone.js:npm_package.pack --workspace_status_command="echo BUILD_SCM_VERSION $VERSION"
 ```
 
-If everything looks fine, replace `.pack` with `.publish` to push to the npm registry.
+If everything looks good, commit the changes and push them to your origin to create a PR.
+
+```
+git checkout -b "release_${TAG}"
+git add packages/zone.js/CHANGELOG.md packages/zone.js/package.json
+git commit -m "release: cut the ${TAG} release"
+git push origin "release_${TAG}"
+```
+
+
+#### 2. Cutting a release
+
+Check out the SHA on main which has the changelog commit of the zone.js
+
+```
+git fetch upstream
+git checkout upstream/main
+rm -rf node_modules && yarn install
+export VERSION=`(node -e "console.log(require('./packages/zone.js/package.json').version)")`
+export TAG="zone.js-${VERSION}"
+export SHA=`git log upstream/main --oneline -n 1000 | grep "release: cut the ${TAG} release" | cut -f 1 -d " "`
+echo "Releasing '$VERSION' which will be tagged as '$TAG' from SHA '$SHA'."
+git checkout ${SHA}
+npm login --registry https://wombat-dressing-room.appspot.com
+yarn bazel -- run --config=release -- //packages/zone.js:npm_package.publish --access public --tag latest
+git tag ${TAG} ${SHA}
+git push upstream ${TAG}
+```

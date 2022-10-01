@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -21,10 +21,12 @@ describe('testing', () => {
        }));
 
     it('should support promises', withBody('<span>works!</span>', () => {
-         return Promise.resolve(true).then(() => passed = true);
+         return Promise.resolve(true).then(() => {
+           passed = true;
+         });
        }));
 
-    it('should support async and await', withBody('<span>works!</span>', async() => {
+    it('should support async and await', withBody('<span>works!</span>', async () => {
          await Promise.resolve(true);
          passed = true;
        }));
@@ -42,7 +44,7 @@ describe('testing', () => {
   describe('requestAnimationFrame', () => {
     it('should have requestAnimationFrame', (done) => {
       // In Browser we have requestAnimationFrame, but verify that we also have it node.js
-      requestAnimationFrame(done);
+      requestAnimationFrame(() => done());
     });
   });
 });

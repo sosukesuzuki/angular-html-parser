@@ -2,7 +2,7 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 
 import { MissionService } from './mission.service';
-import { Subscription }   from 'rxjs';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-astronaut',
@@ -10,6 +10,7 @@ import { Subscription }   from 'rxjs';
     <p>
       {{astronaut}}: <strong>{{mission}}</strong>
       <button
+        type="button"
         (click)="confirm()"
         [disabled]="!announced || confirmed">
         Confirm
@@ -18,7 +19,7 @@ import { Subscription }   from 'rxjs';
   `
 })
 export class AstronautComponent implements OnDestroy {
-  @Input() astronaut: string;
+  @Input() astronaut = '';
   mission = '<no mission announced>';
   confirmed = false;
   announced = false;

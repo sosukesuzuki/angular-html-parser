@@ -31,8 +31,8 @@ module.exports = function(config) {
       'node_modules/core-js/client/shim.js',
 
       // zone.js
-      'node_modules/zone.js/dist/zone.js',
-      'node_modules/zone.js/dist/zone-testing.js',
+      'node_modules/zone.js/bundles/zone.umd.js',
+      'node_modules/zone.js/bundles/zone-testing.umd.js',
 
       // RxJs
       { pattern: 'node_modules/rxjs/**/*.js', included: false, watched: false },
@@ -44,8 +44,11 @@ module.exports = function(config) {
 
       // Paths loaded via module imports:
       // Angular itself
-      { pattern: 'node_modules/@angular/**/*.js', included: false, watched: false },
-      { pattern: 'node_modules/@angular/**/*.js.map', included: false, watched: false },
+      { pattern: 'node_modules/@angular/**/*.mjs', included: false, watched: false },
+      { pattern: 'node_modules/@angular/**/*.mjs.map', included: false, watched: false },
+
+      { pattern: 'node_modules/tslib/tslib.js', included: false, watched: false },
+      { pattern: 'node_modules/systemjs-plugin-babel/**/*.js', included: false, watched: false },
 
       { pattern: appBase + '/systemjs.config.js', included: false, watched: false },
       { pattern: appBase + '/systemjs.config.extras.js', included: false, watched: false },

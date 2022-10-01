@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -9,15 +9,20 @@
 import '@angular/core/test/bundling/util/src/reflect_metadata';
 
 import {CommonModule} from '@angular/common';
-import {Component, Injectable, NgModule, ViewEncapsulation, ɵmarkDirty as markDirty, ɵrenderComponent as renderComponent} from '@angular/core';
+import {Component, Injectable, NgModule} from '@angular/core';
+import {BrowserModule, platformBrowser} from '@angular/platform-browser';
 
 class Todo {
   editing: boolean;
 
   // TODO(issue/24571): remove '!'.
-  private _title !: string;
-  get title() { return this._title; }
-  set title(value: string) { this._title = value.trim(); }
+  private _title!: string;
+  get title() {
+    return this._title;
+  }
+  set title(value: string) {
+    this._title = value.trim();
+  }
 
   constructor(title: string, public completed: boolean = false) {
     this.editing = false;
@@ -39,40 +44,62 @@ class TodoStore {
     return this.todos.filter((todo: Todo) => todo.completed === completed);
   }
 
-  allCompleted() { return this.todos.length === this.getCompleted().length; }
+  allCompleted() {
+    return this.todos.length === this.getCompleted().length;
+  }
 
-  setAllTo(completed: boolean) { this.todos.forEach((t: Todo) => t.completed = completed); }
+  setAllTo(completed: boolean) {
+    this.todos.forEach((t: Todo) => t.completed = completed);
+  }
 
-  removeCompleted() { this.todos = this.getWithCompleted(false); }
+  removeCompleted() {
+    this.todos = this.getWithCompleted(false);
+  }
 
-  getRemaining() { return this.getWithCompleted(false); }
+  getRemaining() {
+    return this.getWithCompleted(false);
+  }
 
-  getCompleted() { return this.getWithCompleted(true); }
+  getCompleted() {
+    return this.getWithCompleted(true);
+  }
 
-  toggleCompletion(todo: Todo) { todo.completed = !todo.completed; }
+  toggleCompletion(todo: Todo) {
+    todo.completed = !todo.completed;
+  }
 
-  remove(todo: Todo) { this.todos.splice(this.todos.indexOf(todo), 1); }
+  remove(todo: Todo) {
+    this.todos.splice(this.todos.indexOf(todo), 1);
+  }
 
-  add(title: string) { this.todos.push(new Todo(title)); }
+  add(title: string) {
+    this.todos.push(new Todo(title));
+  }
 }
 
 @Component({
   selector: 'todo-app',
   // TODO(misko): make this work with `[(ngModel)]`
-  encapsulation: ViewEncapsulation.None,
+  styles: [`
+    .todo-list li.completed label {
+      color: #d9d9d9;
+      text-decoration: line-through;
+      font-weight:bold;
+    }
+  `],
   template: `
   <section class="todoapp">
     <header class="header">
       <h1>todos</h1>
       <input class="new-todo" placeholder="What needs to be done?" autofocus=""
              [value]="newTodoText"
-             (keyup)="$event.code == 'Enter' ? addTodo() : updateNewTodoValue($event.target.value)">
+             (keyup)="$event.code == 'Enter' ? addTodo() : newTodoText = $event.target.value">
     </header>
     <section *ngIf="todoStore.todos.length > 0" class="main">
       <input *ngIf="todoStore.todos.length"
              #toggleall class="toggle-all" type="checkbox"
              [checked]="todoStore.allCompleted()"
-             (click)="toggleAllTodos(toggleall.checked)">
+             (click)="todoStore.setAllTo(toggleall.checked)">
       <ul class="todo-list">
         <li *ngFor="let todo of todoStore.todos"
             [class.completed]="todo.completed"
@@ -87,8 +114,8 @@ class TodoStore {
           <input *ngIf="todo.editing"
                  class="edit" #editedtodo
                  [value]="todo.title"
-                 (blur)="updateEditingTodo(todo, editedtodo.value)"
-                 (keyup)="updateEditedTodoValue($event.target.value)"
+                 (blur)="stopEditing(todo, editedtodo.value)"
+                 (keyup)="todo.title = $event.target.value"
                  (keyup)="$event.code == 'Enter' && updateEditingTodo(todo, editedtodo.value)"
                  (keyup)="$event.code == 'Escape' && cancelEditingTodo(todo)">
         </li>
@@ -113,42 +140,44 @@ class TodoStore {
 class ToDoAppComponent {
   newTodoText = '';
 
-  constructor(public todoStore: TodoStore) {}
+  constructor(public todoStore: TodoStore) {
+    (window as any).toDoAppComponent = this;
+  }
+
+  stopEditing(todo: Todo, editedTitle: string) {
+    todo.title = editedTitle;
+    todo.editing = false;
+  }
 
   cancelEditingTodo(todo: Todo) {
     todo.editing = false;
-    markDirty(this);
   }
 
-  finishUpdatingTodo(todo: Todo, editedTitle: string) {
+  updateEditingTodo(todo: Todo, editedTitle: string) {
     editedTitle = editedTitle.trim();
+    todo.editing = false;
 
     if (editedTitle.length === 0) {
-      this.remove(todo);
+      return this.todoStore.remove(todo);
     }
 
     todo.title = editedTitle;
-    this.cancelEditingTodo(todo);
   }
 
   editTodo(todo: Todo) {
     todo.editing = true;
-    markDirty(this);
   }
 
   removeCompleted() {
     this.todoStore.removeCompleted();
-    markDirty(this);
   }
 
   toggleCompletion(todo: Todo) {
     this.todoStore.toggleCompletion(todo);
-    markDirty(this);
   }
 
   remove(todo: Todo) {
     this.todoStore.remove(todo);
-    markDirty(this);
   }
 
   addTodo() {
@@ -156,27 +185,18 @@ class ToDoAppComponent {
       this.todoStore.add(this.newTodoText);
       this.newTodoText = '';
     }
-    markDirty(this);
-  }
-
-  toggleAllTodos(checked: boolean) {
-    this.todoStore.setAllTo(checked);
-    markDirty(this);
-  }
-
-  updateEditedTodoValue(todo: Todo, value: string) {
-    todo.title = value;
-    markDirty(this);
-  }
-
-  updateNewTodoValue(value: string) {
-    this.newTodoText = value;
-    markDirty(this);
   }
 }
 
-@NgModule({declarations: [ToDoAppComponent], imports: [CommonModule]})
+@NgModule({declarations: [ToDoAppComponent], imports: [CommonModule, BrowserModule]})
 class ToDoAppModule {
+  ngDoBootstrap(app: any) {
+    app.bootstrap(ToDoAppComponent);
+  }
 }
 
-renderComponent(ToDoAppComponent);
+function bootstrapApp() {
+  return platformBrowser().bootstrapModule(ToDoAppModule, {ngZone: 'noop'});
+}
+
+(window as any).bootstrapApp = bootstrapApp;

@@ -1,17 +1,17 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import * as ts from 'typescript';
+import ts from 'typescript';
 
-import {AbsoluteFsPath, absoluteFrom, basename} from '../../file_system';
+import {absoluteFromSourceFile, AbsoluteFsPath, basename} from '../../file_system';
 import {ImportRewriter} from '../../imports';
-import {isNonDeclarationTsPath} from '../../util/src/typescript';
+import {getDecorators, getModifiers, updateImportDeclaration} from '../../ts_compatibility';
+import {FactoryInfo, FactoryTracker, ModuleInfo, PerFileShimGenerator} from '../api';
 
-import {ShimGenerator} from './host';
 import {generatedModuleName} from './util';
 
 const TS_DTS_SUFFIX = /(\.d)?\.ts$/;
@@ -21,57 +21,50 @@ const STRIP_NG_FACTORY = /(.*)NgFactory$/;
  * Generates ts.SourceFiles which contain variable declarations for NgFactories for every exported
  * class of an input ts.SourceFile.
  */
-export class FactoryGenerator implements ShimGenerator {
-  private constructor(private map: Map<string, string>) {}
+export class FactoryGenerator implements PerFileShimGenerator, FactoryTracker {
+  readonly sourceInfo = new Map<string, FactoryInfo>();
+  private sourceToFactorySymbols = new Map<string, Map<string, ModuleInfo>>();
 
-  get factoryFileMap(): Map<string, string> { return this.map; }
+  readonly shouldEmit = true;
+  readonly extensionPrefix = 'ngfactory';
 
-  recognize(fileName: AbsoluteFsPath): boolean { return this.map.has(fileName); }
+  generateShimForFile(sf: ts.SourceFile, genFilePath: AbsoluteFsPath): ts.SourceFile {
+    const absoluteSfPath = absoluteFromSourceFile(sf);
 
-  generate(genFilePath: AbsoluteFsPath, readFile: (fileName: string) => ts.SourceFile | null):
-      ts.SourceFile|null {
-    const originalPath = this.map.get(genFilePath) !;
-    const original = readFile(originalPath);
-    if (original === null) {
-      return null;
-    }
-
-    const relativePathToSource = './' + basename(original.fileName).replace(TS_DTS_SUFFIX, '');
+    const relativePathToSource = './' + basename(sf.fileName).replace(TS_DTS_SUFFIX, '');
     // Collect a list of classes that need to have factory types emitted for them. This list is
     // overly broad as at this point the ts.TypeChecker hasn't been created, and can't be used to
     // semantically understand which decorated types are actually decorated with Angular decorators.
     //
     // The exports generated here are pruned in the factory transform during emit.
-    const symbolNames = original
-                            .statements
+    const symbolNames = sf.statements
                             // Pick out top level class declarations...
                             .filter(ts.isClassDeclaration)
                             // which are named, exported, and have decorators.
                             .filter(
-                                decl => isExported(decl) && decl.decorators !== undefined &&
+                                decl => isExported(decl) && getDecorators(decl) !== undefined &&
                                     decl.name !== undefined)
                             // Grab the symbol name.
-                            .map(decl => decl.name !.text);
+                            .map(decl => decl.name!.text);
 
+
+    let sourceText = '';
 
     // If there is a top-level comment in the original file, copy it over at the top of the
     // generated factory file. This is important for preserving any load-bearing jsdoc comments.
-    let comment: string = '';
-    if (original.statements.length > 0) {
-      const firstStatement = original.statements[0];
-      if (firstStatement.getLeadingTriviaWidth() > 0) {
-        comment = firstStatement.getFullText().substr(0, firstStatement.getLeadingTriviaWidth());
-      }
+    const leadingComment = getFileoverviewComment(sf);
+    if (leadingComment !== null) {
+      // Leading comments must be separated from the rest of the contents by a blank line.
+      sourceText = leadingComment + '\n\n';
     }
 
-    let sourceText = comment;
     if (symbolNames.length > 0) {
       // For each symbol name, generate a constant export of the corresponding NgFactory.
       // This will encompass a lot of symbols which don't need factories, but that's okay
       // because it won't miss any that do.
       const varLines = symbolNames.map(
-          name =>
-              `export const ${name}NgFactory: i0.ɵNgModuleFactory<any> = new i0.ɵNgModuleFactory(${name});`);
+          name => `export const ${
+              name}NgFactory: i0.ɵNgModuleFactory<any> = new i0.ɵNgModuleFactory(${name});`);
       sourceText += [
         // This might be incorrect if the current package being compiled is Angular core, but it's
         // okay to leave in at type checking time. TypeScript can handle this reference via its path
@@ -87,33 +80,32 @@ export class FactoryGenerator implements ShimGenerator {
     // factory transformer if it ends up not being needed.
     sourceText += '\nexport const ɵNonEmptyModule = true;';
 
-    const genFile = ts.createSourceFile(
-        genFilePath, sourceText, original.languageVersion, true, ts.ScriptKind.TS);
-    if (original.moduleName !== undefined) {
-      genFile.moduleName =
-          generatedModuleName(original.moduleName, original.fileName, '.ngfactory');
+    const genFile =
+        ts.createSourceFile(genFilePath, sourceText, sf.languageVersion, true, ts.ScriptKind.TS);
+    if (sf.moduleName !== undefined) {
+      genFile.moduleName = generatedModuleName(sf.moduleName, sf.fileName, '.ngfactory');
     }
+
+    const moduleSymbols = new Map<string, ModuleInfo>();
+    this.sourceToFactorySymbols.set(absoluteSfPath, moduleSymbols);
+    this.sourceInfo.set(genFilePath, {
+      sourceFilePath: absoluteSfPath,
+      moduleSymbols,
+    });
+
     return genFile;
   }
 
-  static forRootFiles(files: ReadonlyArray<AbsoluteFsPath>): FactoryGenerator {
-    const map = new Map<AbsoluteFsPath, string>();
-    files.filter(sourceFile => isNonDeclarationTsPath(sourceFile))
-        .forEach(
-            sourceFile =>
-                map.set(absoluteFrom(sourceFile.replace(/\.ts$/, '.ngfactory.ts')), sourceFile));
-    return new FactoryGenerator(map);
+  track(sf: ts.SourceFile, moduleInfo: ModuleInfo): void {
+    if (this.sourceToFactorySymbols.has(sf.fileName)) {
+      this.sourceToFactorySymbols.get(sf.fileName)!.set(moduleInfo.name, moduleInfo);
+    }
   }
 }
 
 function isExported(decl: ts.Declaration): boolean {
-  return decl.modifiers !== undefined &&
-      decl.modifiers.some(mod => mod.kind == ts.SyntaxKind.ExportKeyword);
-}
-
-export interface FactoryInfo {
-  sourceFilePath: string;
-  moduleSymbolNames: Set<string>;
+  const modifiers = getModifiers(decl);
+  return modifiers !== undefined && modifiers.some(mod => mod.kind == ts.SyntaxKind.ExportKeyword);
 }
 
 export function generatedFactoryTransform(
@@ -135,9 +127,7 @@ function transformFactorySourceFile(
     return file;
   }
 
-  const {moduleSymbolNames, sourceFilePath} = factoryMap.get(file.fileName) !;
-
-  file = ts.getMutableClone(file);
+  const {moduleSymbols, sourceFilePath} = factoryMap.get(file.fileName)!;
 
   // Not every exported factory statement is valid. They were generated before the program was
   // analyzed, and before ngtsc knew which symbols were actually NgModules. factoryMap contains
@@ -170,9 +160,9 @@ function transformFactorySourceFile(
       const rewrittenModuleSpecifier =
           importRewriter.rewriteSpecifier('@angular/core', sourceFilePath);
       if (rewrittenModuleSpecifier !== stmt.moduleSpecifier.text) {
-        transformedStatements.push(ts.updateImportDeclaration(
-            stmt, stmt.decorators, stmt.modifiers, stmt.importClause,
-            ts.createStringLiteral(rewrittenModuleSpecifier)));
+        transformedStatements.push(updateImportDeclaration(
+            stmt, getModifiers(stmt), stmt.importClause,
+            ts.factory.createStringLiteral(rewrittenModuleSpecifier), undefined));
 
         // Record the identifier by which this imported module goes, so references to its symbols
         // can be discovered later.
@@ -195,8 +185,14 @@ function transformFactorySourceFile(
 
         // Otherwise, check if this export is a factory for a known NgModule, and retain it if so.
         const match = STRIP_NG_FACTORY.exec(decl.name.text);
-        if (match !== null && moduleSymbolNames.has(match[1])) {
-          transformedStatements.push(stmt);
+        const module = match ? moduleSymbols.get(match[1]) : null;
+        if (module) {
+          // The factory should be wrapped in a `noSideEffects()` call which tells Closure to treat
+          // the expression as pure, allowing it to be removed if the result is not used.
+          transformedStatements.push(updateInitializers(
+              stmt,
+              (init) => init ? wrapInNoSideEffects(init) : undefined,
+              ));
         }
       } else {
         // Leave the statement alone, as it can't be understood.
@@ -214,7 +210,8 @@ function transformFactorySourceFile(
     // satisfy closure compiler.
     transformedStatements.push(nonEmptyExport);
   }
-  file.statements = ts.createNodeArray(transformedStatements);
+
+  file = ts.factory.updateSourceFile(file, transformedStatements);
 
   // If any imports to @angular/core were detected and rewritten (which happens when compiling
   // @angular/core), go through the SourceFile and rewrite references to symbols imported from core.
@@ -229,8 +226,8 @@ function transformFactorySourceFile(
         // This is an import of a symbol from @angular/core. Transform it with the importRewriter.
         const rewrittenSymbol = importRewriter.rewriteSymbol(node.name.text, '@angular/core');
         if (rewrittenSymbol !== node.name.text) {
-          const updated =
-              ts.updatePropertyAccess(node, node.expression, ts.createIdentifier(rewrittenSymbol));
+          const updated = ts.factory.updatePropertyAccessExpression(
+              node, node.expression, ts.factory.createIdentifier(rewrittenSymbol));
           node = updated as T & ts.PropertyAccessExpression;
         }
       }
@@ -241,4 +238,97 @@ function transformFactorySourceFile(
   }
 
   return file;
+}
+
+
+/**
+ * Parses and returns the comment text of a \@fileoverview comment in the given source file.
+ */
+function getFileoverviewComment(sourceFile: ts.SourceFile): string|null {
+  const text = sourceFile.getFullText();
+  const trivia = text.substring(0, sourceFile.getStart());
+
+  const leadingComments = ts.getLeadingCommentRanges(trivia, 0);
+  if (!leadingComments || leadingComments.length === 0) {
+    return null;
+  }
+
+  const comment = leadingComments[0];
+  if (comment.kind !== ts.SyntaxKind.MultiLineCommentTrivia) {
+    return null;
+  }
+
+  // Only comments separated with a \n\n from the file contents are considered file-level comments
+  // in TypeScript.
+  if (text.substring(comment.end, comment.end + 2) !== '\n\n') {
+    return null;
+  }
+
+  const commentText = text.substring(comment.pos, comment.end);
+  // Closure Compiler ignores @suppress and similar if the comment contains @license.
+  if (commentText.indexOf('@license') !== -1) {
+    return null;
+  }
+
+  return commentText;
+}
+
+/**
+ * Wraps the given expression in a call to `ɵnoSideEffects()`, which tells
+ * Closure we don't care about the side effects of this expression and it should
+ * be treated as "pure". Closure is free to tree shake this expression if its
+ * result is not used.
+ *
+ * Example: Takes `1 + 2` and returns `i0.ɵnoSideEffects(() => 1 + 2)`.
+ */
+function wrapInNoSideEffects(expr: ts.Expression): ts.Expression {
+  const noSideEffects = ts.factory.createPropertyAccessExpression(
+      ts.factory.createIdentifier('i0'),
+      'ɵnoSideEffects',
+  );
+
+  return ts.factory.createCallExpression(
+      noSideEffects,
+      /* typeArguments */[],
+      /* arguments */
+      [
+        ts.factory.createFunctionExpression(
+            /* modifiers */[],
+            /* asteriskToken */ undefined,
+            /* name */ undefined,
+            /* typeParameters */[],
+            /* parameters */[],
+            /* type */ undefined,
+            /* body */ ts.factory.createBlock([
+              ts.factory.createReturnStatement(expr),
+            ]),
+            ),
+      ],
+  );
+}
+
+/**
+ * Clones and updates the initializers for a given statement to use the new
+ * expression provided. Does not mutate the input statement.
+ */
+function updateInitializers(
+    stmt: ts.VariableStatement,
+    update: (initializer?: ts.Expression) => ts.Expression | undefined,
+    ): ts.VariableStatement {
+  return ts.factory.updateVariableStatement(
+      stmt,
+      getModifiers(stmt),
+      ts.factory.updateVariableDeclarationList(
+          stmt.declarationList,
+          stmt.declarationList.declarations.map(
+              (decl) => ts.factory.updateVariableDeclaration(
+                  decl,
+                  decl.name,
+                  decl.exclamationToken,
+                  decl.type,
+                  update(decl.initializer),
+                  ),
+              ),
+          ),
+  );
 }

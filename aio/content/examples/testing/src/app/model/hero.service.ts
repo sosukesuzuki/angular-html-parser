@@ -18,10 +18,10 @@ export class HeroService {
   constructor(private http: HttpClient) { }
 
   /** GET heroes from the server */
-  getHeroes (): Observable<Hero[]> {
+  getHeroes(): Observable<Hero[]> {
     return this.http.get<Hero[]>(this.heroesUrl)
       .pipe(
-        tap(heroes => this.log(`fetched heroes`)),
+        tap(heroes => this.log('fetched heroes')),
         catchError(this.handleError('getHeroes'))
       ) as Observable<Hero[]>;
   }
@@ -29,14 +29,14 @@ export class HeroService {
   /** GET hero by id. Return `undefined` when id not found */
   getHero<Data>(id: number | string): Observable<Hero> {
     if (typeof id === 'string') {
-      id = parseInt(id as string, 10);
+      id = parseInt(id, 10);
     }
     const url = `${this.heroesUrl}/?id=${id}`;
     return this.http.get<Hero[]>(url)
       .pipe(
         map(heroes => heroes[0]), // returns a {0|1} element array
         tap(h => {
-          const outcome = h ? `fetched` : `did not find`;
+          const outcome = h ? 'fetched' : 'did not find';
           this.log(`${outcome} hero id=${id}`);
         }),
         catchError(this.handleError<Hero>(`getHero id=${id}`))
@@ -46,14 +46,14 @@ export class HeroService {
   //////// Save methods //////////
 
   /** POST: add a new hero to the server */
-  addHero (hero: Hero): Observable<Hero> {
+  addHero(hero: Hero): Observable<Hero> {
     return this.http.post<Hero>(this.heroesUrl, hero, httpOptions).pipe(
-      tap((hero: Hero) => this.log(`added hero w/ id=${hero.id}`)),
+      tap((addedHero) => this.log(`added hero w/ id=${addedHero.id}`)),
       catchError(this.handleError<Hero>('addHero'))
     );
   }
   /** DELETE: delete the hero from the server */
-  deleteHero (hero: Hero | number): Observable<Hero> {
+  deleteHero(hero: Hero | number): Observable<Hero> {
     const id = typeof hero === 'number' ? hero : hero.id;
     const url = `${this.heroesUrl}/${id}`;
 
@@ -64,7 +64,7 @@ export class HeroService {
   }
 
   /** PUT: update the hero on the server */
-  updateHero (hero: Hero): Observable<any> {
+  updateHero(hero: Hero): Observable<any> {
     return this.http.put(this.heroesUrl, hero, httpOptions).pipe(
       tap(_ => this.log(`updated hero id=${hero.id}`)),
       catchError(this.handleError<any>('updateHero'))
@@ -73,18 +73,22 @@ export class HeroService {
   /**
    * Returns a function that handles Http operation failures.
    * This error handler lets the app continue to run as if no error occurred.
+   *
    * @param operation - name of the operation that failed
    */
-  private handleError<T> (operation = 'operation') {
+  private handleError<T>(operation = 'operation') {
     return (error: HttpErrorResponse): Observable<T> => {
 
       // TODO: send the error to remote logging infrastructure
       console.error(error); // log to console instead
 
-      const message = (error.error instanceof ErrorEvent) ?
-        error.error.message :
-       `server returned code ${error.status} with body "${error.error}"`;
+      // If a native error is caught, do not transform it. We only want to
+      // transform response errors that are not wrapped in an `Error`.
+      if (error.error instanceof Event) {
+        throw error.error;
+      }
 
+      const message = `server returned code ${error.status} with body "${error.error}"`;
       // TODO: better job of transforming error for user consumption
       throw new Error(`${operation} failed: ${message}`);
     };

@@ -1,8 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { ActivatedRoute }    from '@angular/router';
-
-import { Item,
-  ItemService }     from './items.service';
+import { ActivatedRoute } from '@angular/router';
 
 @Component({
   template: `
@@ -13,11 +10,11 @@ import { Item,
   `
 })
 export class ItemsDetailComponent implements OnInit {
-  id: number;
+  id = 0;
   constructor(private route: ActivatedRoute) { }
 
   ngOnInit() {
-    this.id = parseInt(this.route.snapshot.paramMap.get('id'), 10);
+    this.id = parseInt(this.route.snapshot.paramMap.get('id')!, 10);
   }
 }
 

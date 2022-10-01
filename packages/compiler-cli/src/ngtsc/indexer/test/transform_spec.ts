@@ -1,16 +1,18 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 import {BoundTarget, ParseSourceFile} from '@angular/compiler';
+
 import {runInEachFileSystem} from '../../file_system/testing';
 import {ClassDeclaration} from '../../reflection';
 import {ComponentMeta, IndexingContext} from '../src/context';
 import {getTemplateIdentifiers} from '../src/template';
 import {generateAnalysis} from '../src/transform';
+
 import * as util from './util';
 
 /**
@@ -25,7 +27,7 @@ function populateContext(
     boundTemplate,
     templateMeta: {
       isInline,
-      file: new ParseSourceFile(template, util.getTestFilePath()),
+      file: new ParseSourceFile(template, component.getSourceFile().fileName),
     },
   });
 }
@@ -45,13 +47,15 @@ runInEachFileSystem(() => {
       expect(info).toEqual({
         name: 'C',
         selector: 'c-selector',
-        file: new ParseSourceFile('class C {}', util.getTestFilePath()),
+        file: new ParseSourceFile('class C {}', decl.getSourceFile().fileName),
         template: {
-          identifiers: getTemplateIdentifiers(util.getBoundTemplate('<div>{{foo}}</div>')),
+          identifiers:
+              getTemplateIdentifiers(util.getBoundTemplate('<div>{{foo}}</div>')).identifiers,
           usedComponents: new Set(),
           isInline: false,
-          file: new ParseSourceFile('<div>{{foo}}</div>', util.getTestFilePath()),
-        }
+          file: new ParseSourceFile('<div>{{foo}}</div>', decl.getSourceFile().fileName),
+        },
+        errors: [],
       });
     });
 
@@ -68,8 +72,8 @@ runInEachFileSystem(() => {
 
       const info = analysis.get(decl);
       expect(info).toBeDefined();
-      expect(info !.template.file)
-          .toEqual(new ParseSourceFile('class C {}', util.getTestFilePath()));
+      expect(info!.template.file)
+          .toEqual(new ParseSourceFile('class C {}', decl.getSourceFile().fileName));
     });
 
     it('should give external templates their own source file', () => {
@@ -83,8 +87,8 @@ runInEachFileSystem(() => {
 
       const info = analysis.get(decl);
       expect(info).toBeDefined();
-      expect(info !.template.file)
-          .toEqual(new ParseSourceFile('<div>{{foo}}</div>', util.getTestFilePath()));
+      expect(info!.template.file)
+          .toEqual(new ParseSourceFile('<div>{{foo}}</div>', decl.getSourceFile().fileName));
     });
 
     it('should emit used components', () => {
@@ -110,11 +114,11 @@ runInEachFileSystem(() => {
 
       const infoA = analysis.get(declA);
       expect(infoA).toBeDefined();
-      expect(infoA !.template.usedComponents).toEqual(new Set([declB]));
+      expect(infoA!.template.usedComponents).toEqual(new Set([declB]));
 
       const infoB = analysis.get(declB);
       expect(infoB).toBeDefined();
-      expect(infoB !.template.usedComponents).toEqual(new Set([declA]));
+      expect(infoB!.template.usedComponents).toEqual(new Set([declA]));
     });
   });
 });

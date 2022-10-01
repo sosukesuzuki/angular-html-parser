@@ -1,21 +1,62 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {InjectionToken} from '../../di/injection_token';
 import {InjectFlags} from '../../di/interface/injector';
-import {Type} from '../../interface/type';
+import {ProviderToken} from '../../di/provider_token';
+import {assertDefined, assertEqual} from '../../util/assert';
 
-import {TElementNode} from './node';
+import {TDirectiveHostNode} from './node';
 import {LView, TData} from './view';
 
-export const TNODE = 8;
-export const PARENT_INJECTOR = 8;
-export const INJECTOR_BLOOM_PARENT_SIZE = 9;
+/**
+ * Offsets of the `NodeInjector` data structure in the expando.
+ *
+ * `NodeInjector` is stored in both `LView` as well as `TView.data`. All storage requires 9 words.
+ * First 8 are reserved for bloom filter and the 9th is reserved for the associated `TNode` as well
+ * as parent `NodeInjector` pointer. All indexes are starting with `index` and have an offset as
+ * shown.
+ *
+ * `LView` layout:
+ * ```
+ * index + 0: cumulative bloom filter
+ * index + 1: cumulative bloom filter
+ * index + 2: cumulative bloom filter
+ * index + 3: cumulative bloom filter
+ * index + 4: cumulative bloom filter
+ * index + 5: cumulative bloom filter
+ * index + 6: cumulative bloom filter
+ * index + 7: cumulative bloom filter
+ * index + 8: cumulative bloom filter
+ * index + PARENT: Index to the parent injector. See `RelativeInjectorLocation`
+ *                 `const parent = lView[index + NodeInjectorOffset.PARENT]`
+ * ```
+ *
+ * `TViewData` layout:
+ * ```
+ * index + 0: cumulative bloom filter
+ * index + 1: cumulative bloom filter
+ * index + 2: cumulative bloom filter
+ * index + 3: cumulative bloom filter
+ * index + 4: cumulative bloom filter
+ * index + 5: cumulative bloom filter
+ * index + 6: cumulative bloom filter
+ * index + 7: cumulative bloom filter
+ * index + 8: cumulative bloom filter
+ * index + TNODE: TNode associated with this `NodeInjector`
+ *                `const tNode = tView.data[index + NodeInjectorOffset.TNODE]`
+ * ```
+ */
+export const enum NodeInjectorOffset {
+  TNODE = 8,
+  PARENT = 8,
+  BLOOM_SIZE = 8,
+  SIZE = 9,
+}
 
 /**
  * Represents a relative location of parent injector.
@@ -23,7 +64,9 @@ export const INJECTOR_BLOOM_PARENT_SIZE = 9;
  * The interfaces encodes number of parents `LView`s to traverse and index in the `LView`
  * pointing to the parent injector.
  */
-export interface RelativeInjectorLocation { __brand__: 'RelativeInjectorLocationFlags'; }
+export interface RelativeInjectorLocation {
+  __brand__: 'RelativeInjectorLocationFlags';
+}
 
 export const enum RelativeInjectorLocationFlags {
   InjectorIndexMask = 0b111111111111111,
@@ -114,25 +157,25 @@ export const NO_PARENT_INJECTOR: RelativeInjectorLocation = -1 as any;
  */
 
 /**
-* Factory for creating instances of injectors in the NodeInjector.
-*
-* This factory is complicated by the fact that it can resolve `multi` factories as well.
-*
-* NOTE: Some of the fields are optional which means that this class has two hidden classes.
-* - One without `multi` support (most common)
-* - One with `multi` values, (rare).
-*
-* Since VMs can cache up to 4 inline hidden classes this is OK.
-*
-* - Single factory: Only `resolving` and `factory` is defined.
-* - `providers` factory: `componentProviders` is a number and `index = -1`.
-* - `viewProviders` factory: `componentProviders` is a number and `index` points to `providers`.
-*/
+ * Factory for creating instances of injectors in the NodeInjector.
+ *
+ * This factory is complicated by the fact that it can resolve `multi` factories as well.
+ *
+ * NOTE: Some of the fields are optional which means that this class has two hidden classes.
+ * - One without `multi` support (most common)
+ * - One with `multi` values, (rare).
+ *
+ * Since VMs can cache up to 4 inline hidden classes this is OK.
+ *
+ * - Single factory: Only `resolving` and `factory` is defined.
+ * - `providers` factory: `componentProviders` is a number and `index = -1`.
+ * - `viewProviders` factory: `componentProviders` is a number and `index` points to `providers`.
+ */
 export class NodeInjectorFactory {
   /**
    * The inject implementation to be activated when using the factory.
    */
-  injectImpl: null|(<T>(token: Type<T>|InjectionToken<T>, flags?: InjectFlags) => T);
+  injectImpl: null|(<T>(token: ProviderToken<T>, flags?: InjectFlags) => T);
 
   /**
    * Marker set to true during factory invocation to see if we get into recursive loop.
@@ -161,11 +204,11 @@ export class NodeInjectorFactory {
    * If we have a component and directive active an a single element as declared here
    * ```
    * component:
-   *   provides: [ {provide: String, useValue: 'component', multi: true} ],
-   *   viewProvides: [ {provide: String, useValue: 'componentView', multi: true} ],
+   *   providers: [ {provide: String, useValue: 'component', multi: true} ],
+   *   viewProviders: [ {provide: String, useValue: 'componentView', multi: true} ],
    *
    * directive:
-   *   provides: [ {provide: String, useValue: 'directive', multi: true} ],
+   *   providers: [ {provide: String, useValue: 'directive', multi: true} ],
    * ```
    *
    * Then the expected results are:
@@ -188,23 +231,23 @@ export class NodeInjectorFactory {
   index?: number;
 
   /**
-   * Because the same `multi` provider can be declared in `provides` and `viewProvides` it is
-   * possible for `viewProvides` to shadow the `provides`. For this reason we store the
+   * Because the same `multi` provider can be declared in `providers` and `viewProviders` it is
+   * possible for `viewProviders` to shadow the `providers`. For this reason we store the
    * `provideFactory` of the `providers` so that `providers` can be extended with `viewProviders`.
    *
    * Example:
    *
    * Given:
    * ```
-   * provides: [ {provide: String, useValue: 'all', multi: true} ],
-   * viewProvides: [ {provide: String, useValue: 'viewOnly', multi: true} ],
+   * providers: [ {provide: String, useValue: 'all', multi: true} ],
+   * viewProviders: [ {provide: String, useValue: 'viewOnly', multi: true} ],
    * ```
    *
    * We have to return `['all']` in case of content injection, but `['all', 'viewOnly']` in case
    * of view injection. We further have to make sure that the shared instances (in our case
    * `all`) are the exact same instance in both the content as well as the view injection. (We
-   * have to make sure that we don't double instantiate.) For this reason the `viewProvides`
-   * `Factory` has a pointer to the shadowed `provides` factory so that it can instantiate the
+   * have to make sure that we don't double instantiate.) For this reason the `viewProviders`
+   * `Factory` has a pointer to the shadowed `providers` factory so that it can instantiate the
    * `providers` (`['all']`) and then extend it with `viewProviders` (`['all'] + ['viewOnly'] =
    * ['all', 'viewOnly']`).
    */
@@ -230,21 +273,21 @@ export class NodeInjectorFactory {
            /**
             * The TNode of the same element injector.
             */
-           tNode: TElementNode) => any,
+           tNode: TDirectiveHostNode) => any,
       /**
        * Set to `true` if the token is declared in `viewProviders` (or if it is component).
        */
-      isViewProvider: boolean, injectImplementation: null|
-      (<T>(token: Type<T>|InjectionToken<T>, flags?: InjectFlags) => T)) {
+      isViewProvider: boolean,
+      injectImplementation: null|(<T>(token: ProviderToken<T>, flags?: InjectFlags) => T)) {
+    ngDevMode && assertDefined(factory, 'Factory not specified');
+    ngDevMode && assertEqual(typeof factory, 'function', 'Expected factory function.');
     this.canSeeViewProviders = isViewProvider;
     this.injectImpl = injectImplementation;
   }
 }
 
 export function isFactory(obj: any): obj is NodeInjectorFactory {
-  // See: https://jsperf.com/instanceof-vs-getprototypeof
-  return obj !== null && typeof obj == 'object' &&
-      Object.getPrototypeOf(obj) == NodeInjectorFactory.prototype;
+  return obj instanceof NodeInjectorFactory;
 }
 
 // Note: This hack is necessary so we don't erroneously get a circular dependency

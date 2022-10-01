@@ -1,13 +1,14 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
 import {bindAction, profile} from '../../util';
-import {buildTree, emptyTree} from '../util';
+import {buildTree, emptyTree, initTreeUtils} from '../util';
+
 import {TreeComponent} from './tree';
 
 let tree: TreeComponent;
@@ -24,6 +25,8 @@ function noop() {}
 
 function init() {
   tree = new TreeComponent(document.querySelector('tree'));
+
+  initTreeUtils();
 
   bindAction('#destroyDom', destroyDom);
   bindAction('#createDom', createDom);

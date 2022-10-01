@@ -1,46 +1,78 @@
-# Using Web Workers with Angular CLI
+# Background processing using web workers
 
-[Web Workers](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API) allow you to run CPU intensive computations in a background thread, freeing the main thread to update the user interface.
+[Web workers](https://developer.mozilla.org/docs/Web/API/Web_Workers_API) lets you run CPU-intensive computations in a background thread, freeing the main thread to update the user interface.
+If you find your application performs a lot of computations, such as generating CAD drawings or doing heavy geometrical calculations, using web workers can help increase your application's performance.
 
-If you find your application becomes unresponsive while processing data, using Web Workers can help.
+<div class="alert is-helpful">
 
-## Adding a Web Worker
+The CLI does not support running Angular itself in a web worker.
 
-You can add a web worker anywhere in your application. If the file that contains your expensive computation is `src/app/app.component.ts`, you can add a Web Worker using `ng generate web-worker app`.
+</div>
 
-Running this command will:
+## Adding a web worker
 
-- configure your project to use Web Workers, if it isn't already.
-- add `src/app/app.worker.ts` with scaffolded code to receive messages:
+To add a web worker to an existing project, use the Angular CLI `ng generate` command.
 
-  <code-example language="typescript" header="src/app/app.worker.ts">
-  addEventListener('message', ({ data }) => {
-    const response = `worker response to ${data}`;
-    postMessage(response);
-  });
- </code-example>
+<code-example format="shell" language="shell">
 
-- add scaffolded code to `src/app/app.component.ts` to use the worker:
+ng generate web-worker &lt;location&gt;
 
-  <code-example language="typescript" header="src/app/app.component.ts">
-  if (typeof Worker !== 'undefined') {
-    // Create a new
-    const worker = new Worker('./app.worker', { type: 'module' });
-    worker.onmessage = ({ data }) => {
-      console.log(`page got message: ${data}`);
-    };
-    worker.postMessage('hello');
-  } else {
-    // Web Workers are not supported in this environment.
-    // You should add a fallback so that your program still executes correctly.
-  }
-  </code-example>
+</code-example>
 
-After the initial scaffolding, you will need to refactor your code to use the Web Worker by sending messages to and from.
+You can add a web worker anywhere in your application.
+For example, to add a web worker to the root component, `src/app/app.component.ts`, run the following command.
 
-## Caveats
+<code-example format="shell" language="shell">
 
-There are two important things to keep in mind when using Web Workers in Angular projects:
+ng generate web-worker app
 
-- Some environments or platforms, like `@angular/platform-server` used in [Server-side Rendering](guide/universal), don't support Web Workers. You have to provide a fallback mechanism to perform the computations that the worker would perform to ensure your application will work in these environments.
-- Running Angular itself in a Web Worker via [**@angular/platform-webworker**](api/platform-webworker) is not yet supported in Angular CLI.
+</code-example>
+
+The command performs the following actions.
+
+1.  Configures your project to use web workers, if it isn't already.
+1.  Adds the following scaffold code to `src/app/app.worker.ts` to  receive messages.
+
+    <code-example language="typescript" header="src/app/app.worker.ts">
+
+    addEventListener('message', ({ data }) =&gt; {
+      const response = `worker response to &dollar;{data}`;
+      postMessage(response);
+    });
+
+    </code-example>
+
+1.  Adds the following scaffold code to `src/app/app.component.ts` to use the worker.
+
+    <code-example language="typescript" header="src/app/app.component.ts">
+
+    if (typeof Worker !== 'undefined') {
+      // Create a new
+      const worker = new Worker(new URL('./app.worker', import.meta.url));
+      worker.onmessage = ({ data }) =&gt; {
+        console.log(`page got message: &dollar;{data}`);
+      };
+      worker.postMessage('hello');
+    } else {
+      // Web workers are not supported in this environment.
+      // You should add a fallback so that your program still executes correctly.
+    }
+
+    </code-example>
+
+After you generate this initial scaffold, you must refactor your code to use the web worker by sending messages to and from the worker.
+
+<div class="alert is-important">
+
+Some environments or platforms, such as `@angular/platform-server` used in [Server-side Rendering](guide/universal), don't support web workers.
+To ensure that your application will work in these environments, you must provide a fallback mechanism to perform the computations that the worker would otherwise perform.
+
+</div>
+
+<!-- links -->
+
+<!-- external links -->
+
+<!-- end links -->
+
+@reviewed 2022-02-28

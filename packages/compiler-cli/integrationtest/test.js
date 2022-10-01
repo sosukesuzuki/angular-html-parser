@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -29,10 +29,13 @@ function nodejs_repository() {
   }
 }
 
-const ngcBin = require.resolve('./ngc_bin');
-const xi18nBin = require.resolve('./ng_xi18n');
-const nodeBin =
-    require.resolve(`${nodejs_repository()}/bin/node${(os.platform() === 'win32' ? '.cmd' : '')}`);
+// Since rules nodejs 0.37.1, the nodejs_binary executable now has a different extension depending
+// on platform
+const nodejsBinaryExt = os.platform() === 'win32' ? '.bat' : '.sh';
+const ngcBin = require.resolve(`./ngc_bin${nodejsBinaryExt}`);
+const xi18nBin = require.resolve(`./ng_xi18n${nodejsBinaryExt}`);
+const nodeBin = require.resolve(`${nodejs_repository()}/${
+    (os.platform() === 'win32' ? 'bin/nodejs/node.exe' : 'bin/nodejs/bin/node')}`);
 const jasmineBin = require.resolve('npm/node_modules/jasmine/bin/jasmine.js');
 
 // Prepare the test directory before building the integration test output. This ensures that

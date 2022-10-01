@@ -1,4 +1,4 @@
-load("//tools:defaults.bzl", "ng_module", "ng_package")
+load("//tools:defaults.bzl", "api_golden_test_npm_package", "ng_module", "ng_package")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -14,7 +14,7 @@ ng_module(
         "//packages/core",
         "//packages/platform-browser-dynamic",
         "//packages/upgrade/src/common",
-        "@npm//zone.js",
+        "//packages/zone.js/lib:zone_d_ts",
     ],
 )
 
@@ -22,19 +22,26 @@ ng_package(
     name = "npm_package",
     srcs = [
         "package.json",
-        "//packages/upgrade/static:package.json",
-        "//packages/upgrade/static/testing:package.json",
     ],
-    entry_point = ":index.ts",
     tags = [
         "release-with-framework",
     ],
     # Do not add more to this list.
     # Dependencies on the full npm_package cause long re-builds.
-    visibility = ["//visibility:private"],
+    visibility = ["//integration:__subpackages__"],
     deps = [
         ":upgrade",
         "//packages/upgrade/static",
         "//packages/upgrade/static/testing",
     ],
+)
+
+api_golden_test_npm_package(
+    name = "upgrade_api",
+    data = [
+        ":npm_package",
+        "//goldens:public-api",
+    ],
+    golden_dir = "angular/goldens/public-api/upgrade",
+    npm_package = "angular/packages/upgrade/npm_package",
 )

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -15,15 +15,19 @@ import {PerfLogEvent, PerfLogFeatures, WebDriverExtension} from '../web_driver_e
 export class IOsDriverExtension extends WebDriverExtension {
   static PROVIDERS = [{provide: IOsDriverExtension, deps: [WebDriverAdapter]}];
 
-  constructor(private _driver: WebDriverAdapter) { super(); }
+  constructor(private _driver: WebDriverAdapter) {
+    super();
+  }
 
-  gc(): Promise<any> { throw new Error('Force GC is not supported on iOS'); }
+  override gc(): Promise<any> {
+    throw new Error('Force GC is not supported on iOS');
+  }
 
-  timeBegin(name: string): Promise<any> {
+  override timeBegin(name: string): Promise<any> {
     return this._driver.executeScript(`console.time('${name}');`);
   }
 
-  timeEnd(name: string, restartName: string|null = null): Promise<any> {
+  override timeEnd(name: string, restartName: string|null = null): Promise<any> {
     let script = `console.timeEnd('${name}');`;
     if (restartName != null) {
       script += `console.time('${restartName}');`;
@@ -32,7 +36,7 @@ export class IOsDriverExtension extends WebDriverExtension {
   }
 
   // See https://github.com/WebKit/webkit/tree/master/Source/WebInspectorUI/Versions
-  readPerfLog() {
+  override readPerfLog() {
     // TODO(tbosch): Bug in IOsDriver: Need to execute at least one command
     // so that the browser logs can be read out!
     return this._driver.executeScript('1+1')
@@ -40,7 +44,9 @@ export class IOsDriverExtension extends WebDriverExtension {
         .then((entries) => {
           const records: any[] = [];
           entries.forEach((entry: any) => {
-            const message = JSON.parse(entry['message'])['message'];
+            const message =
+                (JSON.parse(entry['message']) as
+                 {message: {method: string, params: PerfLogEvent}})['message'];
             if (message['method'] === 'Timeline.eventRecorded') {
               records.push(message['params']['record']);
             }
@@ -62,16 +68,16 @@ export class IOsDriverExtension extends WebDriverExtension {
       const endTime = record['endTime'];
 
       if (type === 'FunctionCall' && (data == null || data['scriptName'] !== 'InjectedScript')) {
-        events !.push(createStartEvent('script', startTime));
+        events!.push(createStartEvent('script', startTime));
         endEvent = createEndEvent('script', endTime);
       } else if (type === 'Time') {
-        events !.push(createMarkStartEvent(data['message'], startTime));
+        events!.push(createMarkStartEvent(data['message'], startTime));
       } else if (type === 'TimeEnd') {
-        events !.push(createMarkEndEvent(data['message'], startTime));
+        events!.push(createMarkEndEvent(data['message'], startTime));
       } else if (
           type === 'RecalculateStyles' || type === 'Layout' || type === 'UpdateLayerTree' ||
           type === 'Paint' || type === 'Rasterize' || type === 'CompositeLayers') {
-        events !.push(createStartEvent('render', startTime));
+        events!.push(createStartEvent('render', startTime));
         endEvent = createEndEvent('render', endTime);
       }
       // Note: ios used to support GCEvent up until iOS 6 :-(
@@ -79,21 +85,22 @@ export class IOsDriverExtension extends WebDriverExtension {
         this._convertPerfRecordsToEvents(record['children'], events);
       }
       if (endEvent != null) {
-        events !.push(endEvent);
+        events!.push(endEvent);
       }
     });
     return events;
   }
 
-  perfLogFeatures(): PerfLogFeatures { return new PerfLogFeatures({render: true}); }
+  override perfLogFeatures(): PerfLogFeatures {
+    return new PerfLogFeatures({render: true});
+  }
 
-  supports(capabilities: {[key: string]: any}): boolean {
+  override supports(capabilities: {[key: string]: any}): boolean {
     return capabilities['browserName'].toLowerCase() === 'safari';
   }
 }
 
-function createEvent(
-    ph: 'X' | 'B' | 'E' | 'B' | 'E', name: string, time: number, args: any = null) {
+function createEvent(ph: 'X'|'B'|'E'|'B'|'E', name: string, time: number, args: any = null) {
   const result: PerfLogEvent = {
     'cat': 'timeline',
     'name': name,

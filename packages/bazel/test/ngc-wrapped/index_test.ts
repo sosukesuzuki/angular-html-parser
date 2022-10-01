@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -11,8 +11,7 @@ import * as path from 'path';
 import {setup} from './test_support';
 
 describe('ngc_wrapped', () => {
-
-  it('should work', () => {
+  it('should work', async () => {
     const {read, write, runOneBuild, writeConfig, shouldExist, basePath, typesRoots} = setup();
 
     write('some_project/index.ts', `
@@ -35,7 +34,7 @@ describe('ngc_wrapped', () => {
     });
 
     // expect no error
-    expect(runOneBuild()).toBe(true);
+    expect(await runOneBuild()).toBe(true);
 
     shouldExist('bazel-bin/some_project/index.js');
 

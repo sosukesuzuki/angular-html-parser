@@ -1,18 +1,17 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import {assertNotEqual} from '../../util/assert';
 import {bindingUpdated} from '../bindings';
+import {TNode} from '../interfaces/node';
 import {SanitizerFn} from '../interfaces/sanitization';
-import {BINDING_INDEX, LView} from '../interfaces/view';
-import {getLView, getSelectedIndex} from '../state';
-import {NO_CHANGE} from '../tokens';
+import {LView, RENDERER, TView} from '../interfaces/view';
+import {getLView, getSelectedTNode, getTView, nextBindingIndex} from '../state';
 
-import {TsickleIssue1009, elementPropertyInternal, storeBindingMetadata} from './shared';
+import {elementPropertyInternal, setInputsForProperty, storePropertyBindingMetadata} from './shared';
 
 
 /**
@@ -34,25 +33,27 @@ import {TsickleIssue1009, elementPropertyInternal, storeBindingMetadata} from '.
  * @codeGenApi
  */
 export function ɵɵproperty<T>(
-    propName: string, value: T, sanitizer?: SanitizerFn | null): TsickleIssue1009 {
-  const index = getSelectedIndex();
-  ngDevMode && assertNotEqual(index, -1, 'selected index cannot be -1');
+    propName: string, value: T, sanitizer?: SanitizerFn|null): typeof ɵɵproperty {
   const lView = getLView();
-  const bindReconciledValue = bind(lView, value);
-  if (bindReconciledValue !== NO_CHANGE) {
-    elementPropertyInternal(index, propName, bindReconciledValue, sanitizer);
+  const bindingIndex = nextBindingIndex();
+  if (bindingUpdated(lView, bindingIndex, value)) {
+    const tView = getTView();
+    const tNode = getSelectedTNode();
+    elementPropertyInternal(
+        tView, tNode, lView, propName, value, lView[RENDERER], sanitizer, false);
+    ngDevMode && storePropertyBindingMetadata(tView.data, tNode, propName, bindingIndex);
   }
   return ɵɵproperty;
 }
 
 /**
- * Creates a single value binding.
- *
- * @param lView Current view
- * @param value Value to diff
+ * Given `<div style="..." my-dir>` and `MyDir` with `@Input('style')` we need to write to
+ * directive input.
  */
-export function bind<T>(lView: LView, value: T): T|NO_CHANGE {
-  const bindingIndex = lView[BINDING_INDEX]++;
-  storeBindingMetadata(lView);
-  return bindingUpdated(lView, bindingIndex, value) ? value : NO_CHANGE;
+export function setDirectiveInputsWhichShadowsStyling(
+    tView: TView, tNode: TNode, lView: LView, value: any, isClassBased: boolean) {
+  const inputs = tNode.inputs!;
+  const property = isClassBased ? 'class' : 'style';
+  // We support both 'class' and `className` hence the fallback.
+  setInputsForProperty(tView, lView, inputs[property], property, value);
 }

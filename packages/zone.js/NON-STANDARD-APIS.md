@@ -1,34 +1,32 @@
 # Zone.js's support for non standard apis
 
 Zone.js patched most standard APIs such as DOM event listeners, XMLHttpRequest in Browser, EventEmitter and fs API in Node.js so they can be in zone.
-  
-But there are still a lot of non standard APIs that are not patched by default, such as MediaQuery, Notification, 
- WebAudio and so on. We are adding support to those APIs, and our progress is updated here.
- 
-## Currently supported non standard Web APIs 
+
+But there are still a lot of non-standard APIs that are not patched by default, such as MediaQuery, Notification, WebAudio and so on. This page provides updates on the current state of zone support for Angular APIs.
+
+## Currently supported non-standard Web APIs
 
 * MediaQuery
-* Notification 
+* Notification
 
 ## Currently supported polyfills
 
 * webcomponents
 
 Usage:
-
 ```
 <script src="webcomponents-lite.js"></script>
-<script src="node_modules/zone.js/dist/zone.js"></script>
-<script src="node_modules/zone.js/dist/webapis-shadydom.js"></script>
+<script src="node_modules/zone.js/bundles/zone.umd.js"></script>
+<script src="node_modules/zone.js/bundles/webapis-shadydom.umd.js"></script>
 ```
 
 ## Currently supported non standard node APIs
 
 ## Currently supported non standard common APIs
 
-* bluebird promise
+* [Bluebird](http://bluebirdjs.com/docs/getting-started.html) Promise
 
-Browser Usage: 
+Browser Usage:
 
 ```
   <script src="zone.js"></script>
@@ -39,14 +37,36 @@ Browser Usage:
   </script>
 ```
 
-After those steps, window.Promise will become a ZoneAware Bluebird Promise.
+After those steps, window.Promise becomes Bluebird Promise and will also be zone awareness.
+
+Angular Usage:
+
+in polyfills.ts, import the `zone-bluebird` package.
+
+```
+import 'zone.js'; // Included with Angular CLI.
+import 'zone.js/plugins/zone-bluebird';
+```
+
+in main.ts, patch bluebird.
+
+```
+platformBrowserDynamic()
+    .bootstrapModule(AppModule)
+    .then(_ => {
+import('bluebird').then(Bluebird => {const Zone = (window as any)['Zone']; Zone[Zone['__symbol__']('bluebird')](Bluebird.default);});
+    })
+    .catch(err => console.error(err));
+```
+
+After this step, the `window.Promise` will be the Bluebird `Promise`, and the callback of `Bluebird.then` will be executed in the Angular zone.
 
 Node Sample Usage:
 
 ```
 require('zone.js');
 const Bluebird = require('bluebird');
-require('zone.js/dist/zone-bluebird');
+require('zone.js/plugins/zone-bluebird');
 Zone[Zone['__symbol__']('bluebird')](Bluebird);
 Zone.current.fork({
   name: 'bluebird'
@@ -75,11 +95,11 @@ remove the comment of the following line
 
 ## Others
 
-* Cordova 
+* Cordova
 
 patch `cordova.exec` API
 
-`cordova.exec(success, error, service, action, args);` 
+`cordova.exec(success, error, service, action, args);`
 
 `success` and `error` will be patched with `Zone.wrap`.
 
@@ -96,12 +116,12 @@ to load the patch, you should load in the following order.
 By default, those APIs' support will not be loaded in zone.js or zone-node.js,
 so if you want to load those API's support, you should load those files by yourself.
 
-For example, if you want to add MediaQuery patch, you should do like this: 
+For example, if you want to add MediaQuery patch, you should do like this:
 
 ```
-  <script src="path/zone.js"></script> 
-  <script src="path/webapis-media-query.js"></script> 
-```  
+  <script src="path/zone.js"></script>
+  <script src="path/webapis-media-query.js"></script>
+```
 
 * rxjs
 
@@ -127,17 +147,17 @@ constructorZone.run(() => {
 
 subscriptionZone.run(() => {
   observable.subscribe(() => {
-    console.log('current zone when subscription next', Zone.current.name); // will output subscription. 
+    console.log('current zone when subscription next', Zone.current.name); // will output subscription.
   }, () => {
-    console.log('current zone when subscription error', Zone.current.name); // will output subscription. 
+    console.log('current zone when subscription error', Zone.current.name); // will output subscription.
   }, () => {
-    console.log('current zone when subscription complete', Zone.current.name); // will output subscription. 
+    console.log('current zone when subscription complete', Zone.current.name); // will output subscription.
   });
 });
 
 operatorZone.run(() => {
   observable.map(() => {
-    console.log('current zone when map operator', Zone.current.name); // will output operator. 
+    console.log('current zone when map operator', Zone.current.name); // will output operator.
   });
 });
 ```
@@ -147,8 +167,8 @@ Currently basically everything the `rxjs` API includes
 - Observable
 - Subscription
 - Subscriber
-- Operators 
-- Scheduler 
+- Operators
+- Scheduler
 
 is patched, so each asynchronous call will run in the correct zone.
 
@@ -157,7 +177,7 @@ is patched, so each asynchronous call will run in the correct zone.
 For example, in an Angular application, you can load this patch in your `app.module.ts`.
 
 ```
-import 'zone.js/dist/zone-patch-rxjs';
+import 'zone.js/plugins/zone-patch-rxjs';
 ```
 
 * electron
@@ -173,9 +193,9 @@ In electron, we patched the following APIs with `zone.js`
 add following line into `polyfill.ts` after loading zone-mix.
 
 ```
-//import 'zone.js/dist/zone'; // originally added by angular-cli, comment it out
-import 'zone.js/dist/zone-mix'; // add zone-mix to patch both Browser and Nodejs
-import 'zone.js/dist/zone-patch-electron'; // add zone-patch-electron to patch Electron native API
+//import 'zone.js'; // originally added by angular-cli, comment it out
+import 'zone.js/mix'; // add zone-mix to patch both Browser and Nodejs
+import 'zone.js/plugins/zone-patch-electron'; // add zone-patch-electron to patch Electron native API
 ```
 
 there is a sampel repo [zone-electron](https://github.com/JiaLiPassion/zone-electron).
@@ -186,15 +206,15 @@ user need to patch `io` themselves just like following code.
 
 ```javascript
     <script src="socket.io-client/dist/socket.io.js"></script>
-    <script src="zone.js/dist/zone.js"></script>
-    <script src="zone.js/dist/zone-patch-socket-io.js"></script>
+    <script src="zone.js/bundles/zone.umd.js"></script>
+    <script src="zone.js/bundles/zone-patch-socket-io.js"></script>
     <script>
       // patch io here
       Zone[Zone.__symbol__('socketio')](io);
     </script>
 ```
 
-please reference the sample repo [zone-socketio](https://github.com/JiaLiPassion/zone-socketio) about 
+please reference the sample repo [zone-socketio](https://github.com/JiaLiPassion/zone-socketio) about
 detail usage.
 
 * jsonp
@@ -208,11 +228,11 @@ there is a sampel repo [zone-jsonp](https://github.com/JiaLiPassion/test-zone-js
 sample usage is:
 
 ```javascript
-import 'zone.js/dist/zone-patch-jsonp';
+import 'zone.js/plugins/zone-patch-jsonp';
 Zone['__zone_symbol__jsonp']({
   jsonp: getJSONP,
   sendFuncName: 'send',
-  successFuncName: 'jsonpSuccessCallback', 
+  successFuncName: 'jsonpSuccessCallback',
   failedFuncName: 'jsonpFailedCallback'
 });
 ```
@@ -222,8 +242,8 @@ Currently only `Chrome 64` native support this feature.
 you can add the following line into `polyfill.ts` after loading `zone.js`.
 
 ```
-import 'zone.js/dist/zone';
-import 'zone.js/dist/zone-patch-resize-observer';
+import 'zone.js';
+import 'zone.js/plugins/zone-patch-resize-observer';
 ```
 
 there is a sample repo [zone-resize-observer](https://github.com/JiaLiPassion/zone-resize-observer) here

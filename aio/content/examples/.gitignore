@@ -1,4 +1,5 @@
 # boilerplate files
+**/.vscode/
 **/src/environments/environment.prod.ts
 **/src/environments/environment.ts
 **/src/assets/.gitkeep
@@ -17,7 +18,9 @@
 **/e2e/tsconfig.e2e.json
 **/src/karma.conf.js
 **/.angular-cli.json
+**/.browserslistrc
 **/.editorconfig
+**/.gitignore
 **/angular.json
 **/tsconfig.json
 **/bs-config.e2e.json
@@ -26,11 +29,11 @@
 **/tsconfig.json
 **/tsconfig.app.json
 **/tsconfig.spec.json
-**/tslint.json
 **/karma-test-shim.js
 **/browser-test-shim.js
-**/browserslist
 **/node_modules
+**/yarn.lock
+**/package-lock.json
 
 # built files
 *.map
@@ -53,6 +56,7 @@ dist/
 !systemjs.config.*.js
 !karma-test-shim.*.js
 !copy-dist-files.js
+!i18n/angular.json
 
 # AngularJS files
 !**/*.ajs.js
@@ -82,9 +86,6 @@ upgrade-phonecat-2-hybrid/aot/**/*
 # styleguide
 !styleguide/src/systemjs.custom.js
 
-# universal
-!universal/webpack.server.config.js
-
 # stackblitz
 *stackblitz.no-link.html
 
@@ -98,3 +99,10 @@ upgrade-phonecat-3-final/rollup-config.js
 
 # schematics
 !schematics-for-libraries/projects/my-lib/package.json
+
+#angular-compiler-options
+!angular-compiler-options/tsconfig.json
+!angular-compiler-options/tsconfig.app.json
+
+# deprecated-example
+!deprecation-guide/angular.package.json

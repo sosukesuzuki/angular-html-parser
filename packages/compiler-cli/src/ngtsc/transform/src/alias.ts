@@ -1,36 +1,34 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import * as ts from 'typescript';
+import ts from 'typescript';
 
 export function aliasTransformFactory(exportStatements: Map<string, Map<string, [string, string]>>):
-    ts.TransformerFactory<ts.Bundle|ts.SourceFile> {
+    ts.TransformerFactory<ts.SourceFile> {
   return (context: ts.TransformationContext) => {
-    return (file: ts.SourceFile | ts.Bundle) => {
+    return (file: ts.SourceFile) => {
       if (ts.isBundle(file) || !exportStatements.has(file.fileName)) {
         return file;
       }
 
       const statements = [...file.statements];
-      exportStatements.get(file.fileName) !.forEach(([moduleName, symbolName], aliasName) => {
-        const stmt = ts.createExportDeclaration(
+      exportStatements.get(file.fileName)!.forEach(([moduleName, symbolName], aliasName) => {
+        const stmt = ts.factory.createExportDeclaration(
             /* decorators */ undefined,
             /* modifiers */ undefined,
-            /* exportClause */ ts.createNamedExports([ts.createExportSpecifier(
-                /* propertyName */ symbolName,
-                /* name */ aliasName)]),
-            /* moduleSpecifier */ ts.createStringLiteral(moduleName));
+            /* isTypeOnly */ false,
+            /* exportClause */ ts.createNamedExports([ts.factory.createExportSpecifier(
+                false, symbolName, aliasName)]),
+            /* moduleSpecifier */ ts.factory.createStringLiteral(moduleName));
         statements.push(stmt);
       });
 
-      file = ts.getMutableClone(file);
-      file.statements = ts.createNodeArray(statements);
-      return file;
+      return ts.factory.updateSourceFile(file, statements);
     };
   };
 }

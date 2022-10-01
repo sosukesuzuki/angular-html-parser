@@ -1,6 +1,8 @@
 {
   "compilerOptions": {
-    "lib": ["es5", "es2015.collection", "es2015.core"],
-    "types": ["node"]
+    "lib": ["es2015"],
+    "types": ["node"],
+    "esModuleInterop": true,
+    "downlevelIteration": true
   }
 }

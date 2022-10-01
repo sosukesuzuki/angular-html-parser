@@ -39,7 +39,7 @@
     <thead>
       <tr>
         <th>
-          <button (click)="toggleImage()">
+          <button type="button" (click)="toggleImage()">
             {{showImage ? "Hide" : "Show"}} Poster
           </button>
         </th>
@@ -61,15 +61,14 @@
                 [style.height.px]="50"
                 [style.margin.px]="2"
                 [src]="movie.imageurl"
+                [alt]="movie.title"
                 [title]="movie.title">
         </td>
         <td>{{movie.title}}</td>
         <td>{{movie.hero}}</td>
         <td>{{movie.releaseDate | date}}</td>
         <td>{{movie.mpaa | uppercase}}</td>
-  <!-- #docregion currency -->
         <td>{{movie.price | currency:'USD':true}}</td>
-  <!-- #enddocregion currency -->
         <td>{{movie.starRating | number:'1.1-2'}}</td>
         <td>{{movie.approvalRating | percent: '1.0-0'}}</td>
       </tr>

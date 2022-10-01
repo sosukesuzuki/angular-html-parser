@@ -1,13 +1,12 @@
 import * as angular from 'angular';
 import 'angular-route';
 
-const appName = 'myApp';
-
-angular.module(appName, [
+const appModule = angular.module('myApp', [
   'ngRoute'
 ])
 .config(['$routeProvider', '$locationProvider',
-  function config($routeProvider, $locationProvider) {
+  function config($routeProvider: angular.route.IRouteProvider,
+                  $locationProvider: angular.ILocationProvider) {
     $locationProvider.html5Mode(true);
 
     $routeProvider.
@@ -25,5 +24,5 @@ angular.module(appName, [
 );
 
 export function bootstrap(el: HTMLElement) {
-  return angular.bootstrap(el,  [appName]);
+  return angular.bootstrap(el,  [appModule.name]);
 }

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -39,7 +39,7 @@ const _DOCTYPE = `<!ELEMENT messagebundle (msg)*>
 <!ELEMENT ex (#PCDATA)>`;
 
 export class Xmb extends Serializer {
-  write(messages: i18n.Message[], locale: string|null): string {
+  override write(messages: i18n.Message[], locale: string|null): string {
     const exampleVisitor = new ExampleVisitor();
     const visitor = new _Visitor();
     let rootNode = new xml.Tag(_MESSAGES_TAG);
@@ -57,10 +57,10 @@ export class Xmb extends Serializer {
 
       let sourceTags: xml.Tag[] = [];
       message.sources.forEach((source: i18n.MessageSpan) => {
-        sourceTags.push(new xml.Tag(_SOURCE_TAG, {}, [
-          new xml.Text(
-              `${source.filePath}:${source.startLine}${source.endLine !== source.startLine ? ',' + source.endLine : ''}`)
-        ]));
+        sourceTags.push(new xml.Tag(
+            _SOURCE_TAG, {},
+            [new xml.Text(`${source.filePath}:${source.startLine}${
+                source.endLine !== source.startLine ? ',' + source.endLine : ''}`)]));
       });
 
       rootNode.children.push(
@@ -80,21 +80,25 @@ export class Xmb extends Serializer {
     ]);
   }
 
-  load(content: string, url: string):
+  override load(content: string, url: string):
       {locale: string, i18nNodesByMsgId: {[msgId: string]: i18n.Node[]}} {
     throw new Error('Unsupported');
   }
 
-  digest(message: i18n.Message): string { return digest(message); }
+  override digest(message: i18n.Message): string {
+    return digest(message);
+  }
 
 
-  createNameMapper(message: i18n.Message): PlaceholderMapper {
+  override createNameMapper(message: i18n.Message): PlaceholderMapper {
     return new SimplePlaceholderMapper(message, toPublicName);
   }
 }
 
 class _Visitor implements i18n.Visitor {
-  visitText(text: i18n.Text, context?: any): xml.Node[] { return [new xml.Text(text.value)]; }
+  visitText(text: i18n.Text, context?: any): xml.Node[] {
+    return [new xml.Text(text.value)];
+  }
 
   visitContainer(container: i18n.Container, context: any): xml.Node[] {
     const nodes: xml.Node[] = [];

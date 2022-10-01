@@ -1,16 +1,16 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {EventEmitter, Injectable} from '@angular/core';
+import {EventEmitter, Injectable, OnDestroy, ɵɵinject} from '@angular/core';
 import {SubscriptionLike} from 'rxjs';
 
 import {LocationStrategy} from './location_strategy';
-import {PlatformLocation} from './platform_location';
+import {joinWithSlash, normalizeQueryParams, stripTrailingSlash} from './util';
 
 /** @publicApi */
 export interface PopStateEvent {
@@ -30,7 +30,7 @@ export interface PopStateEvent {
  *
  * @usageNotes
  *
- * It's better to use the `Router#navigate` service to trigger route changes. Use
+ * It's better to use the `Router.navigate()` service to trigger route changes. Use
  * `Location` only if you need to interact with or create normalized URLs outside of
  * routing.
  *
@@ -48,25 +48,28 @@ export interface PopStateEvent {
  *
  * @publicApi
  */
-@Injectable()
-export class Location {
+@Injectable({
+  providedIn: 'root',
+  // See #23917
+  useFactory: createLocation,
+})
+export class Location implements OnDestroy {
   /** @internal */
   _subject: EventEmitter<any> = new EventEmitter();
   /** @internal */
   _baseHref: string;
   /** @internal */
-  _platformStrategy: LocationStrategy;
-  /** @internal */
-  _platformLocation: PlatformLocation;
+  _locationStrategy: LocationStrategy;
   /** @internal */
   _urlChangeListeners: ((url: string, state: unknown) => void)[] = [];
+  /** @internal */
+  _urlChangeSubscription: SubscriptionLike|null = null;
 
-  constructor(platformStrategy: LocationStrategy, platformLocation: PlatformLocation) {
-    this._platformStrategy = platformStrategy;
-    const browserBaseHref = this._platformStrategy.getBaseHref();
-    this._platformLocation = platformLocation;
-    this._baseHref = Location.stripTrailingSlash(_stripIndexHtml(browserBaseHref));
-    this._platformStrategy.onPopState((ev) => {
+  constructor(locationStrategy: LocationStrategy) {
+    this._locationStrategy = locationStrategy;
+    const browserBaseHref = this._locationStrategy.getBaseHref();
+    this._baseHref = stripTrailingSlash(_stripIndexHtml(browserBaseHref));
+    this._locationStrategy.onPopState((ev) => {
       this._subject.emit({
         'url': this.path(true),
         'pop': true,
@@ -74,6 +77,12 @@ export class Location {
         'type': ev.type,
       });
     });
+  }
+
+  /** @nodoc */
+  ngOnDestroy(): void {
+    this._urlChangeSubscription?.unsubscribe();
+    this._urlChangeListeners = [];
   }
 
   /**
@@ -86,14 +95,16 @@ export class Location {
   // TODO: vsavkin. Remove the boolean flag and always include hash once the deprecated router is
   // removed.
   path(includeHash: boolean = false): string {
-    return this.normalize(this._platformStrategy.path(includeHash));
+    return this.normalize(this._locationStrategy.path(includeHash));
   }
 
   /**
    * Reports the current state of the location history.
    * @returns The current value of the `history.state` object.
    */
-  getState(): unknown { return this._platformLocation.getState(); }
+  getState(): unknown {
+    return this._locationStrategy.getState();
+  }
 
   /**
    * Normalizes the given path and compares to the current normalized path.
@@ -105,7 +116,7 @@ export class Location {
    * otherwise.
    */
   isCurrentPathEqualTo(path: string, query: string = ''): boolean {
-    return this.path() == this.normalize(path + Location.normalizeQueryParams(query));
+    return this.path() == this.normalize(path + normalizeQueryParams(query));
   }
 
   /**
@@ -133,7 +144,7 @@ export class Location {
     if (url && url[0] !== '/') {
       url = '/' + url;
     }
-    return this._platformStrategy.prepareExternalUrl(url);
+    return this._locationStrategy.prepareExternalUrl(url);
   }
 
   // TODO: rename this method to pushState
@@ -147,9 +158,9 @@ export class Location {
    *
    */
   go(path: string, query: string = '', state: any = null): void {
-    this._platformStrategy.pushState(state, '', path, query);
+    this._locationStrategy.pushState(state, '', path, query);
     this._notifyUrlChangeListeners(
-        this.prepareExternalUrl(path + Location.normalizeQueryParams(query)), state);
+        this.prepareExternalUrl(path + normalizeQueryParams(query)), state);
   }
 
   /**
@@ -161,30 +172,66 @@ export class Location {
    * @param state Location history state.
    */
   replaceState(path: string, query: string = '', state: any = null): void {
-    this._platformStrategy.replaceState(state, '', path, query);
+    this._locationStrategy.replaceState(state, '', path, query);
     this._notifyUrlChangeListeners(
-        this.prepareExternalUrl(path + Location.normalizeQueryParams(query)), state);
+        this.prepareExternalUrl(path + normalizeQueryParams(query)), state);
   }
 
   /**
    * Navigates forward in the platform's history.
    */
-  forward(): void { this._platformStrategy.forward(); }
+  forward(): void {
+    this._locationStrategy.forward();
+  }
 
   /**
    * Navigates back in the platform's history.
    */
-  back(): void { this._platformStrategy.back(); }
+  back(): void {
+    this._locationStrategy.back();
+  }
+
+  /**
+   * Navigate to a specific page from session history, identified by its relative position to the
+   * current page.
+   *
+   * @param relativePosition  Position of the target page in the history relative to the current
+   *     page.
+   * A negative value moves backwards, a positive value moves forwards, e.g. `location.historyGo(2)`
+   * moves forward two pages and `location.historyGo(-2)` moves back two pages. When we try to go
+   * beyond what's stored in the history session, we stay in the current page. Same behaviour occurs
+   * when `relativePosition` equals 0.
+   * @see https://developer.mozilla.org/en-US/docs/Web/API/History_API#Moving_to_a_specific_point_in_history
+   */
+  historyGo(relativePosition: number = 0): void {
+    this._locationStrategy.historyGo?.(relativePosition);
+  }
 
   /**
    * Registers a URL change listener. Use to catch updates performed by the Angular
    * framework that are not detectible through "popstate" or "hashchange" events.
    *
    * @param fn The change handler function, which take a URL and a location history state.
+   * @returns A function that, when executed, unregisters a URL change listener.
    */
-  onUrlChange(fn: (url: string, state: unknown) => void) {
+  onUrlChange(fn: (url: string, state: unknown) => void): VoidFunction {
     this._urlChangeListeners.push(fn);
-    this.subscribe(v => { this._notifyUrlChangeListeners(v.url, v.state); });
+
+    if (!this._urlChangeSubscription) {
+      this._urlChangeSubscription = this.subscribe(v => {
+        this._notifyUrlChangeListeners(v.url, v.state);
+      });
+    }
+
+    return () => {
+      const fnIndex = this._urlChangeListeners.indexOf(fn);
+      this._urlChangeListeners.splice(fnIndex, 1);
+
+      if (this._urlChangeListeners.length === 0) {
+        this._urlChangeSubscription?.unsubscribe();
+        this._urlChangeSubscription = null;
+      }
+    };
   }
 
   /** @internal */
@@ -195,8 +242,13 @@ export class Location {
   /**
    * Subscribes to the platform's `popState` events.
    *
+   * Note: `Location.go()` does not trigger the `popState` event in the browser. Use
+   * `Location.onUrlChange()` to subscribe to URL changes instead.
+   *
    * @param value Event that is triggered when the state history changes.
    * @param exception The exception to throw.
+   *
+   * @see [onpopstate](https://developer.mozilla.org/en-US/docs/Web/API/WindowEventHandlers/onpopstate)
    *
    * @returns Subscribed events.
    */
@@ -213,9 +265,7 @@ export class Location {
    *
    * @returns The normalized URL parameters string.
    */
-  public static normalizeQueryParams(params: string): string {
-    return params && params[0] !== '?' ? '?' + params : params;
-  }
+  public static normalizeQueryParams: (params: string) => string = normalizeQueryParams;
 
   /**
    * Joins two parts of a URL with a slash if needed.
@@ -226,28 +276,7 @@ export class Location {
    *
    * @returns The joined URL string.
    */
-  public static joinWithSlash(start: string, end: string): string {
-    if (start.length == 0) {
-      return end;
-    }
-    if (end.length == 0) {
-      return start;
-    }
-    let slashes = 0;
-    if (start.endsWith('/')) {
-      slashes++;
-    }
-    if (end.startsWith('/')) {
-      slashes++;
-    }
-    if (slashes == 2) {
-      return start + end.substring(1);
-    }
-    if (slashes == 1) {
-      return start + end;
-    }
-    return start + '/' + end;
-  }
+  public static joinWithSlash: (start: string, end: string) => string = joinWithSlash;
 
   /**
    * Removes a trailing slash from a URL string if needed.
@@ -258,12 +287,11 @@ export class Location {
    *
    * @returns The URL string, modified if needed.
    */
-  public static stripTrailingSlash(url: string): string {
-    const match = url.match(/#|\?|$/);
-    const pathEndIdx = match && match.index || url.length;
-    const droppedSlashIdx = pathEndIdx - (url[pathEndIdx - 1] === '/' ? 1 : 0);
-    return url.slice(0, droppedSlashIdx) + url.slice(pathEndIdx);
-  }
+  public static stripTrailingSlash: (url: string) => string = stripTrailingSlash;
+}
+
+export function createLocation() {
+  return new Location(ɵɵinject(LocationStrategy as any));
 }
 
 function _stripBaseHref(baseHref: string, url: string): string {

@@ -16,19 +16,17 @@ import { Hero } from './hero';
 
 @Component({
   selector: 'app-hero-list-enter-leave',
-  // #docregion template
   template: `
     <ul class="heroes">
       <li *ngFor="let hero of heroes"
-          [@flyInOut]="'in'" (click)="removeHero(hero.id)">
-          <div class="inner">
+          [@flyInOut]="'in'">
+          <button class="inner" type="button" (click)="removeHero(hero.id)">
             <span class="badge">{{ hero.id }}</span>
-            <span>{{ hero.name }}</span>
-          </div>
+            <span class="name">{{ hero.name }}</span>
+          </button>
       </li>
     </ul>
   `,
-  // #enddocregion template
   styleUrls: ['./hero-list-page.component.css'],
   // #docregion animationdef
   animations: [
@@ -46,7 +44,7 @@ import { Hero } from './hero';
   // #enddocregion animationdef
 })
 export class HeroListEnterLeaveComponent {
-  @Input() heroes: Hero[];
+  @Input() heroes: Hero[] = [];
 
   @Output() remove = new EventEmitter<number>();
 

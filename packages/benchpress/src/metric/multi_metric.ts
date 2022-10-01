@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -26,12 +26,14 @@ export class MultiMetric extends Metric {
     ];
   }
 
-  constructor(private _metrics: Metric[]) { super(); }
+  constructor(private _metrics: Metric[]) {
+    super();
+  }
 
   /**
    * Starts measuring
    */
-  beginMeasure(): Promise<any> {
+  override beginMeasure(): Promise<any> {
     return Promise.all(this._metrics.map(metric => metric.beginMeasure()));
   }
 
@@ -40,7 +42,7 @@ export class MultiMetric extends Metric {
    * since the begin call.
    * @param restart: Whether to restart right after this.
    */
-  endMeasure(restart: boolean): Promise<{[key: string]: any}> {
+  override endMeasure(restart: boolean): Promise<{[key: string]: any}> {
     return Promise.all(this._metrics.map(metric => metric.endMeasure(restart)))
         .then(values => mergeStringMaps(<any>values));
   }
@@ -49,14 +51,18 @@ export class MultiMetric extends Metric {
    * Describes the metrics provided by this metric implementation.
    * (e.g. units, ...)
    */
-  describe(): {[key: string]: any} {
+  override describe(): {[key: string]: any} {
     return mergeStringMaps(this._metrics.map((metric) => metric.describe()));
   }
 }
 
 function mergeStringMaps(maps: {[key: string]: string}[]): {[key: string]: string} {
   const result: {[key: string]: string} = {};
-  maps.forEach(map => { Object.keys(map).forEach(prop => { result[prop] = map[prop]; }); });
+  maps.forEach(map => {
+    Object.keys(map).forEach(prop => {
+      result[prop] = map[prop];
+    });
+  });
   return result;
 }
 

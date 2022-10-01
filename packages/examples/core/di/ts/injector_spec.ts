@@ -1,23 +1,23 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {InjectFlags, InjectionToken, Injector, Type, inject, ɵsetCurrentInjector as setCurrentInjector} from '@angular/core';
+import {inject, InjectFlags, InjectionToken, InjectOptions, Injector, ProviderToken, ɵsetCurrentInjector as setCurrentInjector} from '@angular/core';
 
 class MockRootScopeInjector implements Injector {
   constructor(readonly parent: Injector) {}
 
   get<T>(
-      token: Type<T>|InjectionToken<T>, defaultValue?: any,
-      flags: InjectFlags = InjectFlags.Default): T {
-    if ((token as any).ngInjectableDef && (token as any).ngInjectableDef.providedIn === 'root') {
+      token: ProviderToken<T>, defaultValue?: any,
+      flags: InjectFlags|InjectOptions = InjectFlags.Default): T {
+    if ((token as any).ɵprov && (token as any).ɵprov.providedIn === 'root') {
       const old = setCurrentInjector(this);
       try {
-        return (token as any).ngInjectableDef.factory();
+        return (token as any).ɵprov.factory();
       } finally {
         setCurrentInjector(old);
       }
@@ -51,7 +51,8 @@ class MockRootScopeInjector implements Injector {
       const injector =
           Injector.create({providers: [{provide: BASE_URL, useValue: 'http://localhost'}]});
       const url = injector.get(BASE_URL);
-      // here `url` is inferred to be `string` because `BASE_URL` is `InjectionToken<string>`.
+      // Note: since `BASE_URL` is `InjectionToken<string>`
+      // `url` is correctly inferred to be `string`
       expect(url).toBe('http://localhost');
       // #enddocregion
     });

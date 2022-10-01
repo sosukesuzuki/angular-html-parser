@@ -5,20 +5,20 @@
 
 export function addMatchers(): void {
   jasmine.addMatchers({
-    toHaveText: toHaveText
+    toHaveText
   });
 }
 
 function toHaveText(): jasmine.CustomMatcher {
   return {
-    compare: function (actual: any, expectedText: string, expectationFailOutput?: any): jasmine.CustomMatcherResult {
+    compare: (actual: any, expectedText: string, expectationFailOutput?: any): jasmine.CustomMatcherResult => {
       const actualText = elementText(actual);
       const pass = actualText.indexOf(expectedText) > -1;
       const message = pass ? '' : composeMessage();
       return { pass, message };
 
-      function composeMessage () {
-        const a = (actualText.length < 100 ? actualText : actualText.substr(0, 100) + '...');
+      function composeMessage() {
+        const a = (actualText.length < 100 ? actualText : actualText.slice(0, 100) + '...');
         const efo = expectationFailOutput ? ` '${expectationFailOutput}'` : '';
         return `Expected element to have text content '${expectedText}' instead of '${a}'${efo}`;
       }

@@ -5,16 +5,16 @@ import { Component, EventEmitter } from '@angular/core';
 
 @Component({
   selector: 'toh-hero-button',
-  template: `<button></button>`,
+  template: `<button type="button"></button>`,
   inputs: [
     'label'
   ],
   outputs: [
-    'change'
+    'heroChange'
   ]
 })
 export class HeroButtonComponent {
-  change = new EventEmitter<any>();
+  heroChange = new EventEmitter<any>();
   label: string;
 }
 // #enddocregion example

@@ -2,7 +2,7 @@
 // #docregion , v1, final
 import { Component } from '@angular/core';
 
-import { Hero }    from '../hero';
+import { Hero } from '../hero';
 
 @Component({
   selector: 'app-hero-form',
@@ -23,8 +23,6 @@ export class HeroFormComponent {
   // #enddocregion submitted
 
   // #enddocregion final
-  // TODO: Remove this when we're done
-  get diagnostic() { return JSON.stringify(this.model); }
   // #enddocregion v1
 
   // #docregion final, new-hero
@@ -35,7 +33,7 @@ export class HeroFormComponent {
 
   skyDog(): Hero {
     // #docregion SkyDog
-    let myHero =  new Hero(42, 'SkyDog',
+    const myHero =  new Hero(42, 'SkyDog',
                            'Fetch any object at any distance',
                            'Leslie Rollover');
     console.log('My hero is called ' + myHero.name); // "My hero is called SkyDog"
@@ -48,10 +46,8 @@ export class HeroFormComponent {
   // Reveal in html:
   //   Name via form.controls = {{showFormControls(heroForm)}}
   showFormControls(form: any) {
-    return form && form.controls['name'] &&
-    // #docregion form-controls
-    form.controls['name'].value; // Dr. IQ
-    // #enddocregion form-controls
+    return form && form.controls.name &&
+    form.controls.name.value; // Dr. IQ
   }
 
   /////////////////////////////

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -23,11 +23,12 @@ export class PerflogMetric extends Metric {
   static PROVIDERS = [
     {
       provide: PerflogMetric,
-      deps: [
-        WebDriverExtension, PerflogMetric.SET_TIMEOUT, Options.MICRO_METRICS, Options.FORCE_GC,
-        Options.CAPTURE_FRAMES, Options.RECEIVED_DATA, Options.REQUEST_COUNT,
-        PerflogMetric.IGNORE_NAVIGATION
-      ]
+      deps:
+          [
+            WebDriverExtension, PerflogMetric.SET_TIMEOUT, Options.MICRO_METRICS, Options.FORCE_GC,
+            Options.CAPTURE_FRAMES, Options.RECEIVED_DATA, Options.REQUEST_COUNT,
+            PerflogMetric.IGNORE_NAVIGATION
+          ]
     },
     {
       provide: PerflogMetric.SET_TIMEOUT,
@@ -68,7 +69,7 @@ export class PerflogMetric extends Metric {
     }
   }
 
-  describe(): {[key: string]: string} {
+  override describe(): {[key: string]: string} {
     const res: {[key: string]: any} = {
       'scriptTime': 'script execution time in ms, including gc and render',
       'pureScriptTime': 'script execution time in ms, without gc nor render'
@@ -112,7 +113,7 @@ export class PerflogMetric extends Metric {
     return res;
   }
 
-  beginMeasure(): Promise<any> {
+  override beginMeasure(): Promise<any> {
     let resultPromise = Promise.resolve(null);
     if (this._forceGc) {
       resultPromise = resultPromise.then((_) => this._driverExtension.gc());
@@ -120,7 +121,7 @@ export class PerflogMetric extends Metric {
     return resultPromise.then((_) => this._beginMeasure());
   }
 
-  endMeasure(restart: boolean): Promise<{[key: string]: number}> {
+  override endMeasure(restart: boolean): Promise<{[key: string]: number}> {
     if (this._forceGc) {
       return this._endPlainMeasureAndMeasureForceGc(restart);
     } else {
@@ -169,7 +170,9 @@ export class PerflogMetric extends Metric {
         return result;
       }
       let resolve: (result: any) => void;
-      const promise = new Promise<{[key: string]: number}>(res => { resolve = res; });
+      const promise = new Promise<{[key: string]: number}>(res => {
+        resolve = res;
+      });
       this._setTimeout(() => resolve(this._readUntilEndMark(markName, loopCount + 1)), 100);
       return promise;
     });
@@ -188,7 +191,7 @@ export class PerflogMetric extends Metric {
         }
         startEvent['ph'] = 'B';
         endEvent['ph'] = 'E';
-        endEvent['ts'] = startEvent['ts'] ! + startEvent['dur'] !;
+        endEvent['ts'] = startEvent['ts']! + startEvent['dur']!;
         this._remainingEvents.push(startEvent);
         this._remainingEvents.push(endEvent);
       } else {
@@ -198,7 +201,7 @@ export class PerflogMetric extends Metric {
     if (needSort) {
       // Need to sort because of the ph==='X' events
       this._remainingEvents.sort((a, b) => {
-        const diff = a['ts'] ! - b['ts'] !;
+        const diff = a['ts']! - b['ts']!;
         return diff > 0 ? 1 : diff < 0 ? -1 : 0;
       });
     }
@@ -230,18 +233,31 @@ export class PerflogMetric extends Metric {
       result['requestCount'] = 0;
     }
 
-    let markStartEvent: PerfLogEvent = null !;
-    let markEndEvent: PerfLogEvent = null !;
+    let markStartEvent: PerfLogEvent = null!;
+    let markEndEvent: PerfLogEvent = null!;
     events.forEach((event) => {
       const ph = event['ph'];
       const name = event['name'];
-      if (ph === 'B' && name === markName) {
+
+      // Here we are determining if this is the event signaling the start or end of our performance
+      // testing (this is triggered by us calling #timeBegin and #timeEnd).
+      //
+      // Previously, this was done by checking that the event name matched our mark name and that
+      // the phase was either "B" or "E" ("begin" or "end"). However, since Chrome v90 this is
+      // showing up as "-bpstart" and "-bpend" ("benchpress start/end"), which is what one would
+      // actually expect since that is the mark name used in ChromeDriverExtension - see the
+      // #timeBegin and #timeEnd implementations in chrome_driver_extension.ts. For
+      // backwards-compatibility with Chrome v89 (and older), we do both checks: the phase-based
+      // one ("B" or "E") and event name-based (the "-bp(start/end)" suffix).
+      const isStartEvent = (ph === 'B' && name === markName) || name === markName + '-bpstart';
+      const isEndEvent = (ph === 'E' && name === markName) || name === markName + '-bpend';
+      if (isStartEvent) {
         markStartEvent = event;
       } else if (ph === 'I' && name === 'navigationStart' && !this._ignoreNavigation) {
         // if a benchmark measures reload of a page, use the last
         // navigationStart as begin event
         markStartEvent = event;
-      } else if (ph === 'E' && name === markName) {
+      } else if (isEndEvent) {
         markEndEvent = event;
       }
     });
@@ -267,7 +283,7 @@ export class PerflogMetric extends Metric {
     let inMeasureRange = false;
     events.forEach((event) => {
       const ph = event['ph'];
-      let name = event['name'] !;
+      let name = event['name']!;
       let microIterations = 1;
       const microIterationsMatch = name.match(_MICRO_ITERATIONS_REGEX);
       if (microIterationsMatch) {
@@ -286,7 +302,7 @@ export class PerflogMetric extends Metric {
       if (this._requestCount && name === 'sendRequest') {
         result['requestCount'] += 1;
       } else if (this._receivedData && name === 'receivedData' && ph === 'I') {
-        result['receivedData'] += event['args'] !['encodedDataLength'] !;
+        result['receivedData'] += event['args']!['encodedDataLength']!;
       }
       if (ph === 'B' && name === _MARK_NAME_FRAME_CAPTURE) {
         if (frameCaptureStartEvent) {
@@ -305,7 +321,7 @@ export class PerflogMetric extends Metric {
       }
 
       if (ph === 'I' && frameCaptureStartEvent && !frameCaptureEndEvent && name === 'frame') {
-        frameTimestamps.push(event['ts'] !);
+        frameTimestamps.push(event['ts']!);
         if (frameTimestamps.length >= 2) {
           frameTimes.push(
               frameTimestamps[frameTimestamps.length - 1] -
@@ -324,14 +340,14 @@ export class PerflogMetric extends Metric {
         intervalStartCount[name]--;
         if (intervalStartCount[name] === 0) {
           const startEvent = intervalStarts[name];
-          const duration = (event['ts'] ! - startEvent['ts'] !);
-          intervalStarts[name] = null !;
+          const duration = (event['ts']! - startEvent['ts']!);
+          intervalStarts[name] = null!;
           if (name === 'gc') {
             result['gcTime'] += duration;
             const amount =
-                (startEvent['args'] !['usedHeapSize'] ! - event['args'] !['usedHeapSize'] !) / 1000;
+                (startEvent['args']!['usedHeapSize']! - event['args']!['usedHeapSize']!) / 1000;
             result['gcAmount'] += amount;
-            const majorGc = event['args'] !['majorGc'];
+            const majorGc = event['args']!['majorGc'];
             if (majorGc && majorGc) {
               result['majorGcTime'] += duration;
             }
@@ -374,7 +390,9 @@ export class PerflogMetric extends Metric {
         frameTimes.filter(t => t < _FRAME_TIME_SMOOTH_THRESHOLD).length / frameTimes.length;
   }
 
-  private _markName(index: number) { return `${_MARK_NAME_PREFIX}${index}`; }
+  private _markName(index: number) {
+    return `${_MARK_NAME_PREFIX}${index}`;
+  }
 }
 
 const _MICRO_ITERATIONS_REGEX = /(.+)\*(\d+)$/;

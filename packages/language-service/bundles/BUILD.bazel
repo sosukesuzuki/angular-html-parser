@@ -1,18 +1,14 @@
-load(":rollup.bzl", "ls_rollup_bundle")
+load("@npm//@bazel/rollup:index.bzl", "rollup_bundle")
 
-ls_rollup_bundle(
+rollup_bundle(
     name = "language-service",
-    entry_point = "//packages/language-service:index.ts",
-    globals = {
-        "fs": "fs",
-        "path": "path",
-        "typescript": "ts",
-    },
-    license_banner = "banner.js.txt",
+    config_file = "rollup.config.js",
+    entry_point = "//packages/language-service/src:ts_plugin.ts",
+    format = "amd",
+    silent = True,
     visibility = ["//packages/language-service:__pkg__"],
     deps = [
-        "//packages/language-service",
-        "@npm//rxjs",
-        "@npm//tslib",
+        "//packages/language-service/src",
+        "@npm//@rollup/plugin-node-resolve",
     ],
 )

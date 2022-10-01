@@ -1,14 +1,16 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {Location, LocationStrategy, PlatformLocation} from '@angular/common';
+import {Location, LocationStrategy} from '@angular/common';
 import {EventEmitter, Injectable} from '@angular/core';
 import {SubscriptionLike} from 'rxjs';
+
+import {normalizeQueryParams} from '../../src/location/util';
 
 /**
  * A spy for {@link Location} that allows tests to fire simulated location events.
@@ -25,19 +27,32 @@ export class SpyLocation implements Location {
   /** @internal */
   _baseHref: string = '';
   /** @internal */
-  _platformStrategy: LocationStrategy = null !;
-  /** @internal */
-  _platformLocation: PlatformLocation = null !;
+  _locationStrategy: LocationStrategy = null!;
   /** @internal */
   _urlChangeListeners: ((url: string, state: unknown) => void)[] = [];
+  /** @internal */
+  _urlChangeSubscription: SubscriptionLike|null = null;
 
-  setInitialPath(url: string) { this._history[this._historyIndex].path = url; }
+  ngOnDestroy(): void {
+    this._urlChangeSubscription?.unsubscribe();
+    this._urlChangeListeners = [];
+  }
 
-  setBaseHref(url: string) { this._baseHref = url; }
+  setInitialPath(url: string) {
+    this._history[this._historyIndex].path = url;
+  }
 
-  path(): string { return this._history[this._historyIndex].path; }
+  setBaseHref(url: string) {
+    this._baseHref = url;
+  }
 
-  getState(): unknown { return this._history[this._historyIndex].state; }
+  path(): string {
+    return this._history[this._historyIndex].path;
+  }
+
+  getState(): unknown {
+    return this._history[this._historyIndex].state;
+  }
 
   isCurrentPathEqualTo(path: string, query: string = ''): boolean {
     const givenPath = path.endsWith('/') ? path.substring(0, path.length - 1) : path;
@@ -52,9 +67,13 @@ export class SpyLocation implements Location {
   }
 
   simulateHashChange(pathname: string) {
-    // Because we don't prevent the native event, the browser will independently update the path
-    this.setInitialPath(pathname);
+    const path = this.prepareExternalUrl(pathname);
+    this.pushHistory(path, '', null);
+
     this.urlChanges.push('hash: ' + pathname);
+    // the browser will automatically fire popstate event before each `hashchange` event, so we need
+    // to simulate it.
+    this._subject.emit({'url': pathname, 'pop': true, 'type': 'popstate'});
     this._subject.emit({'url': pathname, 'pop': true, 'type': 'hashchange'});
   }
 
@@ -68,11 +87,7 @@ export class SpyLocation implements Location {
   go(path: string, query: string = '', state: any = null) {
     path = this.prepareExternalUrl(path);
 
-    if (this._historyIndex > 0) {
-      this._history.splice(this._historyIndex + 1);
-    }
-    this._history.push(new LocationState(path, query, state));
-    this._historyIndex = this._history.length - 1;
+    this.pushHistory(path, query, state);
 
     const locationState = this._history[this._historyIndex - 1];
     if (locationState.path == path && locationState.query == query) {
@@ -81,7 +96,7 @@ export class SpyLocation implements Location {
 
     const url = path + (query.length > 0 ? ('?' + query) : '');
     this.urlChanges.push(url);
-    this._subject.emit({'url': url, 'pop': false});
+    this._notifyUrlChangeListeners(path + normalizeQueryParams(query), state);
   }
 
   replaceState(path: string, query: string = '', state: any = null) {
@@ -98,24 +113,52 @@ export class SpyLocation implements Location {
 
     const url = path + (query.length > 0 ? ('?' + query) : '');
     this.urlChanges.push('replace: ' + url);
+    this._notifyUrlChangeListeners(path + normalizeQueryParams(query), state);
   }
 
   forward() {
     if (this._historyIndex < (this._history.length - 1)) {
       this._historyIndex++;
-      this._subject.emit({'url': this.path(), 'state': this.getState(), 'pop': true});
+      this._subject.emit(
+          {'url': this.path(), 'state': this.getState(), 'pop': true, 'type': 'popstate'});
     }
   }
 
   back() {
     if (this._historyIndex > 0) {
       this._historyIndex--;
-      this._subject.emit({'url': this.path(), 'state': this.getState(), 'pop': true});
+      this._subject.emit(
+          {'url': this.path(), 'state': this.getState(), 'pop': true, 'type': 'popstate'});
     }
   }
-  onUrlChange(fn: (url: string, state: unknown) => void) {
+
+  historyGo(relativePosition: number = 0): void {
+    const nextPageIndex = this._historyIndex + relativePosition;
+    if (nextPageIndex >= 0 && nextPageIndex < this._history.length) {
+      this._historyIndex = nextPageIndex;
+      this._subject.emit(
+          {'url': this.path(), 'state': this.getState(), 'pop': true, 'type': 'popstate'});
+    }
+  }
+
+  onUrlChange(fn: (url: string, state: unknown) => void): VoidFunction {
     this._urlChangeListeners.push(fn);
-    this.subscribe(v => { this._notifyUrlChangeListeners(v.url, v.state); });
+
+    if (!this._urlChangeSubscription) {
+      this._urlChangeSubscription = this.subscribe(v => {
+        this._notifyUrlChangeListeners(v.url, v.state);
+      });
+    }
+
+    return () => {
+      const fnIndex = this._urlChangeListeners.indexOf(fn);
+      this._urlChangeListeners.splice(fnIndex, 1);
+
+      if (this._urlChangeListeners.length === 0) {
+        this._urlChangeSubscription?.unsubscribe();
+        this._urlChangeSubscription = null;
+      }
+    };
   }
 
   /** @internal */
@@ -129,7 +172,17 @@ export class SpyLocation implements Location {
     return this._subject.subscribe({next: onNext, error: onThrow, complete: onReturn});
   }
 
-  normalize(url: string): string { return null !; }
+  normalize(url: string): string {
+    return null!;
+  }
+
+  private pushHistory(path: string, query: string, state: any) {
+    if (this._historyIndex > 0) {
+      this._history.splice(this._historyIndex + 1);
+    }
+    this._history.push(new LocationState(path, query, state));
+    this._historyIndex = this._history.length - 1;
+  }
 }
 
 class LocationState {

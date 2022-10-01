@@ -1,15 +1,14 @@
 // #docplaster
-// #docregion orders-routing-module
 import { NgModule } from '@angular/core';
 import { Routes, RouterModule } from '@angular/router';
 
 // #docregion orders-routing-module-detail
-import { OrderListComponent } from './order-list/order-list.component';
+import { OrdersComponent } from './orders.component';
 
 const routes: Routes = [
   {
     path: '',
-    component: OrderListComponent
+    component: OrdersComponent
   }
 ];
 // #enddocregion orders-routing-module-detail
@@ -19,4 +18,3 @@ const routes: Routes = [
   exports: [RouterModule]
 })
 export class OrdersRoutingModule { }
-// #enddocregion orders-routing-module

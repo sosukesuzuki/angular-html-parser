@@ -1,6 +1,7 @@
 {
   "description": "Http Guide Testing",
   "files":[
+    "src/app/heroes/hero.ts",
     "src/app/heroes/heroes.service.ts",
     "src/app/heroes/heroes.service.spec.ts",
 
@@ -14,5 +15,6 @@
     "src/index-specs.html"
   ],
   "main": "src/index-specs.html",
-  "tags": ["http", "testing"]
+  "tags": ["http", "testing"],
+  "devDependencies": ["jasmine-core"]
 }

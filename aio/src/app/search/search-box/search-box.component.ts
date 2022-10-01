@@ -15,14 +15,22 @@ import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
  */
 @Component({
   selector: 'aio-search-box',
-  template: `<input #searchBox
+  template: `
+  <input #searchBox
     type="search"
     aria-label="search"
     placeholder="Search"
     (input)="doSearch()"
     (keyup)="doSearch()"
     (focus)="doFocus()"
-    (click)="doSearch()">`
+    (click)="doSearch()">
+  <div class="search-box-shortcut">/</div>
+  <mat-icon
+    *ngIf="searchBox.value"
+    (click)="searchBox.value = ''; searchBox.focus()">
+    close
+  </mat-icon>
+  `
 })
 export class SearchBoxComponent implements AfterViewInit {
 
@@ -30,9 +38,9 @@ export class SearchBoxComponent implements AfterViewInit {
   private searchSubject = new Subject<string>();
 
   @ViewChild('searchBox', { static: true }) searchBox: ElementRef;
-  // tslint:disable-next-line: no-output-on-prefix
+  // eslint-disable-next-line @angular-eslint/no-output-on-prefix
   @Output() onSearch = this.searchSubject.pipe(distinctUntilChanged(), debounceTime(this.searchDebounce));
-  // tslint:disable-next-line: no-output-on-prefix
+  // eslint-disable-next-line @angular-eslint/no-output-on-prefix
   @Output() onFocus = new EventEmitter<string>();
 
   constructor(private locationService: LocationService) { }
@@ -41,7 +49,7 @@ export class SearchBoxComponent implements AfterViewInit {
    * When we first show this search box we trigger a search if there is a search query in the URL
    */
   ngAfterViewInit() {
-    const query = this.locationService.search()['search'];
+    const query = this.locationService.search().search;
     if (query) {
       this.query = this.decodeQuery(query);
       this.doSearch();

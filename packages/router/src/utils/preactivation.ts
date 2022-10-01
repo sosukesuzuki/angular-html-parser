@@ -1,19 +1,19 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {Injector} from '@angular/core';
+import {Injector, ProviderToken, ɵisInjectable as isInjectable} from '@angular/core';
 
-import {LoadedRouterConfig, RunGuardsAndResolvers} from '../config';
+import {RunGuardsAndResolvers} from '../models';
 import {ChildrenOutletContexts, OutletContext} from '../router_outlet_context';
-import {ActivatedRouteSnapshot, RouterStateSnapshot, equalParamsAndUrlSegments} from '../router_state';
+import {ActivatedRouteSnapshot, equalParamsAndUrlSegments, RouterStateSnapshot} from '../router_state';
 import {equalPath} from '../url_tree';
 import {forEach, shallowEqual} from '../utils/collection';
-import {TreeNode, nodeChildrenAsMap} from '../utils/tree';
+import {nodeChildrenAsMap, TreeNode} from '../utils/tree';
 
 export class CanActivate {
   readonly route: ActivatedRouteSnapshot;
@@ -47,28 +47,25 @@ export function getCanActivateChild(p: ActivatedRouteSnapshot):
   return {node: p, guards: canActivateChild};
 }
 
-export function getToken(
-    token: any, snapshot: ActivatedRouteSnapshot, moduleInjector: Injector): any {
-  const config = getClosestLoadedConfig(snapshot);
-  const injector = config ? config.module.injector : moduleInjector;
-  return injector.get(token);
-}
-
-function getClosestLoadedConfig(snapshot: ActivatedRouteSnapshot): LoadedRouterConfig|null {
-  if (!snapshot) return null;
-
-  for (let s = snapshot.parent; s; s = s.parent) {
-    const route = s.routeConfig;
-    if (route && route._loadedConfig) return route._loadedConfig;
+export function getTokenOrFunctionIdentity<T>(
+    tokenOrFunction: Function|ProviderToken<T>, injector: Injector): Function|T {
+  const NOT_FOUND = Symbol();
+  const result = injector.get<T|Symbol>(tokenOrFunction, NOT_FOUND);
+  if (result === NOT_FOUND) {
+    if (typeof tokenOrFunction === 'function' && !isInjectable(tokenOrFunction)) {
+      // We think the token is just a function so return it as-is
+      return tokenOrFunction;
+    } else {
+      // This will throw the not found error
+      return injector.get<T>(tokenOrFunction);
+    }
   }
-
-  return null;
+  return result as T;
 }
 
 function getChildRouteGuards(
-    futureNode: TreeNode<ActivatedRouteSnapshot>, currNode: TreeNode<ActivatedRouteSnapshot>| null,
-    contexts: ChildrenOutletContexts | null, futurePath: ActivatedRouteSnapshot[],
-    checks: Checks = {
+    futureNode: TreeNode<ActivatedRouteSnapshot>, currNode: TreeNode<ActivatedRouteSnapshot>|null,
+    contexts: ChildrenOutletContexts|null, futurePath: ActivatedRouteSnapshot[], checks: Checks = {
       canDeactivateChecks: [],
       canActivateChecks: []
     }): Checks {
@@ -82,15 +79,16 @@ function getChildRouteGuards(
 
   // Process any children left from the current route (not active for the future route)
   forEach(
-      prevChildren, (v: TreeNode<ActivatedRouteSnapshot>, k: string) =>
-                        deactivateRouteAndItsChildren(v, contexts !.getContext(k), checks));
+      prevChildren,
+      (v: TreeNode<ActivatedRouteSnapshot>, k: string) =>
+          deactivateRouteAndItsChildren(v, contexts!.getContext(k), checks));
 
   return checks;
 }
 
 function getRouteGuards(
     futureNode: TreeNode<ActivatedRouteSnapshot>, currNode: TreeNode<ActivatedRouteSnapshot>,
-    parentContexts: ChildrenOutletContexts | null, futurePath: ActivatedRouteSnapshot[],
+    parentContexts: ChildrenOutletContexts|null, futurePath: ActivatedRouteSnapshot[],
     checks: Checks = {
       canDeactivateChecks: [],
       canActivateChecks: []
@@ -102,7 +100,7 @@ function getRouteGuards(
   // reusing the node
   if (curr && future.routeConfig === curr.routeConfig) {
     const shouldRun =
-        shouldRunGuardsAndResolvers(curr, future, future.routeConfig !.runGuardsAndResolvers);
+        shouldRunGuardsAndResolvers(curr, future, future.routeConfig!.runGuardsAndResolvers);
     if (shouldRun) {
       checks.canActivateChecks.push(new CanActivate(futurePath));
     } else {
@@ -121,9 +119,8 @@ function getRouteGuards(
       getChildRouteGuards(futureNode, currNode, parentContexts, futurePath, checks);
     }
 
-    if (shouldRun) {
-      const component = context && context.outlet && context.outlet.component || null;
-      checks.canDeactivateChecks.push(new CanDeactivate(component, curr));
+    if (shouldRun && context && context.outlet && context.outlet.isActivated) {
+      checks.canDeactivateChecks.push(new CanDeactivate(context.outlet.component, curr));
     }
   } else {
     if (curr) {
@@ -146,7 +143,7 @@ function getRouteGuards(
 
 function shouldRunGuardsAndResolvers(
     curr: ActivatedRouteSnapshot, future: ActivatedRouteSnapshot,
-    mode: RunGuardsAndResolvers | undefined): boolean {
+    mode: RunGuardsAndResolvers|undefined): boolean {
   if (typeof mode === 'function') {
     return mode(curr, future);
   }
@@ -172,7 +169,7 @@ function shouldRunGuardsAndResolvers(
 }
 
 function deactivateRouteAndItsChildren(
-    route: TreeNode<ActivatedRouteSnapshot>, context: OutletContext | null, checks: Checks): void {
+    route: TreeNode<ActivatedRouteSnapshot>, context: OutletContext|null, checks: Checks): void {
   const children = nodeChildrenAsMap(route);
   const r = route.value;
 

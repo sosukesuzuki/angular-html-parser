@@ -1,32 +1,26 @@
-#!/usr/bin/env node
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-// Must be imported first, because Angular decorators throw on load.
-import 'reflect-metadata';
-
-import * as ts from 'typescript';
-import * as tsickle from 'tsickle';
-
-import {replaceTsWithNgInErrors} from './ngtsc/diagnostics';
+import ts from 'typescript';
+import type {TsickleHost} from 'tsickle';
+import yargs from 'yargs';
+import {exitCodeFromResult, formatDiagnostics, ParsedConfiguration, performCompilation, readConfiguration} from './perform_compile';
+import {createPerformWatchHost, performWatchCompilation} from './perform_watch';
 import * as api from './transformers/api';
-import {GENERATED_FILES} from './transformers/util';
 
-import {exitCodeFromResult, performCompilation, readConfiguration, formatDiagnostics, Diagnostics, ParsedConfiguration, filterErrorsAndWarnings} from './perform_compile';
-import {performWatchCompilation, createPerformWatchHost} from './perform_watch';
-import {NodeJSFileSystem, setFileSystem} from './ngtsc/file_system';
+type TsickleModule = typeof import('tsickle');
 
 export function main(
     args: string[], consoleError: (s: string) => void = console.error,
     config?: NgcParsedConfiguration, customTransformers?: api.CustomTransformers, programReuse?: {
-      program: api.Program | undefined,
+      program: api.Program|undefined,
     },
-    modifiedResourceFiles?: Set<string>| null): number {
+    modifiedResourceFiles?: Set<string>|null, tsickle?: TsickleModule): number {
   let {project, rootNames, options, errors: configErrors, watch, emitFlags} =
       config || readNgcCommandLineAndConfiguration(args);
   if (configErrors.length) {
@@ -47,7 +41,9 @@ export function main(
     options,
     emitFlags,
     oldProgram,
-    emitCallback: createEmitCallback(options), customTransformers, modifiedResourceFiles
+    emitCallback: createEmitCallback(options, tsickle),
+    customTransformers,
+    modifiedResourceFiles
   });
   if (programReuse !== undefined) {
     programReuse.program = program;
@@ -56,92 +52,122 @@ export function main(
 }
 
 export function mainDiagnosticsForTest(
-    args: string[], config?: NgcParsedConfiguration): ReadonlyArray<ts.Diagnostic|api.Diagnostic> {
-  let {project, rootNames, options, errors: configErrors, watch, emitFlags} =
+    args: string[], config?: NgcParsedConfiguration,
+    programReuse?: {program: api.Program|undefined}, modifiedResourceFiles?: Set<string>|null,
+    tsickle?: TsickleModule): {
+  exitCode: number,
+  diagnostics: ReadonlyArray<ts.Diagnostic>,
+} {
+  let {rootNames, options, errors: configErrors, emitFlags} =
       config || readNgcCommandLineAndConfiguration(args);
   if (configErrors.length) {
-    return configErrors;
+    return {
+      exitCode: exitCodeFromResult(configErrors),
+      diagnostics: configErrors,
+    };
   }
-  const {diagnostics: compileDiags} = performCompilation(
-      {rootNames, options, emitFlags, emitCallback: createEmitCallback(options)});
-  return compileDiags;
+
+  let oldProgram: api.Program|undefined;
+  if (programReuse !== undefined) {
+    oldProgram = programReuse.program;
+  }
+
+  const {diagnostics: compileDiags, program} = performCompilation({
+    rootNames,
+    options,
+    emitFlags,
+    oldProgram,
+    modifiedResourceFiles,
+    emitCallback: createEmitCallback(options, tsickle),
+  });
+
+  if (programReuse !== undefined) {
+    programReuse.program = program;
+  }
+
+  return {
+    exitCode: exitCodeFromResult(compileDiags),
+    diagnostics: compileDiags,
+  };
 }
 
-function createEmitCallback(options: api.CompilerOptions): api.TsEmitCallback|undefined {
-  const transformDecorators = !options.enableIvy && options.annotationsAs !== 'decorators';
-  const transformTypesToClosure = options.annotateForClosureCompiler;
-  if (!transformDecorators && !transformTypesToClosure) {
+function createEmitCallback(
+    options: api.CompilerOptions, tsickle?: TsickleModule): api.TsEmitCallback|undefined {
+  if (!options.annotateForClosureCompiler) {
     return undefined;
   }
-  if (transformDecorators) {
-    // This is needed as a workaround for https://github.com/angular/tsickle/issues/635
-    // Otherwise tsickle might emit references to non imported values
-    // as TypeScript elided the import.
-    options.emitDecoratorMetadata = true;
+  if (tsickle == undefined) {
+    throw Error('Tsickle is not provided but `annotateForClosureCompiler` is enabled.');
   }
   const tsickleHost: Pick<
-      tsickle.TsickleHost, 'shouldSkipTsickleProcessing'|'pathToModuleName'|
-      'shouldIgnoreWarningsForPath'|'fileNameToModuleId'|'googmodule'|'untyped'|
-      'convertIndexImportShorthand'|'transformDecorators'|'transformTypesToClosure'> = {
-    shouldSkipTsickleProcessing: (fileName) =>
-                                     /\.d\.ts$/.test(fileName) || GENERATED_FILES.test(fileName),
+      TsickleHost,
+      'shouldSkipTsickleProcessing'|'pathToModuleName'|'shouldIgnoreWarningsForPath'|
+      'fileNameToModuleId'|'googmodule'|'untyped'|'convertIndexImportShorthand'|
+      'transformDecorators'|'transformTypesToClosure'|'generateExtraSuppressions'|
+      'rootDirsRelative'> = {
+    shouldSkipTsickleProcessing: (fileName) => fileName.endsWith('.d.ts'),
     pathToModuleName: (context, importPath) => '',
     shouldIgnoreWarningsForPath: (filePath) => false,
     fileNameToModuleId: (fileName) => fileName,
     googmodule: false,
     untyped: true,
-    convertIndexImportShorthand: false, transformDecorators, transformTypesToClosure,
+    convertIndexImportShorthand: false,
+    // Decorators are transformed as part of the Angular compiler programs. To avoid
+    // conflicts, we disable decorator transformations for tsickle.
+    transformDecorators: false,
+    transformTypesToClosure: true,
+    generateExtraSuppressions: true,
+    // Only used by the http://go/tsjs-migration-independent-javascript-imports migration in
+    // tsickle. This migration is not relevant externally and is only enabled when users
+    // would explicitly invoke `goog.tsMigrationExportsShim` (which is internal-only).
+    rootDirsRelative: (fileName) => fileName,
   };
 
-  if (options.annotateForClosureCompiler || options.annotationsAs === 'static fields') {
-    return ({
-             program,
-             targetSourceFile,
-             writeFile,
-             cancellationToken,
-             emitOnlyDtsFiles,
-             customTransformers = {},
-             host,
-             options
-           }) =>
-               // tslint:disable-next-line:no-require-imports only depend on tsickle if requested
-        require('tsickle').emitWithTsickle(
-            program, {...tsickleHost, options, host, moduleResolutionHost: host}, host, options,
-            targetSourceFile, writeFile, cancellationToken, emitOnlyDtsFiles, {
-              beforeTs: customTransformers.before,
-              afterTs: customTransformers.after,
-            });
-  } else {
-    return ({
-             program,
-             targetSourceFile,
-             writeFile,
-             cancellationToken,
-             emitOnlyDtsFiles,
-             customTransformers = {},
-           }) =>
-               program.emit(
-                   targetSourceFile, writeFile, cancellationToken, emitOnlyDtsFiles,
-                   {after: customTransformers.after, before: customTransformers.before});
-  }
+  return ({
+           program,
+           targetSourceFile,
+           writeFile,
+           cancellationToken,
+           emitOnlyDtsFiles,
+           customTransformers = {},
+           host,
+           options
+         }) =>
+             tsickle.emitWithTsickle(
+                 program, {...tsickleHost, options, moduleResolutionHost: host}, host, options,
+                 targetSourceFile, writeFile, cancellationToken, emitOnlyDtsFiles, {
+                   beforeTs: customTransformers.before,
+                   afterTs: customTransformers.after,
+                 });
 }
 
-export interface NgcParsedConfiguration extends ParsedConfiguration { watch?: boolean; }
+export interface NgcParsedConfiguration extends ParsedConfiguration {
+  watch?: boolean;
+}
 
 export function readNgcCommandLineAndConfiguration(args: string[]): NgcParsedConfiguration {
   const options: api.CompilerOptions = {};
-  const parsedArgs = require('minimist')(args);
+  const parsedArgs =
+      yargs(args)
+          .parserConfiguration({'strip-aliased': true})
+          .option('i18nFile', {type: 'string'})
+          .option('i18nFormat', {type: 'string'})
+          .option('locale', {type: 'string'})
+          .option('missingTranslation', {type: 'string', choices: ['error', 'warning', 'ignore']})
+          .option('outFile', {type: 'string'})
+          .option('watch', {type: 'boolean', alias: ['w']})
+          .parseSync();
+
   if (parsedArgs.i18nFile) options.i18nInFile = parsedArgs.i18nFile;
   if (parsedArgs.i18nFormat) options.i18nInFormat = parsedArgs.i18nFormat;
   if (parsedArgs.locale) options.i18nInLocale = parsedArgs.locale;
-  const mt = parsedArgs.missingTranslation;
-  if (mt === 'error' || mt === 'warning' || mt === 'ignore') {
-    options.i18nInMissingTranslations = mt;
-  }
+  if (parsedArgs.missingTranslation)
+    options.i18nInMissingTranslations =
+        parsedArgs.missingTranslation as api.CompilerOptions['i18nInMissingTranslations'];
+
   const config = readCommandLineAndConfiguration(
       args, options, ['i18nFile', 'i18nFormat', 'locale', 'missingTranslation', 'watch']);
-  const watch = parsedArgs.w || parsedArgs.watch;
-  return {...config, watch};
+  return {...config, watch: parsedArgs.watch};
 }
 
 export function readCommandLineAndConfiguration(
@@ -165,7 +191,6 @@ export function readCommandLineAndConfiguration(
       emitFlags: api.EmitFlags.Default
     };
   }
-  const allDiagnostics: Diagnostics = [];
   const config = readConfiguration(project, cmdConfig.options);
   const options = {...config.options, ...existingOptions};
   if (options.locale) {
@@ -173,7 +198,8 @@ export function readCommandLineAndConfiguration(
   }
   return {
     project,
-    rootNames: config.rootNames, options,
+    rootNames: config.rootNames,
+    options,
     errors: config.errors,
     emitFlags: config.emitFlags
   };
@@ -200,35 +226,27 @@ function getFormatDiagnosticsHost(options?: api.CompilerOptions): ts.FormatDiagn
 }
 
 function reportErrorsAndExit(
-    allDiagnostics: Diagnostics, options?: api.CompilerOptions,
+    allDiagnostics: ReadonlyArray<ts.Diagnostic>, options?: api.CompilerOptions,
     consoleError: (s: string) => void = console.error): number {
-  const errorsAndWarnings = filterErrorsAndWarnings(allDiagnostics);
-  if (errorsAndWarnings.length) {
-    const formatHost = getFormatDiagnosticsHost(options);
-    if (options && options.enableIvy === true) {
-      const ngDiagnostics = errorsAndWarnings.filter(api.isNgDiagnostic);
-      const tsDiagnostics = errorsAndWarnings.filter(api.isTsDiagnostic);
-      consoleError(replaceTsWithNgInErrors(
-          ts.formatDiagnosticsWithColorAndContext(tsDiagnostics, formatHost)));
-      consoleError(formatDiagnostics(ngDiagnostics, formatHost));
-    } else {
-      consoleError(formatDiagnostics(errorsAndWarnings, formatHost));
-    }
-  }
+  const errorsAndWarnings =
+      allDiagnostics.filter(d => d.category !== ts.DiagnosticCategory.Message);
+  printDiagnostics(errorsAndWarnings, options, consoleError);
   return exitCodeFromResult(allDiagnostics);
 }
 
 export function watchMode(
     project: string, options: api.CompilerOptions, consoleError: (s: string) => void) {
   return performWatchCompilation(createPerformWatchHost(project, diagnostics => {
-    consoleError(formatDiagnostics(diagnostics, getFormatDiagnosticsHost(options)));
+    printDiagnostics(diagnostics, options, consoleError);
   }, options, options => createEmitCallback(options)));
 }
 
-// CLI entry point
-if (require.main === module) {
-  const args = process.argv.slice(2);
-  // We are running the real compiler so run against the real file-system
-  setFileSystem(new NodeJSFileSystem());
-  process.exitCode = main(args);
+function printDiagnostics(
+    diagnostics: ReadonlyArray<ts.Diagnostic>, options: api.CompilerOptions|undefined,
+    consoleError: (s: string) => void): void {
+  if (diagnostics.length === 0) {
+    return;
+  }
+  const formatHost = getFormatDiagnosticsHost(options);
+  consoleError(formatDiagnostics(diagnostics, formatHost));
 }

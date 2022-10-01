@@ -6,49 +6,52 @@ import { asyncData } from '../../../testing';
 import { map } from 'rxjs/operators';
 
 // re-export for tester convenience
-export { Hero }          from '../hero';
-export { HeroService }   from '../hero.service';
+export { Hero } from '../hero';
+export { HeroService } from '../hero.service';
 export { getTestHeroes } from './test-heroes';
 
-import { Hero }          from '../hero';
-import { HeroService }   from '../hero.service';
+import { Hero } from '../hero';
+import { HeroService } from '../hero.service';
 import { getTestHeroes } from './test-heroes';
 
 @Injectable()
 /**
  * FakeHeroService pretends to make real http requests.
  * implements only as much of HeroService as is actually consumed by the app
-*/
+ */
 export class TestHeroService extends HeroService {
 
   constructor() {
-    super(null);
+    // This is a fake testing service that won't be making HTTP
+    // requests so we can pass in `null` as the HTTP client.
+    super(null!);
   }
 
   heroes = getTestHeroes();
-  lastResult: Observable<any>; // result from last method call
+  lastResult!: Observable<any>; // result from last method call
 
-  addHero(hero: Hero): Observable<Hero> {
+  override addHero(hero: Hero): Observable<Hero> {
     throw new Error('Method not implemented.');
   }
 
-  deleteHero(hero: number | Hero): Observable<Hero> {
+  override deleteHero(hero: number | Hero): Observable<Hero> {
     throw new Error('Method not implemented.');
   }
 
-  getHeroes(): Observable<Hero[]> {
+  override getHeroes(): Observable<Hero[]> {
     return this.lastResult = asyncData(this.heroes);
   }
 
-  getHero(id: number | string): Observable<Hero> {
+  override getHero(id: number | string): Observable<Hero> {
     if (typeof id === 'string') {
-      id = parseInt(id as string, 10);
+      id = parseInt(id, 10);
     }
-    let hero = this.heroes.find(h => h.id === id);
-    return this.lastResult = asyncData(hero);
+    const hero = this.heroes.find(h => h.id === id);
+    this.lastResult = asyncData(hero);
+    return this.lastResult;
   }
 
-  updateHero(hero: Hero): Observable<Hero> {
+  override updateHero(hero: Hero): Observable<Hero> {
     return this.lastResult = this.getHero(hero.id).pipe(
       map(h => {
         if (h) {

@@ -1,29 +1,41 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import {CachedFileSystem, NodeJSFileSystem, setFileSystem} from '../src/ngtsc/file_system';
+
+import {dirname, join} from 'path';
+import {fileURLToPath} from 'url';
+
+import {NodeJSFileSystem, setFileSystem} from '../src/ngtsc/file_system';
 
 import {mainNgcc} from './src/main';
-import {hasBeenProcessed as _hasBeenProcessed} from './src/packages/build_marker';
-import {EntryPointJsonProperty, EntryPointPackageJson} from './src/packages/entry_point';
+import {AsyncNgccOptions, SyncNgccOptions} from './src/ngcc_options';
 
-export {ConsoleLogger, LogLevel} from './src/logging/console_logger';
-export {Logger} from './src/logging/logger';
-export {NgccOptions} from './src/main';
-export {PathMappings} from './src/utils';
+export {ConsoleLogger, Logger, LogLevel} from '../src/ngtsc/logging';
+export {AsyncNgccOptions, clearTsConfigCache, NgccOptions, SyncNgccOptions} from './src/ngcc_options';
+export {PathMappings} from './src/path_mappings';
 
-export function hasBeenProcessed(packageJson: object, format: string) {
-  // Recreate the file system on each call to reset the cache
-  setFileSystem(new CachedFileSystem(new NodeJSFileSystem()));
-  return _hasBeenProcessed(packageJson as EntryPointPackageJson, format as EntryPointJsonProperty);
+export function process<T extends AsyncNgccOptions|SyncNgccOptions>(options: T):
+    T extends AsyncNgccOptions ? Promise<void>: void;
+export function process(options: AsyncNgccOptions|SyncNgccOptions): void|Promise<void> {
+  setFileSystem(new NodeJSFileSystem());
+  return mainNgcc(options);
 }
 
-export function process(...args: Parameters<typeof mainNgcc>) {
-  // Recreate the file system on each call to reset the cache
-  setFileSystem(new CachedFileSystem(new NodeJSFileSystem()));
-  return mainNgcc(...args);
-}
+
+// CommonJS/ESM interop for determining the current file name and containing
+// directory. These path is needed for providing an absolute path to the ngcc
+// command line entry-point script (for the CLI).
+export const containingDirPath =
+    typeof __dirname !== 'undefined' ? __dirname : dirname(fileURLToPath(__ESM_IMPORT_META_URL__));
+
+/**
+ * Absolute file path that points to the `ngcc` command line entry-point.
+ *
+ * This can be used by the Angular CLI to spawn a process running ngcc using
+ * command line options.
+ */
+export const ngccMainFilePath = join(containingDirPath, './main-ngcc.js');

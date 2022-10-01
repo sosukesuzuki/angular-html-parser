@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -22,7 +22,9 @@ describe('SyncTestZoneSpec', () => {
     syncTestZone.run(() => {
       expect(() => {
         Promise.resolve().then(function() {});
-      }).toThrow(new Error('Cannot call Promise.then from within a sync test.'));
+      })
+          .toThrow(new Error(
+              'Cannot call Promise.then from within a sync test (syncTestZone for name).'));
     });
   });
 
@@ -30,7 +32,9 @@ describe('SyncTestZoneSpec', () => {
     syncTestZone.run(() => {
       expect(() => {
         setTimeout(() => {}, 100);
-      }).toThrow(new Error('Cannot call setTimeout from within a sync test.'));
+      })
+          .toThrow(
+              new Error('Cannot call setTimeout from within a sync test (syncTestZone for name).'));
     });
   });
 
@@ -41,7 +45,9 @@ describe('SyncTestZoneSpec', () => {
                  document.body.appendChild(button);
                  let x = 1;
                  try {
-                   button.addEventListener('click', () => { x++; });
+                   button.addEventListener('click', () => {
+                     x++;
+                   });
 
                    button.click();
                    expect(x).toEqual(2);
@@ -53,5 +59,11 @@ describe('SyncTestZoneSpec', () => {
                  }
                });
              });
-           }));
+           }, emptyRun));
 });
+
+
+function emptyRun() {
+  // Jasmine will throw if there are no tests.
+  it('should pass', () => {});
+}

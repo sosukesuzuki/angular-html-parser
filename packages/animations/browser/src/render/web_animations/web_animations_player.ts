@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import {AnimationPlayer} from '@angular/animations';
+import {AnimationPlayer, ɵStyleDataMap} from '@angular/animations';
 
 import {computeStyle} from '../../util';
 import {SpecialCasedStyles} from '../special_cased_styles';
@@ -22,19 +22,24 @@ export class WebAnimationsPlayer implements AnimationPlayer {
   private _finished = false;
   private _started = false;
   private _destroyed = false;
-  // TODO(issue/24571): remove '!'.
-  private _finalKeyframe !: {[key: string]: string | number};
+  private _finalKeyframe?: ɵStyleDataMap;
+
+  // the following original fns are persistent copies of the _onStartFns and _onDoneFns
+  // and are used to reset the fns to their original values upon reset()
+  // (since the _onStartFns and _onDoneFns get deleted after they are called)
+  private _originalOnDoneFns: Function[] = [];
+  private _originalOnStartFns: Function[] = [];
 
   // TODO(issue/24571): remove '!'.
-  public readonly domPlayer !: DOMAnimation;
+  public readonly domPlayer!: DOMAnimation;
   public time = 0;
 
   public parentPlayer: AnimationPlayer|null = null;
-  public currentSnapshot: {[styleName: string]: string | number} = {};
+  public currentSnapshot: ɵStyleDataMap = new Map();
 
   constructor(
-      public element: any, public keyframes: {[key: string]: string | number}[],
-      public options: {[key: string]: string | number},
+      public element: any, public keyframes: Array<ɵStyleDataMap>,
+      public options: {[key: string]: string|number},
       private _specialStyles?: SpecialCasedStyles|null) {
     this._duration = <number>options['duration'];
     this._delay = <number>options['delay'] || 0;
@@ -59,9 +64,9 @@ export class WebAnimationsPlayer implements AnimationPlayer {
     this._initialized = true;
 
     const keyframes = this.keyframes;
-    (this as{domPlayer: DOMAnimation}).domPlayer =
+    (this as {domPlayer: DOMAnimation}).domPlayer =
         this._triggerWebAnimation(this.element, keyframes, this.options);
-    this._finalKeyframe = keyframes.length ? keyframes[keyframes.length - 1] : {};
+    this._finalKeyframe = keyframes.length ? keyframes[keyframes.length - 1] : new Map();
     this.domPlayer.addEventListener('finish', () => this._onFinish());
   }
 
@@ -74,18 +79,34 @@ export class WebAnimationsPlayer implements AnimationPlayer {
     }
   }
 
-  /** @internal */
-  _triggerWebAnimation(element: any, keyframes: any[], options: any): DOMAnimation {
-    // jscompiler doesn't seem to know animate is a native property because it's not fully
-    // supported yet across common browsers (we polyfill it for Edge/Safari) [CL #143630929]
-    return element['animate'](keyframes, options) as DOMAnimation;
+  private _convertKeyframesToObject(keyframes: Array<ɵStyleDataMap>): any[] {
+    const kfs: any[] = [];
+    keyframes.forEach(frame => {
+      kfs.push(Object.fromEntries(frame));
+    });
+    return kfs;
   }
 
-  onStart(fn: () => void): void { this._onStartFns.push(fn); }
+  /** @internal */
+  _triggerWebAnimation(element: any, keyframes: Array<ɵStyleDataMap>, options: any): DOMAnimation {
+    // jscompiler doesn't seem to know animate is a native property because it's not fully
+    // supported yet across common browsers (we polyfill it for Edge/Safari) [CL #143630929]
+    return element['animate'](this._convertKeyframesToObject(keyframes), options) as DOMAnimation;
+  }
 
-  onDone(fn: () => void): void { this._onDoneFns.push(fn); }
+  onStart(fn: () => void): void {
+    this._originalOnStartFns.push(fn);
+    this._onStartFns.push(fn);
+  }
 
-  onDestroy(fn: () => void): void { this._onDestroyFns.push(fn); }
+  onDone(fn: () => void): void {
+    this._originalOnDoneFns.push(fn);
+    this._onDoneFns.push(fn);
+  }
+
+  onDestroy(fn: () => void): void {
+    this._onDestroyFns.push(fn);
+  }
 
   play(): void {
     this._buildPlayer();
@@ -119,6 +140,8 @@ export class WebAnimationsPlayer implements AnimationPlayer {
     this._destroyed = false;
     this._finished = false;
     this._started = false;
+    this._onStartFns = this._originalOnStartFns;
+    this._onDoneFns = this._originalOnDoneFns;
   }
 
   private _resetDomPlayerState() {
@@ -132,7 +155,9 @@ export class WebAnimationsPlayer implements AnimationPlayer {
     this.play();
   }
 
-  hasStarted(): boolean { return this._started; }
+  hasStarted(): boolean {
+    return this._started;
+  }
 
   destroy(): void {
     if (!this._destroyed) {
@@ -147,28 +172,41 @@ export class WebAnimationsPlayer implements AnimationPlayer {
     }
   }
 
-  setPosition(p: number): void { this.domPlayer.currentTime = p * this.time; }
+  setPosition(p: number): void {
+    if (this.domPlayer === undefined) {
+      this.init();
+    }
+    this.domPlayer.currentTime = p * this.time;
+  }
 
-  getPosition(): number { return this.domPlayer.currentTime / this.time; }
+  getPosition(): number {
+    return this.domPlayer.currentTime / this.time;
+  }
 
-  get totalTime(): number { return this._delay + this._duration; }
+  get totalTime(): number {
+    return this._delay + this._duration;
+  }
 
   beforeDestroy() {
-    const styles: {[key: string]: string | number} = {};
+    const styles: ɵStyleDataMap = new Map();
     if (this.hasStarted()) {
-      Object.keys(this._finalKeyframe).forEach(prop => {
-        if (prop != 'offset') {
-          styles[prop] =
-              this._finished ? this._finalKeyframe[prop] : computeStyle(this.element, prop);
+      // note: this code is invoked only when the `play` function was called prior to this
+      // (thus `hasStarted` returns true), this implies that the code that initializes
+      // `_finalKeyframe` has also been executed and the non-null assertion can be safely used here
+      const finalKeyframe = this._finalKeyframe!;
+      finalKeyframe.forEach((val, prop) => {
+        if (prop !== 'offset') {
+          styles.set(prop, this._finished ? val : computeStyle(this.element, prop));
         }
       });
     }
+
     this.currentSnapshot = styles;
   }
 
   /** @internal */
   triggerCallback(phaseName: string): void {
-    const methods = phaseName == 'start' ? this._onStartFns : this._onDoneFns;
+    const methods = phaseName === 'start' ? this._onStartFns : this._onDoneFns;
     methods.forEach(fn => fn());
     methods.length = 0;
   }

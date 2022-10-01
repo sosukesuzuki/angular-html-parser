@@ -1,13 +1,16 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Meta, Title } from '@angular/platform-browser';
 
-import { Observable, of } from 'rxjs';
+import { Observable, asapScheduler, of, lastValueFrom } from 'rxjs';
+import { EMPTY_HTML, htmlEscape } from 'safevalues';
+import { htmlSafeByReview } from 'safevalues/restricted/reviewed';
 
 import { FILE_NOT_FOUND_ID, FETCHING_ERROR_ID } from 'app/documents/document.service';
-import { Logger } from 'app/shared/logger.service';
 import { CustomElementsModule } from 'app/custom-elements/custom-elements.module';
-import { TocService } from 'app/shared/toc.service';
 import { ElementsLoader } from 'app/custom-elements/elements-loader';
+import { Logger } from 'app/shared/logger.service';
+import { fromOuterHTML } from 'app/shared/security';
+import { TocService } from 'app/shared/toc.service';
 import {
 MockTitle, MockTocService, ObservableWithSubscriptionSpies,
 TestDocViewerComponent, TestModule, TestParentComponent, MockElementsLoader
@@ -20,6 +23,8 @@ describe('DocViewerComponent', () => {
   let parentComponent: TestParentComponent;
   let docViewerEl: HTMLElement;
   let docViewer: TestDocViewerComponent;
+
+  const safeFlushAsapScheduler = () => asapScheduler.actions.length && asapScheduler.flush();
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -42,19 +47,21 @@ describe('DocViewerComponent', () => {
   describe('#doc', () => {
     let renderSpy: jasmine.Spy;
 
-    const setCurrentDoc = (contents: string|null, id = 'fizz/buzz') => {
-      parentComponent.currentDoc = {contents, id};
-      parentFixture.detectChanges();
+    const setCurrentDoc = (newDoc: TestParentComponent['currentDoc']) => {
+      parentComponent.currentDoc = newDoc;
+      parentFixture.detectChanges();  // Run change detection to propagate the new doc to `DocViewer`.
+      safeFlushAsapScheduler();  // Flush `asapScheduler` to trigger `DocViewer#render()`.
     };
 
-    beforeEach(() => renderSpy = spyOn(docViewer, 'render').and.returnValue([null]));
+    beforeEach(() => renderSpy = spyOn(docViewer, 'render').and.callFake(() => of(undefined)));
 
     it('should render the new document', () => {
-      setCurrentDoc('foo', 'bar');
+      const contents = htmlEscape('foo');
+      setCurrentDoc({contents, id: 'bar'});
       expect(renderSpy).toHaveBeenCalledTimes(1);
-      expect(renderSpy.calls.mostRecent().args).toEqual([{id: 'bar', contents: 'foo'}]);
+      expect(renderSpy.calls.mostRecent().args).toEqual([{id: 'bar', contents}]);
 
-      setCurrentDoc(null, 'baz');
+      setCurrentDoc({contents: null, id: 'baz'});
       expect(renderSpy).toHaveBeenCalledTimes(2);
       expect(renderSpy.calls.mostRecent().args).toEqual([{id: 'baz', contents: null}]);
     });
@@ -63,43 +70,42 @@ describe('DocViewerComponent', () => {
       const obs = new ObservableWithSubscriptionSpies();
       renderSpy.and.returnValue(obs);
 
-      setCurrentDoc('foo', 'bar');
+      setCurrentDoc({contents: htmlEscape('foo'), id: 'bar'});
       expect(obs.subscribeSpy).toHaveBeenCalledTimes(1);
       expect(obs.unsubscribeSpies[0]).not.toHaveBeenCalled();
 
-      setCurrentDoc('baz', 'qux');
+      setCurrentDoc({contents: htmlEscape('baz'), id: 'qux'});
       expect(obs.subscribeSpy).toHaveBeenCalledTimes(2);
       expect(obs.unsubscribeSpies[0]).toHaveBeenCalledTimes(1);
     });
 
     it('should ignore falsy document values', () => {
-      parentComponent.currentDoc = null;
-      parentFixture.detectChanges();
-
+      setCurrentDoc(null);
       expect(renderSpy).not.toHaveBeenCalled();
 
-      parentComponent.currentDoc = undefined;
-      parentFixture.detectChanges();
-
+      setCurrentDoc(undefined);
       expect(renderSpy).not.toHaveBeenCalled();
     });
   });
 
   describe('#ngOnDestroy()', () => {
     it('should stop responding to document changes', () => {
-      const renderSpy = spyOn(docViewer, 'render').and.returnValue([undefined]);
+      const renderSpy = spyOn(docViewer, 'render').and.callFake(() => of(undefined));
 
       expect(renderSpy).not.toHaveBeenCalled();
 
-      docViewer.doc = {contents: 'Some content', id: 'some-id'};
+      docViewer.doc = {contents: htmlEscape('Some content'), id: 'some-id'};
+      safeFlushAsapScheduler();
       expect(renderSpy).toHaveBeenCalledTimes(1);
 
       docViewer.ngOnDestroy();
 
-      docViewer.doc = {contents: 'Other content', id: 'other-id'};
+      docViewer.doc = {contents: htmlEscape('Other content'), id: 'other-id'};
+      safeFlushAsapScheduler();
       expect(renderSpy).toHaveBeenCalledTimes(1);
 
-      docViewer.doc = {contents: 'More content', id: 'more-id'};
+      docViewer.doc = {contents: htmlEscape('More content'), id: 'more-id'};
+      safeFlushAsapScheduler();
       expect(renderSpy).toHaveBeenCalledTimes(1);
     });
   });
@@ -128,8 +134,8 @@ describe('DocViewerComponent', () => {
     };
 
     beforeEach(() => {
-      titleService = TestBed.get(Title);
-      tocService = TestBed.get(TocService);
+      titleService = TestBed.inject(Title) as unknown as MockTitle;
+      tocService = TestBed.inject(TocService) as unknown as MockTocService;
 
       targetEl = document.createElement('div');
       document.body.appendChild(targetEl);  // Required for `innerText` to work as expected.
@@ -211,10 +217,10 @@ describe('DocViewerComponent', () => {
       describe('needed', () => {
         it('should add an embedded ToC element if there is an `<h1>` heading', () => {
           doPrepareTitleAndToc(DOC_WITH_H1);
-          const tocEl = getTocEl()!;
+          const tocEl = getTocEl();
 
           expect(tocEl).toBeTruthy();
-          expect(tocEl.classList.contains('embedded')).toBe(true);
+          expect(tocEl?.classList.contains('embedded')).toBe(true);
         });
 
         it('should not add a second ToC element if there a hard coded one in place', () => {
@@ -295,36 +301,36 @@ describe('DocViewerComponent', () => {
     let swapViewsSpy: jasmine.Spy;
     let loadElementsSpy: jasmine.Spy;
 
-    const doRender = (contents: string | null, id = 'foo') =>
-      docViewer.render({contents, id}).toPromise();
+    const doRender = (contents: TrustedHTML | null, id = 'foo') =>
+      lastValueFrom(docViewer.render({contents, id}));
 
     beforeEach(() => {
-      const elementsLoader = TestBed.get(ElementsLoader) as MockElementsLoader;
-      loadElementsSpy = elementsLoader.loadContainedCustomElements.and.returnValue(of(undefined));
+      const elementsLoader = TestBed.inject(ElementsLoader) as Partial<ElementsLoader> as MockElementsLoader;
+      loadElementsSpy = elementsLoader.loadContainedCustomElements.and.callFake(() => of(undefined));
       prepareTitleAndTocSpy = spyOn(docViewer, 'prepareTitleAndToc');
-      swapViewsSpy = spyOn(docViewer, 'swapViews').and.returnValue(of(undefined));
+      swapViewsSpy = spyOn(docViewer, 'swapViews').and.callFake(() => of(undefined));
     });
 
     it('should return an `Observable`', () => {
-      expect(docViewer.render({contents: '', id: ''})).toEqual(jasmine.any(Observable));
+      expect(docViewer.render({contents: EMPTY_HTML, id: ''})).toEqual(jasmine.any(Observable));
     });
 
     describe('(contents, title, ToC)', () => {
       beforeEach(() => swapViewsSpy.and.callThrough());
 
       it('should display the document contents', async () => {
-        const contents = '<h1>Hello,</h1> <div>world!</div>';
+        const contents = htmlSafeByReview('<h1>Hello,</h1> <div>world!</div>', 'constant HTML');
         await doRender(contents);
 
-        expect(docViewerEl.innerHTML).toContain(contents);
+        expect(docViewerEl.innerHTML).toContain(contents.toString());
         expect(docViewerEl.textContent).toBe('Hello, world!');
       });
 
       it('should display nothing if the document has no contents', async () => {
-        await doRender('Test');
+        await doRender(htmlEscape('Test'));
         expect(docViewerEl.textContent).toBe('Test');
 
-        await doRender('');
+        await doRender(EMPTY_HTML);
         expect(docViewerEl.textContent).toBe('');
 
         docViewer.currViewContainer.innerHTML = 'Test';
@@ -340,7 +346,7 @@ describe('DocViewerComponent', () => {
           expect(docId).toBe('foo');
         });
 
-        await doRender('Some content', 'foo');
+        await doRender(htmlEscape('Some content'), 'foo');
 
         expect(prepareTitleAndTocSpy).toHaveBeenCalledTimes(1);
         expect(prepareTitleAndTocSpy).toHaveBeenCalledBefore(loadElementsSpy);
@@ -351,47 +357,47 @@ describe('DocViewerComponent', () => {
         prepareTitleAndTocSpy.and.returnValue(addTitleAndTocSpy);
 
         addTitleAndTocSpy.and.callFake(() => expect(docViewerEl.textContent).toBe('Foo content'));
-        await doRender('Foo content');
+        await doRender(htmlEscape('Foo content'));
         expect(addTitleAndTocSpy).toHaveBeenCalledTimes(1);
 
         addTitleAndTocSpy.and.callFake(() => expect(docViewerEl.textContent).toBe('Bar content'));
-        await doRender('Bar content');
+        await doRender(htmlEscape('Bar content'));
         expect(addTitleAndTocSpy).toHaveBeenCalledTimes(2);
 
         addTitleAndTocSpy.and.callFake(() => expect(docViewerEl.textContent).toBe(''));
-        await doRender('');
+        await doRender(EMPTY_HTML);
         expect(addTitleAndTocSpy).toHaveBeenCalledTimes(3);
 
         addTitleAndTocSpy.and.callFake(() => expect(docViewerEl.textContent).toBe('Qux content'));
-        await doRender('Qux content');
+        await doRender(htmlEscape('Qux content'));
         expect(addTitleAndTocSpy).toHaveBeenCalledTimes(4);
       });
 
       it('should remove the "noindex" meta tag if the document is valid', async () => {
-        await doRender('foo', 'bar');
-        expect(TestBed.get(Meta).removeTag).toHaveBeenCalledWith('name="robots"');
+        await doRender(htmlEscape('foo'), 'bar');
+        expect(TestBed.inject(Meta).removeTag).toHaveBeenCalledWith('name="robots"');
       });
 
       it('should add the "noindex" meta tag if the document is 404', async () => {
-        await doRender('missing', FILE_NOT_FOUND_ID);
-        expect(TestBed.get(Meta).addTag).toHaveBeenCalledWith({ name: 'robots', content: 'noindex' });
+        await doRender(htmlEscape('missing'), FILE_NOT_FOUND_ID);
+        expect(TestBed.inject(Meta).addTag).toHaveBeenCalledWith({ name: 'robots', content: 'noindex' });
       });
 
       it('should add a "noindex" meta tag if the document fetching fails', async () => {
-        await doRender('error', FETCHING_ERROR_ID);
-        expect(TestBed.get(Meta).addTag).toHaveBeenCalledWith({ name: 'robots', content: 'noindex' });
+        await doRender(htmlEscape('error'), FETCHING_ERROR_ID);
+        expect(TestBed.inject(Meta).addTag).toHaveBeenCalledWith({ name: 'robots', content: 'noindex' });
       });
     });
 
     describe('(embedding components)', () => {
       it('should embed components', async () => {
-        await doRender('Some content');
+        await doRender(htmlEscape('Some content'));
         expect(loadElementsSpy).toHaveBeenCalledTimes(1);
         expect(loadElementsSpy).toHaveBeenCalledWith(docViewer.nextViewContainer);
       });
 
       it('should attempt to embed components even if the document is empty', async () => {
-        await doRender('');
+        await doRender(EMPTY_HTML);
         await doRender(null);
 
         expect(loadElementsSpy).toHaveBeenCalledTimes(2);
@@ -403,7 +409,7 @@ describe('DocViewerComponent', () => {
         const obs = new ObservableWithSubscriptionSpies();
         loadElementsSpy.and.returnValue(obs);
 
-        const renderObservable = docViewer.render({contents: 'Some content', id: 'foo'});
+        const renderObservable = docViewer.render({contents: htmlEscape('Some content'), id: 'foo'});
         const subscription = renderObservable.subscribe();
 
         expect(obs.subscribeSpy).toHaveBeenCalledTimes(1);
@@ -418,7 +424,7 @@ describe('DocViewerComponent', () => {
 
     describe('(swapping views)', () => {
       it('should still swap the views if the document is empty', async () => {
-        await doRender('');
+        await doRender(EMPTY_HTML);
         expect(swapViewsSpy).toHaveBeenCalledTimes(1);
 
         await doRender(null);
@@ -429,7 +435,8 @@ describe('DocViewerComponent', () => {
         const addTitleAndTocSpy = jasmine.createSpy('addTitleAndToc');
         prepareTitleAndTocSpy.and.returnValue(addTitleAndTocSpy);
 
-        await doRender('<div></div>');
+        const el = document.createElement('div');
+        await doRender(fromOuterHTML(el));
 
         expect(swapViewsSpy).toHaveBeenCalledWith(addTitleAndTocSpy);
       });
@@ -438,7 +445,7 @@ describe('DocViewerComponent', () => {
         const obs = new ObservableWithSubscriptionSpies();
         swapViewsSpy.and.returnValue(obs);
 
-        const renderObservable = docViewer.render({contents: 'Hello, world!', id: 'foo'});
+        const renderObservable = docViewer.render({contents: htmlEscape('Hello, world!'), id: 'foo'});
         const subscription = renderObservable.subscribe();
 
         expect(obs.subscribeSpy).toHaveBeenCalledTimes(1);
@@ -454,7 +461,9 @@ describe('DocViewerComponent', () => {
     describe('(on error) should clean up, log the error and recover', () => {
       let logger: MockLogger;
 
-      beforeEach(() => logger = TestBed.get(Logger));
+      beforeEach(() => {
+        logger = TestBed.inject(Logger) as unknown as MockLogger;
+      });
 
       it('when `prepareTitleAndTocSpy()` fails', async () => {
         const error = Error('Typical `prepareTitleAndToc()` error');
@@ -463,7 +472,7 @@ describe('DocViewerComponent', () => {
           throw error;
         });
 
-        await doRender('Some content', 'foo');
+        await doRender(htmlEscape('Some content'), 'foo');
 
         expect(prepareTitleAndTocSpy).toHaveBeenCalledTimes(1);
         expect(swapViewsSpy).not.toHaveBeenCalled();
@@ -472,7 +481,7 @@ describe('DocViewerComponent', () => {
           [jasmine.any(Error)]
         ]);
         expect(logger.output.error[0][0].message).toEqual(`[DocViewer] Error preparing document 'foo': ${error.stack}`);
-        expect(TestBed.get(Meta).addTag).toHaveBeenCalledWith({ name: 'robots', content: 'noindex' });
+        expect(TestBed.inject(Meta).addTag).toHaveBeenCalledWith({ name: 'robots', content: 'noindex' });
       });
 
       it('when `EmbedComponentsService.embedInto()` fails', async () => {
@@ -482,7 +491,7 @@ describe('DocViewerComponent', () => {
           throw error;
         });
 
-        await doRender('Some content', 'bar');
+        await doRender(htmlEscape('Some content'), 'bar');
 
         expect(prepareTitleAndTocSpy).toHaveBeenCalledTimes(1);
         expect(loadElementsSpy).toHaveBeenCalledTimes(1);
@@ -491,7 +500,7 @@ describe('DocViewerComponent', () => {
         expect(logger.output.error).toEqual([
           [jasmine.any(Error)]
         ]);
-        expect(TestBed.get(Meta).addTag).toHaveBeenCalledWith({ name: 'robots', content: 'noindex' });
+        expect(TestBed.inject(Meta).addTag).toHaveBeenCalledWith({ name: 'robots', content: 'noindex' });
       });
 
       it('when `swapViews()` fails', async () => {
@@ -501,7 +510,7 @@ describe('DocViewerComponent', () => {
           throw error;
         });
 
-        await doRender('Some content', 'qux');
+        await doRender(htmlEscape('Some content'), 'qux');
 
         expect(prepareTitleAndTocSpy).toHaveBeenCalledTimes(1);
         expect(swapViewsSpy).toHaveBeenCalledTimes(1);
@@ -510,7 +519,7 @@ describe('DocViewerComponent', () => {
           [jasmine.any(Error)]
         ]);
         expect(logger.output.error[0][0].message).toEqual(`[DocViewer] Error preparing document 'qux': ${error.stack}`);
-        expect(TestBed.get(Meta).addTag).toHaveBeenCalledWith({ name: 'robots', content: 'noindex' });
+        expect(TestBed.inject(Meta).addTag).toHaveBeenCalledWith({ name: 'robots', content: 'noindex' });
       });
 
       it('when something fails with non-Error', async () => {
@@ -520,7 +529,7 @@ describe('DocViewerComponent', () => {
           throw error;
         });
 
-        await doRender('Some content', 'qux');
+        await doRender(htmlEscape('Some content'), 'qux');
 
         expect(swapViewsSpy).toHaveBeenCalledTimes(1);
         expect(docViewer.nextViewContainer.innerHTML).toBe('');
@@ -528,7 +537,7 @@ describe('DocViewerComponent', () => {
           [jasmine.any(Error)]
         ]);
         expect(logger.output.error[0][0].message).toEqual(`[DocViewer] Error preparing document 'qux': ${error}`);
-        expect(TestBed.get(Meta).addTag).toHaveBeenCalledWith({ name: 'robots', content: 'noindex' });
+        expect(TestBed.inject(Meta).addTag).toHaveBeenCalledWith({ name: 'robots', content: 'noindex' });
       });
     });
 
@@ -537,7 +546,7 @@ describe('DocViewerComponent', () => {
         const onDocReadySpy = jasmine.createSpy('onDocReady');
         docViewer.docReady.subscribe(onDocReadySpy);
 
-        await doRender('Some content');
+        await doRender(htmlEscape('Some content'));
 
         expect(onDocReadySpy).toHaveBeenCalledTimes(1);
         expect(loadElementsSpy).toHaveBeenCalledBefore(onDocReadySpy);
@@ -547,7 +556,7 @@ describe('DocViewerComponent', () => {
         const onDocReadySpy = jasmine.createSpy('onDocReady');
         docViewer.docReady.subscribe(onDocReadySpy);
 
-        await doRender('Some content');
+        await doRender(htmlEscape('Some content'));
 
         expect(onDocReadySpy).toHaveBeenCalledTimes(1);
         expect(onDocReadySpy).toHaveBeenCalledBefore(swapViewsSpy);
@@ -557,7 +566,7 @@ describe('DocViewerComponent', () => {
         const onDocRenderedSpy = jasmine.createSpy('onDocRendered');
         docViewer.docRendered.subscribe(onDocRenderedSpy);
 
-        await doRender('Some content');
+        await doRender(htmlEscape('Some content'));
 
         expect(onDocRenderedSpy).toHaveBeenCalledTimes(1);
         expect(swapViewsSpy).toHaveBeenCalledBefore(onDocRenderedSpy);
@@ -569,9 +578,7 @@ describe('DocViewerComponent', () => {
     let oldCurrViewContainer: HTMLElement;
     let oldNextViewContainer: HTMLElement;
 
-    const doSwapViews = (cb?: () => void) =>
-      new Promise<void>((resolve, reject) =>
-        docViewer.swapViews(cb).subscribe(resolve, reject));
+    const doSwapViews = (cb?: () => void) => lastValueFrom(docViewer.swapViews(cb));
 
     beforeEach(() => {
       oldCurrViewContainer = docViewer.currViewContainer;
@@ -587,146 +594,139 @@ describe('DocViewerComponent', () => {
     });
 
     [true, false].forEach(animationsEnabled => {
-      describe(`(animationsEnabled: ${animationsEnabled})`, () => {
-        beforeEach(() => DocViewerComponent.animationsEnabled = animationsEnabled);
-        afterEach(() => DocViewerComponent.animationsEnabled = true);
+      describe(`(animations enabled: ${animationsEnabled})`, () => {
+        beforeEach(() => docViewerEl.classList[animationsEnabled ? 'remove' : 'add'](NO_ANIMATIONS));
 
-        [true, false].forEach(noAnimations => {
-          describe(`(.${NO_ANIMATIONS}: ${noAnimations})`, () => {
-            beforeEach(() => docViewerEl.classList[noAnimations ? 'add' : 'remove'](NO_ANIMATIONS));
-
-            it('should return an observable', done => {
-              docViewer.swapViews().subscribe(done, done.fail);
-            });
-
-            it('should swap the views', async () => {
-              await doSwapViews();
-
-              expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
-              expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
-              expect(docViewer.currViewContainer).toBe(oldNextViewContainer);
-              expect(docViewer.nextViewContainer).toBe(oldCurrViewContainer);
-
-              await doSwapViews();
-
-              expect(docViewerEl.contains(oldCurrViewContainer)).toBe(true);
-              expect(docViewerEl.contains(oldNextViewContainer)).toBe(false);
-              expect(docViewer.currViewContainer).toBe(oldCurrViewContainer);
-              expect(docViewer.nextViewContainer).toBe(oldNextViewContainer);
-            });
-
-            it('should emit `docRemoved` after removing the leaving view', async () => {
-              const onDocRemovedSpy = jasmine.createSpy('onDocRemoved').and.callFake(() => {
-                expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
-                expect(docViewerEl.contains(oldNextViewContainer)).toBe(false);
-              });
-
-              docViewer.docRemoved.subscribe(onDocRemovedSpy);
-
-              expect(docViewerEl.contains(oldCurrViewContainer)).toBe(true);
-              expect(docViewerEl.contains(oldNextViewContainer)).toBe(false);
-
-              await doSwapViews();
-
-              expect(onDocRemovedSpy).toHaveBeenCalledTimes(1);
-              expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
-              expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
-            });
-
-            it('should not emit `docRemoved` if the leaving view is already removed', async () => {
-              const onDocRemovedSpy = jasmine.createSpy('onDocRemoved');
-
-              docViewer.docRemoved.subscribe(onDocRemovedSpy);
-              docViewerEl.removeChild(oldCurrViewContainer);
-
-              await doSwapViews();
-
-              expect(onDocRemovedSpy).not.toHaveBeenCalled();
-            });
-
-            it('should emit `docInserted` after inserting the entering view', async () => {
-              const onDocInsertedSpy = jasmine.createSpy('onDocInserted').and.callFake(() => {
-                expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
-                expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
-              });
-
-              docViewer.docInserted.subscribe(onDocInsertedSpy);
-
-              expect(docViewerEl.contains(oldCurrViewContainer)).toBe(true);
-              expect(docViewerEl.contains(oldNextViewContainer)).toBe(false);
-
-              await doSwapViews();
-
-              expect(onDocInsertedSpy).toHaveBeenCalledTimes(1);
-              expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
-              expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
-            });
-
-            it('should call the callback after inserting the entering view', async () => {
-              const onInsertedCb = jasmine.createSpy('onInsertedCb').and.callFake(() => {
-                expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
-                expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
-              });
-              const onDocInsertedSpy = jasmine.createSpy('onDocInserted');
-
-              docViewer.docInserted.subscribe(onDocInsertedSpy);
-
-              expect(docViewerEl.contains(oldCurrViewContainer)).toBe(true);
-              expect(docViewerEl.contains(oldNextViewContainer)).toBe(false);
-
-              await doSwapViews(onInsertedCb);
-
-              expect(onInsertedCb).toHaveBeenCalledTimes(1);
-              expect(onInsertedCb).toHaveBeenCalledBefore(onDocInsertedSpy);
-              expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
-              expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
-            });
-
-            it('should empty the previous view', async () => {
-              await doSwapViews();
-
-              expect(docViewer.currViewContainer.innerHTML).toBe('Next view');
-              expect(docViewer.nextViewContainer.innerHTML).toBe('');
-
-              docViewer.nextViewContainer.innerHTML = 'Next view 2';
-              await doSwapViews();
-
-              expect(docViewer.currViewContainer.innerHTML).toBe('Next view 2');
-              expect(docViewer.nextViewContainer.innerHTML).toBe('');
-            });
-
-            if (animationsEnabled && !noAnimations) {
-              // Only test this when there are animations. Without animations, the views are swapped
-              // synchronously, so there is no need (or way) to abort.
-              it('should abort swapping if the returned observable is unsubscribed from', async () => {
-                docViewer.swapViews().subscribe().unsubscribe();
-                await doSwapViews();
-
-                // Since the first call was cancelled, only one swapping should have taken place.
-                expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
-                expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
-                expect(docViewer.currViewContainer).toBe(oldNextViewContainer);
-                expect(docViewer.nextViewContainer).toBe(oldCurrViewContainer);
-                expect(docViewer.currViewContainer.innerHTML).toBe('Next view');
-                expect(docViewer.nextViewContainer.innerHTML).toBe('');
-              });
-            } else {
-              it('should swap views synchronously when animations are disabled', () => {
-                const cbSpy = jasmine.createSpy('cb');
-
-                docViewer.swapViews(cbSpy).subscribe();
-
-                expect(cbSpy).toHaveBeenCalledTimes(1);
-                expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
-                expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
-                expect(docViewer.currViewContainer).toBe(oldNextViewContainer);
-                expect(docViewer.nextViewContainer).toBe(oldCurrViewContainer);
-                expect(docViewer.currViewContainer.innerHTML).toBe('Next view');
-                expect(docViewer.nextViewContainer.innerHTML).toBe('');
-              });
-            }
-          });
+        it('should return an observable', done => {
+          docViewer.swapViews().subscribe({ next: done, error: done.fail });
         });
+
+        it('should swap the views', async () => {
+          await doSwapViews();
+
+          expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
+          expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
+          expect(docViewer.currViewContainer).toBe(oldNextViewContainer);
+          expect(docViewer.nextViewContainer).toBe(oldCurrViewContainer);
+
+          await doSwapViews();
+
+          expect(docViewerEl.contains(oldCurrViewContainer)).toBe(true);
+          expect(docViewerEl.contains(oldNextViewContainer)).toBe(false);
+          expect(docViewer.currViewContainer).toBe(oldCurrViewContainer);
+          expect(docViewer.nextViewContainer).toBe(oldNextViewContainer);
+        });
+
+        it('should emit `docRemoved` after removing the leaving view', async () => {
+          const onDocRemovedSpy = jasmine.createSpy('onDocRemoved').and.callFake(() => {
+            expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
+            expect(docViewerEl.contains(oldNextViewContainer)).toBe(false);
+          });
+
+          docViewer.docRemoved.subscribe(onDocRemovedSpy);
+
+          expect(docViewerEl.contains(oldCurrViewContainer)).toBe(true);
+          expect(docViewerEl.contains(oldNextViewContainer)).toBe(false);
+
+          await doSwapViews();
+
+          expect(onDocRemovedSpy).toHaveBeenCalledTimes(1);
+          expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
+          expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
+        });
+
+        it('should not emit `docRemoved` if the leaving view is already removed', async () => {
+          const onDocRemovedSpy = jasmine.createSpy('onDocRemoved');
+
+          docViewer.docRemoved.subscribe(onDocRemovedSpy);
+          docViewerEl.removeChild(oldCurrViewContainer);
+
+          await doSwapViews();
+
+          expect(onDocRemovedSpy).not.toHaveBeenCalled();
+        });
+
+        it('should emit `docInserted` after inserting the entering view', async () => {
+          const onDocInsertedSpy = jasmine.createSpy('onDocInserted').and.callFake(() => {
+            expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
+            expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
+          });
+
+          docViewer.docInserted.subscribe(onDocInsertedSpy);
+
+          expect(docViewerEl.contains(oldCurrViewContainer)).toBe(true);
+          expect(docViewerEl.contains(oldNextViewContainer)).toBe(false);
+
+          await doSwapViews();
+
+          expect(onDocInsertedSpy).toHaveBeenCalledTimes(1);
+          expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
+          expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
+        });
+
+        it('should call the callback after inserting the entering view', async () => {
+          const onInsertedCb = jasmine.createSpy('onInsertedCb').and.callFake(() => {
+            expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
+            expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
+          });
+          const onDocInsertedSpy = jasmine.createSpy('onDocInserted');
+
+          docViewer.docInserted.subscribe(onDocInsertedSpy);
+
+          expect(docViewerEl.contains(oldCurrViewContainer)).toBe(true);
+          expect(docViewerEl.contains(oldNextViewContainer)).toBe(false);
+
+          await doSwapViews(onInsertedCb);
+
+          expect(onInsertedCb).toHaveBeenCalledTimes(1);
+          expect(onInsertedCb).toHaveBeenCalledBefore(onDocInsertedSpy);
+          expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
+          expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
+        });
+
+        it('should empty the previous view', async () => {
+          await doSwapViews();
+
+          expect(docViewer.currViewContainer.innerHTML).toBe('Next view');
+          expect(docViewer.nextViewContainer.innerHTML).toBe('');
+
+          docViewer.nextViewContainer.innerHTML = 'Next view 2';
+          await doSwapViews();
+
+          expect(docViewer.currViewContainer.innerHTML).toBe('Next view 2');
+          expect(docViewer.nextViewContainer.innerHTML).toBe('');
+        });
+
+        if (animationsEnabled) {
+          // Only test this when there are animations. Without animations, the views are swapped
+          // synchronously, so there is no need (or way) to abort.
+          it('should abort swapping if the returned observable is unsubscribed from', async () => {
+            docViewer.swapViews().subscribe().unsubscribe();
+            await doSwapViews();
+
+            // Since the first call was cancelled, only one swapping should have taken place.
+            expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
+            expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
+            expect(docViewer.currViewContainer).toBe(oldNextViewContainer);
+            expect(docViewer.nextViewContainer).toBe(oldCurrViewContainer);
+            expect(docViewer.currViewContainer.innerHTML).toBe('Next view');
+            expect(docViewer.nextViewContainer.innerHTML).toBe('');
+          });
+        } else {
+          it('should swap views synchronously when animations are disabled', () => {
+            const cbSpy = jasmine.createSpy('cb');
+
+            docViewer.swapViews(cbSpy).subscribe();
+
+            expect(cbSpy).toHaveBeenCalledTimes(1);
+            expect(docViewerEl.contains(oldCurrViewContainer)).toBe(false);
+            expect(docViewerEl.contains(oldNextViewContainer)).toBe(true);
+            expect(docViewer.currViewContainer).toBe(oldNextViewContainer);
+            expect(docViewer.nextViewContainer).toBe(oldCurrViewContainer);
+            expect(docViewer.currViewContainer.innerHTML).toBe('Next view');
+            expect(docViewer.nextViewContainer.innerHTML).toBe('');
+          });
+        }
       });
     });
   });

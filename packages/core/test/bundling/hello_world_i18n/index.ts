@@ -1,19 +1,14 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
+import './translations';
 
-import {Component, NgModule, ɵi18nConfigureLocalize, ɵrenderComponent as renderComponent} from '@angular/core';
-
-const translations = {
-  'Hello World!': 'Bonjour Monde!',
-  'Hello Title!': 'Bonjour Titre!',
-};
-
-ɵi18nConfigureLocalize({translations});
+import {Component, NgModule} from '@angular/core';
+import {BrowserModule, platformBrowser} from '@angular/platform-browser';
 
 @Component({
   selector: 'hello-world',
@@ -21,11 +16,13 @@ const translations = {
 })
 export class HelloWorld {
 }
-// TODO(misko): Forgetting to export HelloWorld and not having NgModule fails silently.
 
-@NgModule({declarations: [HelloWorld]})
-export class INeedToExistEvenThoughIAmNotNeeded {
+@NgModule({
+  declarations: [HelloWorld],
+  imports: [BrowserModule],
+  bootstrap: [HelloWorld],
+})
+export class Module {
 }
-// TODO(misko): Package should not be required to make this work.
 
-renderComponent(HelloWorld);
+platformBrowser().bootstrapModule(Module, {ngZone: 'noop'});

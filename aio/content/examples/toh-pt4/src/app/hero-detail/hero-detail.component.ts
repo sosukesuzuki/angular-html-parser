@@ -8,13 +8,11 @@ import { Hero } from '../hero';
 })
 export class HeroDetailComponent implements OnInit {
 
-  // #docregion hero
-  @Input() hero: Hero;
-  // #enddocregion hero
+  @Input() hero: Hero | undefined;
 
   constructor() { }
 
-  ngOnInit() {
+  ngOnInit(): void {
   }
 
 }

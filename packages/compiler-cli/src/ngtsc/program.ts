@@ -1,566 +1,360 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {GeneratedFile} from '@angular/compiler';
-import * as ts from 'typescript';
+import {HtmlParser, MessageBundle} from '@angular/compiler';
+import ts from 'typescript';
 
 import * as api from '../transformers/api';
-import {nocollapseHack} from '../transformers/nocollapse_hack';
+import {i18nExtract} from '../transformers/i18n';
+import {verifySupportedTypeScriptVersion} from '../typescript_support';
 
-import {ComponentDecoratorHandler, DirectiveDecoratorHandler, InjectableDecoratorHandler, NgModuleDecoratorHandler, NoopReferencesRegistry, PipeDecoratorHandler, ReferencesRegistry} from './annotations';
-import {BaseDefDecoratorHandler} from './annotations/src/base_def';
-import {CycleAnalyzer, ImportGraph} from './cycles';
-import {ErrorCode, ngErrorCode} from './diagnostics';
-import {FlatIndexGenerator, ReferenceGraph, checkForPrivateExports, findFlatIndexEntryPoint} from './entry_point';
-import {AbsoluteFsPath, LogicalFileSystem, absoluteFrom} from './file_system';
-import {AbsoluteModuleStrategy, AliasGenerator, AliasStrategy, DefaultImportTracker, FileToModuleHost, FileToModuleStrategy, ImportRewriter, LocalIdentifierStrategy, LogicalProjectStrategy, ModuleResolver, NoopImportRewriter, R3SymbolsImportRewriter, Reference, ReferenceEmitter} from './imports';
-import {IncrementalState} from './incremental';
-import {IndexedComponent, IndexingContext} from './indexer';
-import {generateAnalysis} from './indexer/src/transform';
-import {CompoundMetadataReader, CompoundMetadataRegistry, DtsMetadataReader, LocalMetadataRegistry, MetadataReader} from './metadata';
-import {PartialEvaluator} from './partial_evaluator';
-import {NOOP_PERF_RECORDER, PerfRecorder, PerfTracker} from './perf';
-import {TypeScriptReflectionHost} from './reflection';
-import {HostResourceLoader} from './resource_loader';
-import {NgModuleRouteAnalyzer, entryPointKeyFor} from './routing';
-import {LocalModuleScopeRegistry, MetadataDtsModuleScopeResolver} from './scope';
-import {FactoryGenerator, FactoryInfo, GeneratedShimsHostWrapper, ShimGenerator, SummaryGenerator, TypeCheckShimGenerator, generatedFactoryTransform} from './shims';
-import {ivySwitchTransform} from './switch';
-import {IvyCompilation, declarationTransformFactory, ivyTransformFactory} from './transform';
-import {aliasTransformFactory} from './transform/src/alias';
-import {TypeCheckContext, TypeCheckingConfig, typeCheckFilePath} from './typecheck';
-import {normalizeSeparators} from './util/src/path';
-import {getRootDirs, getSourceFileOrNull, isDtsPath, resolveModuleName} from './util/src/typescript';
+import {CompilationTicket, freshCompilationTicket, incrementalFromCompilerTicket, NgCompiler, NgCompilerHost} from './core';
+import {NgCompilerOptions} from './core/api';
+import {absoluteFrom, AbsoluteFsPath, getFileSystem, resolve} from './file_system';
+import {TrackedIncrementalBuildStrategy} from './incremental';
+import {IndexedComponent} from './indexer';
+import {ActivePerfRecorder, PerfCheckpoint as PerfCheckpoint, PerfEvent, PerfPhase} from './perf';
+import {TsCreateProgramDriver} from './program_driver';
+import {DeclarationNode} from './reflection';
+import {retagAllTsFiles, untagAllTsFiles} from './shims';
+import {OptimizeFor} from './typecheck/api';
 
+/**
+ * Entrypoint to the Angular Compiler (Ivy+) which sits behind the `api.Program` interface, allowing
+ * it to be a drop-in replacement for the legacy View Engine compiler to tooling such as the
+ * command-line main() function or the Angular CLI.
+ */
 export class NgtscProgram implements api.Program {
+  readonly compiler: NgCompiler;
+
+  /**
+   * The primary TypeScript program, which is used for analysis and emit.
+   */
   private tsProgram: ts.Program;
-  private reuseTsProgram: ts.Program;
-  private resourceManager: HostResourceLoader;
-  private compilation: IvyCompilation|undefined = undefined;
-  private factoryToSourceInfo: Map<string, FactoryInfo>|null = null;
-  private sourceToFactorySymbols: Map<string, Set<string>>|null = null;
-  private _coreImportsFrom: ts.SourceFile|null|undefined = undefined;
-  private _importRewriter: ImportRewriter|undefined = undefined;
-  private _reflector: TypeScriptReflectionHost|undefined = undefined;
-  private _isCore: boolean|undefined = undefined;
-  private rootDirs: AbsoluteFsPath[];
-  private closureCompilerEnabled: boolean;
-  private entryPoint: ts.SourceFile|null;
-  private exportReferenceGraph: ReferenceGraph|null = null;
-  private flatIndexGenerator: FlatIndexGenerator|null = null;
-  private routeAnalyzer: NgModuleRouteAnalyzer|null = null;
 
-  private constructionDiagnostics: ts.Diagnostic[] = [];
-  private moduleResolver: ModuleResolver;
-  private cycleAnalyzer: CycleAnalyzer;
-  private metaReader: MetadataReader|null = null;
-
-  private refEmitter: ReferenceEmitter|null = null;
-  private fileToModuleHost: FileToModuleHost|null = null;
-  private defaultImportTracker: DefaultImportTracker;
-  private perfRecorder: PerfRecorder = NOOP_PERF_RECORDER;
-  private perfTracker: PerfTracker|null = null;
-  private incrementalState: IncrementalState;
-  private typeCheckFilePath: AbsoluteFsPath;
-
-  private modifiedResourceFiles: Set<string>|null;
+  private host: NgCompilerHost;
+  private incrementalStrategy: TrackedIncrementalBuildStrategy;
 
   constructor(
-      rootNames: ReadonlyArray<string>, private options: api.CompilerOptions,
-      private host: api.CompilerHost, oldProgram?: NgtscProgram) {
-    if (shouldEnablePerfTracing(options)) {
-      this.perfTracker = PerfTracker.zeroedToNow();
-      this.perfRecorder = this.perfTracker;
+      rootNames: ReadonlyArray<string>, private options: NgCompilerOptions,
+      delegateHost: api.CompilerHost, oldProgram?: NgtscProgram) {
+    const perfRecorder = ActivePerfRecorder.zeroedToNow();
+
+    perfRecorder.phase(PerfPhase.Setup);
+
+    // First, check whether the current TS version is supported.
+    if (!options.disableTypeScriptVersionCheck) {
+      verifySupportedTypeScriptVersion();
     }
 
-    this.modifiedResourceFiles =
-        this.host.getModifiedResourceFiles && this.host.getModifiedResourceFiles() || null;
-    this.rootDirs = getRootDirs(host, options);
-    this.closureCompilerEnabled = !!options.annotateForClosureCompiler;
-    this.resourceManager = new HostResourceLoader(host, options);
-    const shouldGenerateShims = options.allowEmptyCodegenFiles || false;
-    const normalizedRootNames = rootNames.map(n => absoluteFrom(n));
-    if (host.fileNameToModuleName !== undefined) {
-      this.fileToModuleHost = host as FileToModuleHost;
-    }
-    let rootFiles = [...rootNames];
+    const reuseProgram = oldProgram?.compiler.getCurrentProgram();
+    this.host = NgCompilerHost.wrap(delegateHost, rootNames, options, reuseProgram ?? null);
 
-    const generators: ShimGenerator[] = [];
-    if (shouldGenerateShims) {
-      // Summary generation.
-      const summaryGenerator = SummaryGenerator.forRootFiles(normalizedRootNames);
-
-      // Factory generation.
-      const factoryGenerator = FactoryGenerator.forRootFiles(normalizedRootNames);
-      const factoryFileMap = factoryGenerator.factoryFileMap;
-      this.factoryToSourceInfo = new Map<string, FactoryInfo>();
-      this.sourceToFactorySymbols = new Map<string, Set<string>>();
-      factoryFileMap.forEach((sourceFilePath, factoryPath) => {
-        const moduleSymbolNames = new Set<string>();
-        this.sourceToFactorySymbols !.set(sourceFilePath, moduleSymbolNames);
-        this.factoryToSourceInfo !.set(factoryPath, {sourceFilePath, moduleSymbolNames});
-      });
-
-      const factoryFileNames = Array.from(factoryFileMap.keys());
-      rootFiles.push(...factoryFileNames, ...summaryGenerator.getSummaryFileNames());
-      generators.push(summaryGenerator, factoryGenerator);
+    if (reuseProgram !== undefined) {
+      // Prior to reusing the old program, restore shim tagging for all its `ts.SourceFile`s.
+      // TypeScript checks the `referencedFiles` of `ts.SourceFile`s for changes when evaluating
+      // incremental reuse of data from the old program, so it's important that these match in order
+      // to get the most benefit out of reuse.
+      retagAllTsFiles(reuseProgram);
     }
 
-    this.typeCheckFilePath = typeCheckFilePath(this.rootDirs);
-    generators.push(new TypeCheckShimGenerator(this.typeCheckFilePath));
-    rootFiles.push(this.typeCheckFilePath);
+    this.tsProgram = perfRecorder.inPhase(
+        PerfPhase.TypeScriptProgramCreate,
+        () => ts.createProgram(this.host.inputFiles, options, this.host, reuseProgram));
 
-    let entryPoint: AbsoluteFsPath|null = null;
-    if (options.flatModuleOutFile !== undefined) {
-      entryPoint = findFlatIndexEntryPoint(normalizedRootNames);
-      if (entryPoint === null) {
-        // This error message talks specifically about having a single .ts file in "files". However
-        // the actual logic is a bit more permissive. If a single file exists, that will be taken,
-        // otherwise the highest level (shortest path) "index.ts" file will be used as the flat
-        // module entry point instead. If neither of these conditions apply, the error below is
-        // given.
-        //
-        // The user is not informed about the "index.ts" option as this behavior is deprecated -
-        // an explicit entrypoint should always be specified.
-        this.constructionDiagnostics.push({
-          category: ts.DiagnosticCategory.Error,
-          code: ngErrorCode(ErrorCode.CONFIG_FLAT_MODULE_NO_INDEX),
-          file: undefined,
-          start: undefined,
-          length: undefined,
-          messageText:
-              'Angular compiler option "flatModuleOutFile" requires one and only one .ts file in the "files" field.',
-        });
-      } else {
-        const flatModuleId = options.flatModuleId || null;
-        const flatModuleOutFile = normalizeSeparators(options.flatModuleOutFile);
-        this.flatIndexGenerator =
-            new FlatIndexGenerator(entryPoint, flatModuleOutFile, flatModuleId);
-        generators.push(this.flatIndexGenerator);
-        rootFiles.push(this.flatIndexGenerator.flatIndexPath);
+    perfRecorder.phase(PerfPhase.Unaccounted);
+    perfRecorder.memory(PerfCheckpoint.TypeScriptProgramCreate);
+
+    this.host.postProgramCreationCleanup();
+
+    // Shim tagging has served its purpose, and tags can now be removed from all `ts.SourceFile`s in
+    // the program.
+    untagAllTsFiles(this.tsProgram);
+
+    const programDriver = new TsCreateProgramDriver(
+        this.tsProgram, this.host, this.options, this.host.shimExtensionPrefixes);
+
+    this.incrementalStrategy = oldProgram !== undefined ?
+        oldProgram.incrementalStrategy.toNextBuildStrategy() :
+        new TrackedIncrementalBuildStrategy();
+    const modifiedResourceFiles = new Set<AbsoluteFsPath>();
+    if (this.host.getModifiedResourceFiles !== undefined) {
+      const strings = this.host.getModifiedResourceFiles();
+      if (strings !== undefined) {
+        for (const fileString of strings) {
+          modifiedResourceFiles.add(absoluteFrom(fileString));
+        }
       }
     }
 
-    if (generators.length > 0) {
-      this.host = new GeneratedShimsHostWrapper(host, generators);
-    }
-
-    this.tsProgram =
-        ts.createProgram(rootFiles, options, this.host, oldProgram && oldProgram.reuseTsProgram);
-    this.reuseTsProgram = this.tsProgram;
-
-    this.entryPoint = entryPoint !== null ? getSourceFileOrNull(this.tsProgram, entryPoint) : null;
-    this.moduleResolver = new ModuleResolver(this.tsProgram, options, this.host);
-    this.cycleAnalyzer = new CycleAnalyzer(new ImportGraph(this.moduleResolver));
-    this.defaultImportTracker = new DefaultImportTracker();
+    let ticket: CompilationTicket;
     if (oldProgram === undefined) {
-      this.incrementalState = IncrementalState.fresh();
+      ticket = freshCompilationTicket(
+          this.tsProgram, options, this.incrementalStrategy, programDriver, perfRecorder,
+          /* enableTemplateTypeChecker */ false, /* usePoisonedData */ false);
     } else {
-      this.incrementalState = IncrementalState.reconcile(
-          oldProgram.incrementalState, oldProgram.reuseTsProgram, this.tsProgram,
-          this.modifiedResourceFiles);
+      ticket = incrementalFromCompilerTicket(
+          oldProgram.compiler,
+          this.tsProgram,
+          this.incrementalStrategy,
+          programDriver,
+          modifiedResourceFiles,
+          perfRecorder,
+      );
     }
+
+
+    // Create the NgCompiler which will drive the rest of the compilation.
+    this.compiler = NgCompiler.fromTicket(ticket, this.host);
   }
 
-  getTsProgram(): ts.Program { return this.tsProgram; }
+  getTsProgram(): ts.Program {
+    return this.tsProgram;
+  }
+
+  getReuseTsProgram(): ts.Program {
+    return this.compiler.getCurrentProgram();
+  }
 
   getTsOptionDiagnostics(cancellationToken?: ts.CancellationToken|
-                         undefined): ReadonlyArray<ts.Diagnostic> {
-    return this.tsProgram.getOptionsDiagnostics(cancellationToken);
-  }
-
-  getNgOptionDiagnostics(cancellationToken?: ts.CancellationToken|
-                         undefined): ReadonlyArray<ts.Diagnostic|api.Diagnostic> {
-    return this.constructionDiagnostics;
+                         undefined): readonly ts.Diagnostic[] {
+    return this.compiler.perfRecorder.inPhase(
+        PerfPhase.TypeScriptDiagnostics,
+        () => this.tsProgram.getOptionsDiagnostics(cancellationToken));
   }
 
   getTsSyntacticDiagnostics(
       sourceFile?: ts.SourceFile|undefined,
-      cancellationToken?: ts.CancellationToken|undefined): ReadonlyArray<ts.Diagnostic> {
-    return this.tsProgram.getSyntacticDiagnostics(sourceFile, cancellationToken);
-  }
+      cancellationToken?: ts.CancellationToken|undefined): readonly ts.Diagnostic[] {
+    return this.compiler.perfRecorder.inPhase(PerfPhase.TypeScriptDiagnostics, () => {
+      const ignoredFiles = this.compiler.ignoreForDiagnostics;
+      let res: readonly ts.Diagnostic[];
+      if (sourceFile !== undefined) {
+        if (ignoredFiles.has(sourceFile)) {
+          return [];
+        }
 
-  getNgStructuralDiagnostics(cancellationToken?: ts.CancellationToken|
-                             undefined): ReadonlyArray<api.Diagnostic> {
-    return [];
+        res = this.tsProgram.getSyntacticDiagnostics(sourceFile, cancellationToken);
+      } else {
+        const diagnostics: ts.Diagnostic[] = [];
+        for (const sf of this.tsProgram.getSourceFiles()) {
+          if (!ignoredFiles.has(sf)) {
+            diagnostics.push(...this.tsProgram.getSyntacticDiagnostics(sf, cancellationToken));
+          }
+        }
+        res = diagnostics;
+      }
+      return res;
+    });
   }
 
   getTsSemanticDiagnostics(
       sourceFile?: ts.SourceFile|undefined,
-      cancellationToken?: ts.CancellationToken|undefined): ReadonlyArray<ts.Diagnostic> {
-    return this.tsProgram.getSemanticDiagnostics(sourceFile, cancellationToken);
+      cancellationToken?: ts.CancellationToken|undefined): readonly ts.Diagnostic[] {
+    return this.compiler.perfRecorder.inPhase(PerfPhase.TypeScriptDiagnostics, () => {
+      const ignoredFiles = this.compiler.ignoreForDiagnostics;
+      let res: readonly ts.Diagnostic[];
+      if (sourceFile !== undefined) {
+        if (ignoredFiles.has(sourceFile)) {
+          return [];
+        }
+
+        res = this.tsProgram.getSemanticDiagnostics(sourceFile, cancellationToken);
+      } else {
+        const diagnostics: ts.Diagnostic[] = [];
+        for (const sf of this.tsProgram.getSourceFiles()) {
+          if (!ignoredFiles.has(sf)) {
+            diagnostics.push(...this.tsProgram.getSemanticDiagnostics(sf, cancellationToken));
+          }
+        }
+        res = diagnostics;
+      }
+      return res;
+    });
+  }
+
+  getNgOptionDiagnostics(cancellationToken?: ts.CancellationToken|
+                         undefined): readonly ts.Diagnostic[] {
+    return this.compiler.getOptionDiagnostics();
+  }
+
+  getNgStructuralDiagnostics(cancellationToken?: ts.CancellationToken|
+                             undefined): readonly ts.Diagnostic[] {
+    return [];
   }
 
   getNgSemanticDiagnostics(
-      fileName?: string|undefined, cancellationToken?: ts.CancellationToken|
-                                   undefined): ReadonlyArray<ts.Diagnostic|api.Diagnostic> {
-    const compilation = this.ensureAnalyzed();
-    const diagnostics = [...compilation.diagnostics, ...this.getTemplateDiagnostics()];
-    if (this.entryPoint !== null && this.exportReferenceGraph !== null) {
-      diagnostics.push(...checkForPrivateExports(
-          this.entryPoint, this.tsProgram.getTypeChecker(), this.exportReferenceGraph));
+      fileName?: string|undefined,
+      cancellationToken?: ts.CancellationToken|undefined): readonly ts.Diagnostic[] {
+    let sf: ts.SourceFile|undefined = undefined;
+    if (fileName !== undefined) {
+      sf = this.tsProgram.getSourceFile(fileName);
+      if (sf === undefined) {
+        // There are no diagnostics for files which don't exist in the program - maybe the caller
+        // has stale data?
+        return [];
+      }
     }
-    return diagnostics;
+
+    if (sf === undefined) {
+      return this.compiler.getDiagnostics();
+    } else {
+      return this.compiler.getDiagnosticsForFile(sf, OptimizeFor.WholeProgram);
+    }
   }
 
-  async loadNgStructureAsync(): Promise<void> {
-    if (this.compilation === undefined) {
-      this.compilation = this.makeCompilation();
-    }
-    const analyzeSpan = this.perfRecorder.start('analyze');
-    await Promise.all(this.tsProgram.getSourceFiles()
-                          .filter(file => !file.fileName.endsWith('.d.ts'))
-                          .map(file => {
-
-                            const analyzeFileSpan = this.perfRecorder.start('analyzeFile', file);
-                            let analysisPromise = this.compilation !.analyzeAsync(file);
-                            if (analysisPromise === undefined) {
-                              this.perfRecorder.stop(analyzeFileSpan);
-                            } else if (this.perfRecorder.enabled) {
-                              analysisPromise = analysisPromise.then(
-                                  () => this.perfRecorder.stop(analyzeFileSpan));
-                            }
-                            return analysisPromise;
-                          })
-                          .filter((result): result is Promise<void> => result !== undefined));
-    this.perfRecorder.stop(analyzeSpan);
-    this.compilation.resolve();
+  /**
+   * Ensure that the `NgCompiler` has properly analyzed the program, and allow for the asynchronous
+   * loading of any resources during the process.
+   *
+   * This is used by the Angular CLI to allow for spawning (async) child compilations for things
+   * like SASS files used in `styleUrls`.
+   */
+  loadNgStructureAsync(): Promise<void> {
+    return this.compiler.analyzeAsync();
   }
 
   listLazyRoutes(entryRoute?: string|undefined): api.LazyRoute[] {
-    if (entryRoute) {
-      // Note:
-      // This resolution step is here to match the implementation of the old `AotCompilerHost` (see
-      // https://github.com/angular/angular/blob/50732e156/packages/compiler-cli/src/transformers/compiler_host.ts#L175-L188).
-      //
-      // `@angular/cli` will always call this API with an absolute path, so the resolution step is
-      // not necessary, but keeping it backwards compatible in case someone else is using the API.
+    return [];
+  }
 
-      // Relative entry paths are disallowed.
-      if (entryRoute.startsWith('.')) {
-        throw new Error(
-            `Failed to list lazy routes: Resolution of relative paths (${entryRoute}) is not supported.`);
-      }
+  private emitXi18n(): void {
+    const ctx = new MessageBundle(new HtmlParser(), [], {}, this.options.i18nOutLocale ?? null);
+    this.compiler.xi18n(ctx);
+    i18nExtract(
+        this.options.i18nOutFormat ?? null, this.options.i18nOutFile ?? null, this.host,
+        this.options, ctx, resolve);
+  }
 
-      // Non-relative entry paths fall into one of the following categories:
-      // - Absolute system paths (e.g. `/foo/bar/my-project/my-module`), which are unaffected by the
-      //   logic below.
-      // - Paths to enternal modules (e.g. `some-lib`).
-      // - Paths mapped to directories in `tsconfig.json` (e.g. `shared/my-module`).
-      //   (See https://www.typescriptlang.org/docs/handbook/module-resolution.html#path-mapping.)
-      //
-      // In all cases above, the `containingFile` argument is ignored, so we can just take the first
-      // of the root files.
-      const containingFile = this.tsProgram.getRootFileNames()[0];
-      const [entryPath, moduleName] = entryRoute.split('#');
-      const resolvedModule = resolveModuleName(entryPath, containingFile, this.options, this.host);
+  emit(opts?: {
+    emitFlags?: api.EmitFlags|undefined;
+    forceEmit?: boolean;
+    cancellationToken?: ts.CancellationToken | undefined;
+    customTransformers?: api.CustomTransformers | undefined;
+    emitCallback?: api.TsEmitCallback | undefined;
+    mergeEmitResultsCallback?: api.TsMergeEmitResultsCallback | undefined;
+  }|undefined): ts.EmitResult {
+    // Check if emission of the i18n messages bundle was requested.
+    if (opts !== undefined && opts.emitFlags !== undefined &&
+        opts.emitFlags & api.EmitFlags.I18nBundle) {
+      this.emitXi18n();
 
-      if (resolvedModule) {
-        entryRoute = entryPointKeyFor(resolvedModule.resolvedFileName, moduleName);
+      // `api.EmitFlags` is a View Engine compiler concept. We only pay attention to the absence of
+      // the other flags here if i18n emit was requested (since this is usually done in the xi18n
+      // flow, where we don't want to emit JS at all).
+      if (!(opts.emitFlags & api.EmitFlags.JS)) {
+        return {
+          diagnostics: [],
+          emitSkipped: true,
+          emittedFiles: [],
+        };
       }
     }
 
-    this.ensureAnalyzed();
-    return this.routeAnalyzer !.listLazyRoutes(entryRoute);
+    const forceEmit = opts?.forceEmit ?? false;
+
+    this.compiler.perfRecorder.memory(PerfCheckpoint.PreEmit);
+
+    const res = this.compiler.perfRecorder.inPhase(PerfPhase.TypeScriptEmit, () => {
+      const {transformers} = this.compiler.prepareEmit();
+      const ignoreFiles = this.compiler.ignoreForEmit;
+      const emitCallback = opts && opts.emitCallback || defaultEmitCallback;
+
+      const writeFile: ts.WriteFileCallback =
+          (fileName: string, data: string, writeByteOrderMark: boolean,
+           onError: ((message: string) => void)|undefined,
+           sourceFiles: ReadonlyArray<ts.SourceFile>|undefined) => {
+            if (sourceFiles !== undefined) {
+              // Record successful writes for any `ts.SourceFile` (that's not a declaration file)
+              // that's an input to this write.
+              for (const writtenSf of sourceFiles) {
+                if (writtenSf.isDeclarationFile) {
+                  continue;
+                }
+
+                this.compiler.incrementalCompilation.recordSuccessfulEmit(writtenSf);
+              }
+            }
+            this.host.writeFile(fileName, data, writeByteOrderMark, onError, sourceFiles);
+          };
+
+      const customTransforms = opts && opts.customTransformers;
+      const beforeTransforms = transformers.before || [];
+      const afterDeclarationsTransforms = transformers.afterDeclarations;
+
+      if (customTransforms !== undefined && customTransforms.beforeTs !== undefined) {
+        beforeTransforms.push(...customTransforms.beforeTs);
+      }
+
+      const emitResults: ts.EmitResult[] = [];
+
+      for (const targetSourceFile of this.tsProgram.getSourceFiles()) {
+        if (targetSourceFile.isDeclarationFile || ignoreFiles.has(targetSourceFile)) {
+          continue;
+        }
+
+        if (!forceEmit && this.compiler.incrementalCompilation.safeToSkipEmit(targetSourceFile)) {
+          this.compiler.perfRecorder.eventCount(PerfEvent.EmitSkipSourceFile);
+          continue;
+        }
+
+        this.compiler.perfRecorder.eventCount(PerfEvent.EmitSourceFile);
+
+        emitResults.push(emitCallback({
+          targetSourceFile,
+          program: this.tsProgram,
+          host: this.host,
+          options: this.options,
+          emitOnlyDtsFiles: false,
+          writeFile,
+          customTransformers: {
+            before: beforeTransforms,
+            after: customTransforms && customTransforms.afterTs,
+            afterDeclarations: afterDeclarationsTransforms,
+          } as any,
+        }));
+      }
+
+      this.compiler.perfRecorder.memory(PerfCheckpoint.Emit);
+
+      // Run the emit, including a custom transformer that will downlevel the Ivy decorators in
+      // code.
+      return ((opts && opts.mergeEmitResultsCallback) || mergeEmitResults)(emitResults);
+    });
+
+    // Record performance analysis information to disk if we've been asked to do so.
+    if (this.options.tracePerformance !== undefined) {
+      const perf = this.compiler.perfRecorder.finalize();
+      getFileSystem().writeFile(
+          getFileSystem().resolve(this.options.tracePerformance), JSON.stringify(perf, null, 2));
+    }
+    return res;
   }
 
-  getLibrarySummaries(): Map<string, api.LibrarySummary> {
-    throw new Error('Method not implemented.');
-  }
-
-  getEmittedGeneratedFiles(): Map<string, GeneratedFile> {
-    throw new Error('Method not implemented.');
+  getIndexedComponents(): Map<DeclarationNode, IndexedComponent> {
+    return this.compiler.getIndexedComponents();
   }
 
   getEmittedSourceFiles(): Map<string, ts.SourceFile> {
     throw new Error('Method not implemented.');
   }
-
-  private ensureAnalyzed(): IvyCompilation {
-    if (this.compilation === undefined) {
-      const analyzeSpan = this.perfRecorder.start('analyze');
-      this.compilation = this.makeCompilation();
-      this.tsProgram.getSourceFiles()
-          .filter(file => !file.fileName.endsWith('.d.ts'))
-          .forEach(file => {
-            const analyzeFileSpan = this.perfRecorder.start('analyzeFile', file);
-            this.compilation !.analyzeSync(file);
-            this.perfRecorder.stop(analyzeFileSpan);
-          });
-      this.perfRecorder.stop(analyzeSpan);
-      this.compilation.resolve();
-    }
-    return this.compilation;
-  }
-
-  emit(opts?: {
-    emitFlags?: api.EmitFlags,
-    cancellationToken?: ts.CancellationToken,
-    customTransformers?: api.CustomTransformers,
-    emitCallback?: api.TsEmitCallback,
-    mergeEmitResultsCallback?: api.TsMergeEmitResultsCallback
-  }): ts.EmitResult {
-    const emitCallback = opts && opts.emitCallback || defaultEmitCallback;
-
-    const compilation = this.ensureAnalyzed();
-
-    const writeFile: ts.WriteFileCallback =
-        (fileName: string, data: string, writeByteOrderMark: boolean,
-         onError: ((message: string) => void) | undefined,
-         sourceFiles: ReadonlyArray<ts.SourceFile>| undefined) => {
-          if (this.closureCompilerEnabled && fileName.endsWith('.js')) {
-            data = nocollapseHack(data);
-          }
-          this.host.writeFile(fileName, data, writeByteOrderMark, onError, sourceFiles);
-        };
-
-    const customTransforms = opts && opts.customTransformers;
-
-    const beforeTransforms = [
-      ivyTransformFactory(
-          compilation, this.reflector, this.importRewriter, this.defaultImportTracker, this.isCore,
-          this.closureCompilerEnabled),
-      aliasTransformFactory(compilation.exportStatements) as ts.TransformerFactory<ts.SourceFile>,
-      this.defaultImportTracker.importPreservingTransformer(),
-    ];
-    const afterDeclarationsTransforms = [
-      declarationTransformFactory(compilation),
-    ];
-
-
-    if (this.factoryToSourceInfo !== null) {
-      beforeTransforms.push(
-          generatedFactoryTransform(this.factoryToSourceInfo, this.importRewriter));
-    }
-    beforeTransforms.push(ivySwitchTransform);
-    if (customTransforms && customTransforms.beforeTs) {
-      beforeTransforms.push(...customTransforms.beforeTs);
-    }
-
-    const emitSpan = this.perfRecorder.start('emit');
-    const emitResults: ts.EmitResult[] = [];
-
-    const typeCheckFile = getSourceFileOrNull(this.tsProgram, this.typeCheckFilePath);
-
-    for (const targetSourceFile of this.tsProgram.getSourceFiles()) {
-      if (targetSourceFile.isDeclarationFile || targetSourceFile === typeCheckFile) {
-        continue;
-      }
-
-      if (this.incrementalState.safeToSkip(targetSourceFile)) {
-        continue;
-      }
-
-      const fileEmitSpan = this.perfRecorder.start('emitFile', targetSourceFile);
-      emitResults.push(emitCallback({
-        targetSourceFile,
-        program: this.tsProgram,
-        host: this.host,
-        options: this.options,
-        emitOnlyDtsFiles: false, writeFile,
-        customTransformers: {
-          before: beforeTransforms,
-          after: customTransforms && customTransforms.afterTs,
-          afterDeclarations: afterDeclarationsTransforms,
-        },
-      }));
-      this.perfRecorder.stop(fileEmitSpan);
-    }
-    this.perfRecorder.stop(emitSpan);
-
-    if (this.perfTracker !== null && this.options.tracePerformance !== undefined) {
-      this.perfTracker.serializeToFile(this.options.tracePerformance, this.host);
-    }
-
-    // Run the emit, including a custom transformer that will downlevel the Ivy decorators in code.
-    return ((opts && opts.mergeEmitResultsCallback) || mergeEmitResults)(emitResults);
-  }
-
-  private getTemplateDiagnostics(): ReadonlyArray<api.Diagnostic|ts.Diagnostic> {
-    // Skip template type-checking if it's disabled.
-    if (this.options.ivyTemplateTypeCheck === false &&
-        this.options.fullTemplateTypeCheck !== true) {
-      return [];
-    }
-
-    const compilation = this.ensureAnalyzed();
-
-    // Run template type-checking.
-
-    // First select a type-checking configuration, based on whether full template type-checking is
-    // requested.
-    let typeCheckingConfig: TypeCheckingConfig;
-    if (this.options.fullTemplateTypeCheck) {
-      typeCheckingConfig = {
-        applyTemplateContextGuards: true,
-        checkQueries: false,
-        checkTemplateBodies: true,
-        checkTypeOfBindings: true,
-        checkTypeOfPipes: true,
-        strictSafeNavigationTypes: true,
-      };
-    } else {
-      typeCheckingConfig = {
-        applyTemplateContextGuards: false,
-        checkQueries: false,
-        checkTemplateBodies: false,
-        checkTypeOfBindings: false,
-        checkTypeOfPipes: false,
-        strictSafeNavigationTypes: false,
-      };
-    }
-
-    // Execute the typeCheck phase of each decorator in the program.
-    const prepSpan = this.perfRecorder.start('typeCheckPrep');
-    const ctx = new TypeCheckContext(typeCheckingConfig, this.refEmitter !, this.typeCheckFilePath);
-    compilation.typeCheck(ctx);
-    this.perfRecorder.stop(prepSpan);
-
-    // Get the diagnostics.
-    const typeCheckSpan = this.perfRecorder.start('typeCheckDiagnostics');
-    const {diagnostics, program} =
-        ctx.calculateTemplateDiagnostics(this.tsProgram, this.host, this.options);
-    this.perfRecorder.stop(typeCheckSpan);
-    this.reuseTsProgram = program;
-
-    return diagnostics;
-  }
-
-  getIndexedComponents(): Map<ts.Declaration, IndexedComponent> {
-    const compilation = this.ensureAnalyzed();
-    const context = new IndexingContext();
-    compilation.index(context);
-    return generateAnalysis(context);
-  }
-
-  private makeCompilation(): IvyCompilation {
-    const checker = this.tsProgram.getTypeChecker();
-
-    let aliasGenerator: AliasGenerator|null = null;
-    // Construct the ReferenceEmitter.
-    if (this.fileToModuleHost === null || !this.options._useHostForImportGeneration) {
-      // The CompilerHost doesn't have fileNameToModuleName, so build an NPM-centric reference
-      // resolution strategy.
-      this.refEmitter = new ReferenceEmitter([
-        // First, try to use local identifiers if available.
-        new LocalIdentifierStrategy(),
-        // Next, attempt to use an absolute import.
-        new AbsoluteModuleStrategy(
-            this.tsProgram, checker, this.options, this.host, this.reflector),
-        // Finally, check if the reference is being written into a file within the project's logical
-        // file system, and use a relative import if so. If this fails, ReferenceEmitter will throw
-        // an error.
-        new LogicalProjectStrategy(checker, new LogicalFileSystem(this.rootDirs)),
-      ]);
-    } else {
-      // The CompilerHost supports fileNameToModuleName, so use that to emit imports.
-      this.refEmitter = new ReferenceEmitter([
-        // First, try to use local identifiers if available.
-        new LocalIdentifierStrategy(),
-        // Then use aliased references (this is a workaround to StrictDeps checks).
-        new AliasStrategy(),
-        // Then use fileNameToModuleName to emit imports.
-        new FileToModuleStrategy(checker, this.fileToModuleHost),
-      ]);
-      aliasGenerator = new AliasGenerator(this.fileToModuleHost);
-    }
-
-    const evaluator = new PartialEvaluator(this.reflector, checker, this.incrementalState);
-    const dtsReader = new DtsMetadataReader(checker, this.reflector);
-    const localMetaRegistry = new LocalMetadataRegistry();
-    const localMetaReader = new CompoundMetadataReader([localMetaRegistry, this.incrementalState]);
-    const depScopeReader = new MetadataDtsModuleScopeResolver(dtsReader, aliasGenerator);
-    const scopeRegistry = new LocalModuleScopeRegistry(
-        localMetaReader, depScopeReader, this.refEmitter, aliasGenerator);
-    const metaRegistry =
-        new CompoundMetadataRegistry([localMetaRegistry, scopeRegistry, this.incrementalState]);
-
-    this.metaReader = new CompoundMetadataReader([localMetaReader, dtsReader]);
-
-
-    // If a flat module entrypoint was specified, then track references via a `ReferenceGraph`
-    // in
-    // order to produce proper diagnostics for incorrectly exported directives/pipes/etc. If
-    // there
-    // is no flat module entrypoint then don't pay the cost of tracking references.
-    let referencesRegistry: ReferencesRegistry;
-    if (this.entryPoint !== null) {
-      this.exportReferenceGraph = new ReferenceGraph();
-      referencesRegistry = new ReferenceGraphAdapter(this.exportReferenceGraph);
-    } else {
-      referencesRegistry = new NoopReferencesRegistry();
-    }
-
-    this.routeAnalyzer = new NgModuleRouteAnalyzer(this.moduleResolver, evaluator);
-
-    // Set up the IvyCompilation, which manages state for the Ivy transformer.
-    const handlers = [
-      new BaseDefDecoratorHandler(this.reflector, evaluator, this.isCore),
-      new ComponentDecoratorHandler(
-          this.reflector, evaluator, metaRegistry, this.metaReader !, scopeRegistry, this.isCore,
-          this.resourceManager, this.rootDirs, this.options.preserveWhitespaces || false,
-          this.options.i18nUseExternalIds !== false, this.moduleResolver, this.cycleAnalyzer,
-          this.refEmitter, this.defaultImportTracker, this.incrementalState),
-      new DirectiveDecoratorHandler(
-          this.reflector, evaluator, metaRegistry, this.defaultImportTracker, this.isCore),
-      new InjectableDecoratorHandler(
-          this.reflector, this.defaultImportTracker, this.isCore,
-          this.options.strictInjectionParameters || false),
-      new NgModuleDecoratorHandler(
-          this.reflector, evaluator, metaRegistry, scopeRegistry, referencesRegistry, this.isCore,
-          this.routeAnalyzer, this.refEmitter, this.defaultImportTracker,
-          this.options.i18nInLocale),
-      new PipeDecoratorHandler(
-          this.reflector, evaluator, metaRegistry, this.defaultImportTracker, this.isCore),
-    ];
-
-    return new IvyCompilation(
-        handlers, this.reflector, this.importRewriter, this.incrementalState, this.perfRecorder,
-        this.sourceToFactorySymbols, scopeRegistry);
-  }
-
-  private get reflector(): TypeScriptReflectionHost {
-    if (this._reflector === undefined) {
-      this._reflector = new TypeScriptReflectionHost(this.tsProgram.getTypeChecker());
-    }
-    return this._reflector;
-  }
-
-  private get coreImportsFrom(): ts.SourceFile|null {
-    if (this._coreImportsFrom === undefined) {
-      this._coreImportsFrom = this.isCore && getR3SymbolsFile(this.tsProgram) || null;
-    }
-    return this._coreImportsFrom;
-  }
-
-  private get isCore(): boolean {
-    if (this._isCore === undefined) {
-      this._isCore = isAngularCorePackage(this.tsProgram);
-    }
-    return this._isCore;
-  }
-
-  private get importRewriter(): ImportRewriter {
-    if (this._importRewriter === undefined) {
-      const coreImportsFrom = this.coreImportsFrom;
-      this._importRewriter = coreImportsFrom !== null ?
-          new R3SymbolsImportRewriter(coreImportsFrom.fileName) :
-          new NoopImportRewriter();
-    }
-    return this._importRewriter;
-  }
 }
 
-const defaultEmitCallback: api.TsEmitCallback =
-    ({program, targetSourceFile, writeFile, cancellationToken, emitOnlyDtsFiles,
-      customTransformers}) =>
-        program.emit(
-            targetSourceFile, writeFile, cancellationToken, emitOnlyDtsFiles, customTransformers);
+const defaultEmitCallback: api.TsEmitCallback = ({
+  program,
+  targetSourceFile,
+  writeFile,
+  cancellationToken,
+  emitOnlyDtsFiles,
+  customTransformers
+}) =>
+    program.emit(
+        targetSourceFile, writeFile, cancellationToken, emitOnlyDtsFiles, customTransformers);
 
 function mergeEmitResults(emitResults: ts.EmitResult[]): ts.EmitResult {
   const diagnostics: ts.Diagnostic[] = [];
@@ -573,70 +367,4 @@ function mergeEmitResults(emitResults: ts.EmitResult[]): ts.EmitResult {
   }
 
   return {diagnostics, emitSkipped, emittedFiles};
-}
-
-/**
- * Find the 'r3_symbols.ts' file in the given `Program`, or return `null` if it wasn't there.
- */
-function getR3SymbolsFile(program: ts.Program): ts.SourceFile|null {
-  return program.getSourceFiles().find(file => file.fileName.indexOf('r3_symbols.ts') >= 0) || null;
-}
-
-/**
- * Determine if the given `Program` is @angular/core.
- */
-function isAngularCorePackage(program: ts.Program): boolean {
-  // Look for its_just_angular.ts somewhere in the program.
-  const r3Symbols = getR3SymbolsFile(program);
-  if (r3Symbols === null) {
-    return false;
-  }
-
-  // Look for the constant ITS_JUST_ANGULAR in that file.
-  return r3Symbols.statements.some(stmt => {
-    // The statement must be a variable declaration statement.
-    if (!ts.isVariableStatement(stmt)) {
-      return false;
-    }
-    // It must be exported.
-    if (stmt.modifiers === undefined ||
-        !stmt.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)) {
-      return false;
-    }
-    // It must declare ITS_JUST_ANGULAR.
-    return stmt.declarationList.declarations.some(decl => {
-      // The declaration must match the name.
-      if (!ts.isIdentifier(decl.name) || decl.name.text !== 'ITS_JUST_ANGULAR') {
-        return false;
-      }
-      // It must initialize the variable to true.
-      if (decl.initializer === undefined || decl.initializer.kind !== ts.SyntaxKind.TrueKeyword) {
-        return false;
-      }
-      // This definition matches.
-      return true;
-    });
-  });
-}
-
-export class ReferenceGraphAdapter implements ReferencesRegistry {
-  constructor(private graph: ReferenceGraph) {}
-
-  add(source: ts.Declaration, ...references: Reference<ts.Declaration>[]): void {
-    for (const {node} of references) {
-      let sourceFile = node.getSourceFile();
-      if (sourceFile === undefined) {
-        sourceFile = ts.getOriginalNode(node).getSourceFile();
-      }
-
-      // Only record local references (not references into .d.ts files).
-      if (sourceFile === undefined || !isDtsPath(sourceFile.fileName)) {
-        this.graph.add(source, node);
-      }
-    }
-  }
-}
-
-function shouldEnablePerfTracing(options: api.CompilerOptions): boolean {
-  return options.tracePerformance !== undefined;
 }

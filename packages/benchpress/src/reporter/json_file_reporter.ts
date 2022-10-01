@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -37,9 +37,12 @@ export class JsonFileReporter extends Reporter {
     super();
   }
 
-  reportMeasureValues(measureValues: MeasureValues): Promise<any> { return Promise.resolve(null); }
+  override reportMeasureValues(measureValues: MeasureValues): Promise<any> {
+    return Promise.resolve(null);
+  }
 
-  reportSample(completeSample: MeasureValues[], validSample: MeasureValues[]): Promise<any> {
+  override reportSample(completeSample: MeasureValues[], validSample: MeasureValues[]):
+      Promise<any> {
     const stats: {[key: string]: string} = {};
     sortedProps(this._description.metrics).forEach((metricName) => {
       stats[metricName] = formatStats(validSample, metricName);

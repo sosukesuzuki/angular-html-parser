@@ -21,16 +21,19 @@ module.exports = function(config) {
       'node_modules/core-js/client/shim.js',
 
       // zone.js
-      'node_modules/zone.js/dist/zone.js',
-      'node_modules/zone.js/dist/zone-testing.js',
+      'node_modules/zone.js/bundles/zone.umd.js',
+      'node_modules/zone.js/bundles/zone-testing.umd.js',
 
       // RxJs.
       { pattern: 'node_modules/rxjs/**/*.js', included: false, watched: false },
       { pattern: 'node_modules/rxjs/**/*.js.map', included: false, watched: false },
 
       // Angular itself and the testing library
-      {pattern: 'node_modules/@angular/**/*.js', included: false, watched: false},
-      {pattern: 'node_modules/@angular/**/*.js.map', included: false, watched: false},
+      { pattern: 'node_modules/@angular/**/*.mjs', included: false, watched: false },
+      { pattern: 'node_modules/@angular/**/*.mjs.map', included: false, watched: false },
+
+      { pattern: 'node_modules/tslib/tslib.js', included: false, watched: false },
+      { pattern: 'node_modules/systemjs-plugin-babel/**/*.js', included: false, watched: false },
 
       {pattern: 'systemjs.config.js', included: false, watched: false},
       'karma-test-shim.js',
@@ -44,12 +47,21 @@ module.exports = function(config) {
       // #enddocregion files
     ],
 
+    // This is needed, because the AngularJS files are loaded from `https://code.angularjs.org/`.
+    // Without this, latest browsers prevent loading the scripts from localhost with:
+    // ```
+    // Access to script at 'https://code.angularjs.org/1.5.5/angular.js' from origin
+    // 'http://localhost:9876' has been blocked by CORS policy: No 'Access-Control-Allow-Origin'
+    // header is present on the requested resource.
+    // ```
+    crossOriginAttribute: false,
+
     // #docregion html
     // proxied base paths for loading assets
     proxies: {
       // required for component assets fetched by Angular's compiler
-      "/phone-detail": '/base/app/phone-detail',
-      "/phone-list": '/base/app/phone-list'
+      '/phone-detail': '/base/app/phone-detail',
+      '/phone-list': '/base/app/phone-list'
     },
     // #enddocregion html
 

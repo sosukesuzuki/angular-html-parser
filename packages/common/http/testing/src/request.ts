@@ -1,13 +1,23 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {HttpErrorResponse, HttpEvent, HttpHeaders, HttpRequest, HttpResponse} from '@angular/common/http';
+import {HttpErrorResponse, HttpEvent, HttpHeaders, HttpRequest, HttpResponse, HttpStatusCode} from '@angular/common/http';
 import {Observer} from 'rxjs';
+
+/**
+ * Type that describes options that can be used to create an error
+ * in `TestRequest`.
+ */
+type TestRequestErrorOptions = {
+  headers?: HttpHeaders|{[name: string]: string | string[]},
+  status?: number,
+  statusText?: string,
+};
 
 /**
  * A mock requests that was received and is ready to be answered.
@@ -21,7 +31,9 @@ export class TestRequest {
   /**
    * Whether the request was cancelled after it was sent.
    */
-  get cancelled(): boolean { return this._cancelled; }
+  get cancelled(): boolean {
+    return this._cancelled;
+  }
 
   /**
    * @internal set by `HttpClientTestingBackend`
@@ -38,11 +50,14 @@ export class TestRequest {
    *
    * Both successful and unsuccessful responses can be delivered via `flush()`.
    */
-  flush(body: ArrayBuffer|Blob|string|number|Object|(string|number|Object|null)[]|null, opts: {
-    headers?: HttpHeaders | {[name: string]: string | string[]},
-    status?: number,
-    statusText?: string,
-  } = {}): void {
+  flush(
+      body: ArrayBuffer|Blob|boolean|string|number|Object|(boolean|string|number|Object|null)[]|
+      null,
+      opts: {
+        headers?: HttpHeaders|{[name: string]: string | string[]},
+        status?: number,
+        statusText?: string,
+      } = {}): void {
     if (this.cancelled) {
       throw new Error(`Cannot flush a cancelled request.`);
     }
@@ -51,10 +66,10 @@ export class TestRequest {
         (opts.headers instanceof HttpHeaders) ? opts.headers : new HttpHeaders(opts.headers);
     body = _maybeConvertBody(this.request.responseType, body);
     let statusText: string|undefined = opts.statusText;
-    let status: number = opts.status !== undefined ? opts.status : 200;
+    let status: number = opts.status !== undefined ? opts.status : HttpStatusCode.Ok;
     if (opts.status === undefined) {
       if (body === null) {
-        status = 204;
+        status = HttpStatusCode.NoContent;
         statusText = statusText || 'No Content';
       } else {
         statusText = statusText || 'OK';
@@ -73,12 +88,14 @@ export class TestRequest {
 
   /**
    * Resolve the request by returning an `ErrorEvent` (e.g. simulating a network failure).
+   * @deprecated Http requests never emit an `ErrorEvent`. Please specify a `ProgressEvent`.
    */
-  error(error: ErrorEvent, opts: {
-    headers?: HttpHeaders | {[name: string]: string | string[]},
-    status?: number,
-    statusText?: string,
-  } = {}): void {
+  error(error: ErrorEvent, opts?: TestRequestErrorOptions): void;
+  /**
+   * Resolve the request by returning an `ProgressEvent` (e.g. simulating a network failure).
+   */
+  error(error: ProgressEvent, opts?: TestRequestErrorOptions): void;
+  error(error: ProgressEvent|ErrorEvent, opts: TestRequestErrorOptions = {}): void {
     if (this.cancelled) {
       throw new Error(`Cannot return an error for a cancelled request.`);
     }
@@ -112,9 +129,8 @@ export class TestRequest {
 /**
  * Helper function to convert a response body to an ArrayBuffer.
  */
-function _toArrayBufferBody(
-    body: ArrayBuffer | Blob | string | number | Object |
-    (string | number | Object | null)[]): ArrayBuffer {
+function _toArrayBufferBody(body: ArrayBuffer|Blob|string|number|Object|
+                            (string | number | Object | null)[]): ArrayBuffer {
   if (typeof ArrayBuffer === 'undefined') {
     throw new Error('ArrayBuffer responses are not supported on this platform.');
   }
@@ -127,9 +143,8 @@ function _toArrayBufferBody(
 /**
  * Helper function to convert a response body to a Blob.
  */
-function _toBlob(
-    body: ArrayBuffer | Blob | string | number | Object |
-    (string | number | Object | null)[]): Blob {
+function _toBlob(body: ArrayBuffer|Blob|string|number|Object|
+                 (string | number | Object | null)[]): Blob {
   if (typeof Blob === 'undefined') {
     throw new Error('Blob responses are not supported on this platform.');
   }
@@ -146,7 +161,8 @@ function _toBlob(
  * Helper function to convert a response body to JSON data.
  */
 function _toJsonBody(
-    body: ArrayBuffer | Blob | string | number | Object | (string | number | Object | null)[],
+    body: ArrayBuffer|Blob|boolean|string|number|Object|
+    (boolean | string | number | Object | null)[],
     format: string = 'JSON'): Object|string|number|(Object | string | number)[] {
   if (typeof ArrayBuffer !== 'undefined' && body instanceof ArrayBuffer) {
     throw new Error(`Automatic conversion to ${format} is not supported for ArrayBuffers.`);
@@ -155,7 +171,7 @@ function _toJsonBody(
     throw new Error(`Automatic conversion to ${format} is not supported for Blobs.`);
   }
   if (typeof body === 'string' || typeof body === 'number' || typeof body === 'object' ||
-      Array.isArray(body)) {
+      typeof body === 'boolean' || Array.isArray(body)) {
     return body;
   }
   throw new Error(`Automatic conversion to ${format} is not supported for response type.`);
@@ -164,9 +180,8 @@ function _toJsonBody(
 /**
  * Helper function to convert a response body to a string.
  */
-function _toTextBody(
-    body: ArrayBuffer | Blob | string | number | Object |
-    (string | number | Object | null)[]): string {
+function _toTextBody(body: ArrayBuffer|Blob|string|number|Object|
+                     (string | number | Object | null)[]): string {
   if (typeof body === 'string') {
     return body;
   }
@@ -183,9 +198,9 @@ function _toTextBody(
  * Convert a response body to the requested type.
  */
 function _maybeConvertBody(
-    responseType: string, body: ArrayBuffer | Blob | string | number | Object |
-        (string | number | Object | null)[] | null): ArrayBuffer|Blob|string|number|Object|
-    (string | number | Object | null)[]|null {
+    responseType: string,
+    body: ArrayBuffer|Blob|string|number|Object|(string | number | Object | null)[]|
+    null): ArrayBuffer|Blob|string|number|Object|(string | number | Object | null)[]|null {
   if (body === null) {
     return null;
   }

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -9,7 +9,7 @@
 import {runOneBuild} from '@angular/bazel';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as ts from 'typescript';
+import ts from 'typescript';
 
 import {createTsConfig} from './tsconfig_template';
 
@@ -19,7 +19,9 @@ export interface TestSupport {
   angularCorePath: string;
   typesRoots: string;
   writeConfig({
-      srcTargetPath, depPaths, pathMapping,
+    srcTargetPath,
+    depPaths,
+    pathMapping,
   }: {
     srcTargetPath: string,
     depPaths?: string[],
@@ -30,16 +32,16 @@ export interface TestSupport {
   writeFiles(...mockDirs: {[fileName: string]: string}[]): void;
   shouldExist(fileName: string): void;
   shouldNotExist(fileName: string): void;
-  runOneBuild(): boolean;
+  runOneBuild(): Promise<boolean>;
 }
 
-export function setup(
-    {
-        bazelBin = 'bazel-bin', tsconfig = 'tsconfig.json',
-    }: {
-      bazelBin?: string,
-      tsconfig?: string,
-    } = {}): TestSupport {
+export function setup({
+  bazelBin = 'bazel-bin',
+  tsconfig = 'tsconfig.json',
+}: {
+  bazelBin?: string,
+  tsconfig?: string,
+} = {}): TestSupport {
   const runfilesPath = process.env['TEST_SRCDIR'];
 
   const basePath = makeTempDir(runfilesPath);
@@ -93,12 +95,17 @@ export function setup(
   }
 
   function writeFiles(...mockDirs: {[fileName: string]: string}[]) {
-    mockDirs.forEach(
-        (dir) => { Object.keys(dir).forEach((fileName) => { write(fileName, dir[fileName]); }); });
+    mockDirs.forEach((dir) => {
+      Object.keys(dir).forEach((fileName) => {
+        write(fileName, dir[fileName]);
+      });
+    });
   }
 
   function writeConfig({
-      srcTargetPath, depPaths = [], pathMapping = [],
+    srcTargetPath,
+    depPaths = [],
+    pathMapping = [],
   }: {
     srcTargetPath: string,
     depPaths?: string[],
@@ -133,7 +140,8 @@ export function setup(
       defaultTsConfig: emptyTsConfig.config,
       rootDir: basePath,
       target: target,
-      outDir: bazelBinPath, compilationTargetSrc,
+      outDir: bazelBinPath,
+      compilationTargetSrc,
       files: files,
       pathMapping: pathMappingObj,
     });
@@ -153,7 +161,9 @@ export function setup(
     }
   }
 
-  function runOneBuildImpl(): boolean { return runOneBuild(['@' + tsConfigJsonPath]); }
+  async function runOneBuildImpl(): Promise<boolean> {
+    return runOneBuild(['@' + tsConfigJsonPath]);
+  }
 }
 
 function makeTempDir(baseDir: string): string {

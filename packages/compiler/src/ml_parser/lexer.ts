@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -9,38 +9,10 @@
 import * as chars from '../chars';
 import {ParseError, ParseLocation, ParseSourceFile, ParseSourceSpan} from '../parse_util';
 
+import {NAMED_ENTITIES} from './entities';
 import {DEFAULT_INTERPOLATION_CONFIG, InterpolationConfig} from './interpolation_config';
-import {NAMED_ENTITIES, TagContentType, TagDefinition, mergeNsAndName} from './tags';
-
-export enum TokenType {
-  TAG_OPEN_START,
-  TAG_OPEN_END,
-  TAG_OPEN_END_VOID,
-  TAG_CLOSE,
-  TEXT,
-  ESCAPABLE_RAW_TEXT,
-  RAW_TEXT,
-  COMMENT_START,
-  COMMENT_END,
-  CDATA_START,
-  CDATA_END,
-  ATTR_NAME,
-  ATTR_QUOTE,
-  ATTR_VALUE,
-  DOC_TYPE_START,
-  DOC_TYPE_END,
-  EXPANSION_FORM_START,
-  EXPANSION_CASE_VALUE,
-  EXPANSION_CASE_EXP_START,
-  EXPANSION_CASE_EXP_END,
-  EXPANSION_FORM_END,
-  EOF
-}
-
-export class Token {
-  constructor(
-      public type: TokenType|null, public parts: string[], public sourceSpan: ParseSourceSpan) {}
-}
+import {TagContentType, TagDefinition, mergeNsAndName} from './tags';
+import {IncompleteTagOpenToken, TagOpenStartToken, Token, TokenType} from './tokens';
 
 export class TokenError extends ParseError {
   constructor(errorMsg: string, public tokenType: TokenType|null, span: ParseSourceSpan) {
@@ -49,7 +21,9 @@ export class TokenError extends ParseError {
 }
 
 export class TokenizeResult {
-  constructor(public tokens: Token[], public errors: TokenError[]) {}
+  constructor(
+      public tokens: Token[], public errors: TokenError[],
+      public nonNormalizedIcuExpressions: Token[]) {}
 }
 
 export interface LexerRange {
@@ -97,11 +71,24 @@ export interface TokenizeOptions {
    */
   escapedString?: boolean;
   /**
+   * If this text is stored in an external template (e.g. via `templateUrl`) then we need to decide
+   * whether or not to normalize the line-endings (from `\r\n` to `\n`) when processing ICU
+   * expressions.
+   *
+   * If `true` then we will normalize ICU expression line endings.
+   * The default is `false`, but this will be switched in a future major release.
+   */
+  i18nNormalizeLineEndingsInICUs?: boolean;
+  /**
    * An array of characters that should be considered as leading trivia.
    * Leading trivia are characters that are not important to the developer, and so should not be
    * included in source-map segments.  A common example is whitespace.
    */
   leadingTriviaChars?: string[];
+  /**
+   * If true, do not convert CRLF to LF.
+   */
+  preserveLineEndings?: boolean;
 
   canSelfClose?: boolean;
   allowHtmComponentClosingTags?: boolean;
@@ -110,7 +97,10 @@ export interface TokenizeOptions {
 export function tokenize(
     source: string, url: string, getTagContentType: (tagName: string, prefix: string, hasParent: boolean, attrs: Array<{prefix: string, name: string, value?: string}>) => TagContentType,
     options: TokenizeOptions = {}): TokenizeResult {
-  return new _Tokenizer(new ParseSourceFile(source, url), getTagContentType, options).tokenize();
+  const tokenizer = new _Tokenizer(new ParseSourceFile(source, url), getTagContentType, options);
+  tokenizer.tokenize();
+  return new TokenizeResult(
+      mergeTextTokens(tokenizer.tokens), tokenizer.errors, tokenizer.nonNormalizedIcuExpressions);
 }
 
 const _CR_OR_CRLF_REGEXP = /\r\n?/g;
@@ -124,11 +114,21 @@ function _unknownEntityErrorMsg(entitySrc: string): string {
   return `Unknown entity "${entitySrc}" - use the "&#<decimal>;" or  "&#x<hex>;" syntax`;
 }
 
+function _unparsableEntityErrorMsg(type: CharacterReferenceType, entityStr: string): string {
+  return `Unable to parse entity "${entityStr}" - ${
+      type} character reference entities must end with ";"`;
+}
+
+enum CharacterReferenceType {
+  HEX = 'hexadecimal',
+  DEC = 'decimal',
+}
+
 class _ControlFlowError {
   constructor(public error: TokenError) {}
 }
 
-// See http://www.w3.org/TR/html51/syntax.html#writing
+// See https://www.w3.org/TR/html51/syntax.html#writing-html-documents
 class _Tokenizer {
   private _cursor: CharacterCursor;
   private _tokenizeIcu: boolean;
@@ -140,9 +140,13 @@ class _Tokenizer {
   private _currentTokenType: TokenType|null = null;
   private _expansionCaseStack: TokenType[] = [];
   private _inInterpolation: boolean = false;
+  private readonly _preserveLineEndings: boolean;
+  private readonly _escapedString: boolean;
+  private readonly _i18nNormalizeLineEndingsInICUs: boolean;
   private _fullNameStack: string[] = [];
   tokens: Token[] = [];
   errors: TokenError[] = [];
+  nonNormalizedIcuExpressions: Token[] = [];
 
   /**
    * @param _file The html source file being tokenized.
@@ -162,6 +166,9 @@ class _Tokenizer {
         options.range || {endPos: _file.content.length, startPos: 0, startLine: 0, startCol: 0};
     this._cursor = options.escapedString ? new EscapedCharacterCursor(_file, range) :
                                            new PlainCharacterCursor(_file, range);
+    this._preserveLineEndings = options.preserveLineEndings || false;
+    this._escapedString = options.escapedString || false;
+    this._i18nNormalizeLineEndingsInICUs = options.i18nNormalizeLineEndingsInICUs || false;
     try {
       this._cursor.init();
     } catch (e) {
@@ -170,14 +177,17 @@ class _Tokenizer {
   }
 
   private _processCarriageReturns(content: string): string {
-    // http://www.w3.org/TR/html5/syntax.html#preprocessing-the-input-stream
+    if (this._preserveLineEndings) {
+      return content;
+    }
+    // https://www.w3.org/TR/html51/syntax.html#preprocessing-the-input-stream
     // In order to keep the original position in the source, we can not
     // pre-process it.
     // Instead CRs are processed right before instantiating the tokens.
     return content.replace(_CR_OR_CRLF_REGEXP, '\n');
   }
 
-  tokenize(): TokenizeResult {
+  tokenize(): void {
     while (this._cursor.peek() !== chars.$EOF) {
       const start = this._cursor.clone();
       try {
@@ -204,7 +214,11 @@ class _Tokenizer {
             }
           }
         } else if (!(this._tokenizeIcu && this._tokenizeExpansionForm())) {
-          this._consumeText();
+          // In (possibly interpolated) text the end of the text is given by `isTextEnd()`, while
+          // the premature end of an interpolation is given by the start of a new HTML element.
+          this._consumeWithInterpolation(
+              TokenType.TEXT, TokenType.INTERPOLATION, () => this._isTextEnd(),
+              () => this._isTagStart());
         }
       } catch (e) {
         this.handleError(e);
@@ -212,7 +226,6 @@ class _Tokenizer {
     }
     this._beginToken(TokenType.EOF);
     this._endToken([]);
-    return new TokenizeResult(mergeTextTokens(this.tokens), this.errors);
   }
 
   /**
@@ -250,7 +263,7 @@ class _Tokenizer {
     this._currentTokenType = type;
   }
 
-  private _endToken(parts: string[], end = this._cursor.clone()): Token {
+  private _endToken(parts: string[], end?: CharacterCursor): Token {
     if (this._currentTokenStart === null) {
       throw new TokenError(
           'Programming error - attempted to end a token when there was no start to the token',
@@ -261,9 +274,12 @@ class _Tokenizer {
           'Programming error - attempted to end a token which has no token type', null,
           this._cursor.getSpan(this._currentTokenStart));
     }
-    const token = new Token(
-        this._currentTokenType, parts,
-        this._cursor.getSpan(this._currentTokenStart, this._leadingTriviaCodePoints));
+    const token = {
+      type: this._currentTokenType,
+      parts,
+      sourceSpan:
+          (end ?? this._cursor).getSpan(this._currentTokenStart, this._leadingTriviaCodePoints),
+    } as Token;
     this.tokens.push(token);
     this._currentTokenStart = null;
     this._currentTokenType = null;
@@ -365,8 +381,7 @@ class _Tokenizer {
   private _requireCharCodeUntilFn(predicate: (code: number) => boolean, len: number) {
     const start = this._cursor.clone();
     this._attemptCharCodeUntilFn(predicate);
-    const end = this._cursor.clone();
-    if (end.diff(start) < len) {
+    if (this._cursor.diff(start) < len) {
       throw this._createError(
           _unexpectedCharacterErrorMsg(this._cursor.peek()), this._cursor.getSpan(start));
     }
@@ -378,19 +393,16 @@ class _Tokenizer {
     }
   }
 
-  private _readChar(decodeEntities: boolean): string {
-    if (decodeEntities && this._cursor.peek() === chars.$AMPERSAND) {
-      return this._decodeEntity();
-    } else {
-      // Don't rely upon reading directly from `_input` as the actual char value
-      // may have been generated from an escape sequence.
-      const char = String.fromCodePoint(this._cursor.peek());
-      this._cursor.advance();
-      return char;
-    }
+  private _readChar(): string {
+    // Don't rely upon reading directly from `_input` as the actual char value
+    // may have been generated from an escape sequence.
+    const char = String.fromCodePoint(this._cursor.peek());
+    this._cursor.advance();
+    return char;
   }
 
-  private _decodeEntity(): string {
+  private _consumeEntity(textTokenType: TokenType): void {
+    this._beginToken(TokenType.ENCODED_ENTITY);
     const start = this._cursor.clone();
     this._cursor.advance();
     if (this._attemptCharCode(chars.$HASH)) {
@@ -398,14 +410,19 @@ class _Tokenizer {
       const codeStart = this._cursor.clone();
       this._attemptCharCodeUntilFn(isDigitEntityEnd);
       if (this._cursor.peek() != chars.$SEMICOLON) {
+        // Advance cursor to include the peeked character in the string provided to the error
+        // message.
+        this._cursor.advance();
+        const entityType = isHex ? CharacterReferenceType.HEX : CharacterReferenceType.DEC;
         throw this._createError(
-            _unexpectedCharacterErrorMsg(this._cursor.peek()), this._cursor.getSpan());
+            _unparsableEntityErrorMsg(entityType, this._cursor.getChars(start)),
+            this._cursor.getSpan());
       }
       const strNum = this._cursor.getChars(codeStart);
       this._cursor.advance();
       try {
         const charCode = parseInt(strNum, isHex ? 16 : 10);
-        return String.fromCharCode(charCode);
+        this._endToken([String.fromCharCode(charCode), this._cursor.getChars(start)]);
       } catch {
         throw this._createError(
             _unknownEntityErrorMsg(this._cursor.getChars(start)), this._cursor.getSpan());
@@ -414,21 +431,25 @@ class _Tokenizer {
       const nameStart = this._cursor.clone();
       this._attemptCharCodeUntilFn(isNamedEntityEnd);
       if (this._cursor.peek() != chars.$SEMICOLON) {
+        // No semicolon was found so abort the encoded entity token that was in progress, and treat
+        // this as a text token
+        this._beginToken(textTokenType, start);
         this._cursor = nameStart;
-        return '&';
+        this._endToken(['&']);
+      } else {
+        const name = this._cursor.getChars(nameStart);
+        this._cursor.advance();
+        const char = NAMED_ENTITIES[name];
+        if (!char) {
+          throw this._createError(_unknownEntityErrorMsg(name), this._cursor.getSpan(start));
+        }
+        this._endToken([char, `&${name};`]);
       }
-      const name = this._cursor.getChars(nameStart);
-      this._cursor.advance();
-      const char = NAMED_ENTITIES[name];
-      if (!char) {
-        throw this._createError(_unknownEntityErrorMsg(name), this._cursor.getSpan(start));
-      }
-      return char;
     }
   }
 
-  private _consumeRawText(decodeEntities: boolean, endMarkerPredicate: () => boolean): Token {
-    this._beginToken(decodeEntities ? TokenType.ESCAPABLE_RAW_TEXT : TokenType.RAW_TEXT);
+  private _consumeRawText(consumeEntities: boolean, endMarkerPredicate: () => boolean): void {
+    this._beginToken(consumeEntities ? TokenType.ESCAPABLE_RAW_TEXT : TokenType.RAW_TEXT);
     const parts: string[] = [];
     while (true) {
       const tagCloseStart = this._cursor.clone();
@@ -437,9 +458,16 @@ class _Tokenizer {
       if (foundEndMarker) {
         break;
       }
-      parts.push(this._readChar(decodeEntities));
+      if (consumeEntities && this._cursor.peek() === chars.$AMPERSAND) {
+        this._endToken([this._processCarriageReturns(parts.join(''))]);
+        parts.length = 0;
+        this._consumeEntity(TokenType.ESCAPABLE_RAW_TEXT);
+        this._beginToken(TokenType.ESCAPABLE_RAW_TEXT);
+      } else {
+        parts.push(this._readChar());
+      }
     }
-    return this._endToken([this._processCarriageReturns(parts.join(''))]);
+    this._endToken([this._processCarriageReturns(parts.join(''))]);
   }
 
   private _consumeComment(start: CharacterCursor) {
@@ -501,9 +529,7 @@ class _Tokenizer {
   private _consumeTagOpen(start: CharacterCursor) {
     let tagName: string;
     let prefix: string;
-    let openTagToken: Token|undefined;
-    let tokensBeforeTagOpen = this.tokens.length;
-    const innerStart = this._cursor.clone();
+    let openTagToken: TagOpenStartToken|IncompleteTagOpenToken|undefined;
     const attrs: Array<{prefix: string, name: string, value?: string}> = [];
     try {
       if (!chars.isAsciiLetter(this._cursor.peek())) {
@@ -515,7 +541,8 @@ class _Tokenizer {
       prefix = openTagToken.parts[0];
       tagName = openTagToken.parts[1];
       this._attemptCharCodeUntilFn(isNotWhitespace);
-      while (this._cursor.peek() !== chars.$SLASH && this._cursor.peek() !== chars.$GT) {
+      while (this._cursor.peek() !== chars.$SLASH && this._cursor.peek() !== chars.$GT &&
+             this._cursor.peek() !== chars.$LT && this._cursor.peek() !== chars.$EOF) {
         const [prefix, name] = this._consumeAttributeName();
         this._attemptCharCodeUntilFn(isNotWhitespace);
         if (this._attemptCharCode(chars.$EQ)) {
@@ -530,14 +557,15 @@ class _Tokenizer {
       this._consumeTagOpenEnd();
     } catch (e) {
       if (e instanceof _ControlFlowError) {
-        // When the start tag is invalid (including invalid "attributes"), assume we want a "<"
-        this._cursor = innerStart;
         if (openTagToken) {
-          this.tokens.length = tokensBeforeTagOpen;
+          // We errored before we could close the opening tag, so it is incomplete.
+          openTagToken.type = TokenType.INCOMPLETE_TAG_OPEN;
+        } else {
+          // When the start tag is invalid, assume we want a "<" as text.
+          // Back to back text tokens are merged at the end.
+          this._beginToken(TokenType.TEXT, start);
+          this._endToken(['<']);
         }
-        // Back to back text tokens are merged at the end
-        this._beginToken(TokenType.TEXT, start);
-        this._endToken(['<']);
         return;
       }
 
@@ -558,8 +586,8 @@ class _Tokenizer {
     }
   }
 
-  private _consumeRawTextWithTagClose(prefix: string, tagName: string, decodeEntities: boolean) {
-    const textToken = this._consumeRawText(decodeEntities, () => {
+  private _consumeRawTextWithTagClose(prefix: string, tagName: string, consumeEntities: boolean) {
+    this._consumeRawText(consumeEntities, () => {
       if (!this._attemptCharCode(chars.$LT)) return false;
       if (!this._attemptCharCode(chars.$SLASH)) return false;
       this._attemptCharCodeUntilFn(isNotWhitespace);
@@ -574,10 +602,10 @@ class _Tokenizer {
     this._handleFullNameStackForTagClose(prefix, tagName);
   }
 
-  private _consumeTagOpenStart(start: CharacterCursor) {
+  private _consumeTagOpenStart(start: CharacterCursor): TagOpenStartToken {
     this._beginToken(TokenType.TAG_OPEN_START, start);
     const parts = this._consumePrefixAndName();
-    return this._endToken(parts);
+    return this._endToken(parts) as TagOpenStartToken;
   }
 
   private _consumeAttributeName() {
@@ -594,28 +622,28 @@ class _Tokenizer {
   private _consumeAttributeValue() {
     let value: string;
     if (this._cursor.peek() === chars.$SQ || this._cursor.peek() === chars.$DQ) {
-      this._beginToken(TokenType.ATTR_QUOTE);
       const quoteChar = this._cursor.peek();
-      this._cursor.advance();
-      this._endToken([String.fromCodePoint(quoteChar)]);
-      this._beginToken(TokenType.ATTR_VALUE);
-      const parts: string[] = [];
-      while (this._cursor.peek() !== quoteChar) {
-        parts.push(this._readChar(true));
-      }
-      value = this._processCarriageReturns(parts.join(''));
-      this._endToken([value]);
-      this._beginToken(TokenType.ATTR_QUOTE);
-      this._cursor.advance();
-      this._endToken([String.fromCodePoint(quoteChar)]);
+      this._consumeQuote(quoteChar);
+      // In an attribute then end of the attribute value and the premature end to an interpolation
+      // are both triggered by the `quoteChar`.
+      const endPredicate = () => this._cursor.peek() === quoteChar;
+      value = this._consumeWithInterpolation(
+          TokenType.ATTR_VALUE_TEXT, TokenType.ATTR_VALUE_INTERPOLATION, endPredicate,
+          endPredicate);
+      this._consumeQuote(quoteChar);
     } else {
-      this._beginToken(TokenType.ATTR_VALUE);
-      const valueStart = this._cursor.clone();
-      this._requireCharCodeUntilFn(isNameEnd, 1);
-      value = this._processCarriageReturns(this._cursor.getChars(valueStart));
-      this._endToken([value]);
+      const endPredicate = () => isNameEnd(this._cursor.peek());
+      value = this._consumeWithInterpolation(
+          TokenType.ATTR_VALUE_TEXT, TokenType.ATTR_VALUE_INTERPOLATION, endPredicate,
+          endPredicate);
     }
     return value;
+  }
+
+  private _consumeQuote(quoteChar: number) {
+    this._beginToken(TokenType.ATTR_QUOTE);
+    this._requireCharCode(quoteChar);
+    this._endToken([String.fromCodePoint(quoteChar)]);
   }
 
   private _consumeTagOpenEnd() {
@@ -653,7 +681,17 @@ class _Tokenizer {
 
     this._beginToken(TokenType.RAW_TEXT);
     const condition = this._readUntil(chars.$COMMA);
-    this._endToken([condition]);
+    const normalizedCondition = this._processCarriageReturns(condition);
+    if (this._i18nNormalizeLineEndingsInICUs) {
+      // We explicitly want to normalize line endings for this text.
+      this._endToken([normalizedCondition]);
+    } else {
+      // We are not normalizing line endings.
+      const conditionToken = this._endToken([condition]);
+      if (normalizedCondition !== condition) {
+        this.nonNormalizedIcuExpressions.push(conditionToken);
+      }
+    }
     this._requireCharCode(chars.$COMMA);
     this._attemptCharCodeUntilFn(isNotWhitespace);
 
@@ -695,30 +733,123 @@ class _Tokenizer {
     this._expansionCaseStack.pop();
   }
 
-  private _consumeText() {
-    const start = this._cursor.clone();
-    this._beginToken(TokenType.TEXT, start);
+  /**
+   * Consume a string that may contain interpolation expressions.
+   *
+   * The first token consumed will be of `tokenType` and then there will be alternating
+   * `interpolationTokenType` and `tokenType` tokens until the `endPredicate()` returns true.
+   *
+   * If an interpolation token ends prematurely it will have no end marker in its `parts` array.
+   *
+   * @param textTokenType the kind of tokens to interleave around interpolation tokens.
+   * @param interpolationTokenType the kind of tokens that contain interpolation.
+   * @param endPredicate a function that should return true when we should stop consuming.
+   * @param endInterpolation a function that should return true if there is a premature end to an
+   *     interpolation expression - i.e. before we get to the normal interpolation closing marker.
+   */
+  private _consumeWithInterpolation(
+      textTokenType: TokenType, interpolationTokenType: TokenType, endPredicate: () => boolean,
+      endInterpolation: () => boolean) {
+    this._beginToken(textTokenType);
     const parts: string[] = [];
 
-    do {
+    while (!endPredicate()) {
+      const current = this._cursor.clone();
       if (this._interpolationConfig && this._attemptStr(this._interpolationConfig.start)) {
-        parts.push(this._interpolationConfig.start);
-        this._inInterpolation = true;
-      } else if (
-          this._interpolationConfig && this._inInterpolation &&
-          this._attemptStr(this._interpolationConfig.end)) {
-        parts.push(this._interpolationConfig.end);
-        this._inInterpolation = false;
+        this._endToken([this._processCarriageReturns(parts.join(''))], current);
+        parts.length = 0;
+        this._consumeInterpolation(interpolationTokenType, current, endInterpolation);
+        this._beginToken(textTokenType);
+      } else if (this._cursor.peek() === chars.$AMPERSAND) {
+        this._endToken([this._processCarriageReturns(parts.join(''))]);
+        parts.length = 0;
+        this._consumeEntity(textTokenType);
+        this._beginToken(textTokenType);
       } else {
-        parts.push(this._readChar(true));
+        parts.push(this._readChar());
       }
-    } while (!this._isTextEnd());
+    }
 
-    this._endToken([this._processCarriageReturns(parts.join(''))]);
+    // It is possible that an interpolation was started but not ended inside this text token.
+    // Make sure that we reset the state of the lexer correctly.
+    this._inInterpolation = false;
+
+    const value = this._processCarriageReturns(parts.join(''));
+    this._endToken([value]);
+    return value;
+  }
+
+  /**
+   * Consume a block of text that has been interpreted as an Angular interpolation.
+   *
+   * @param interpolationTokenType the type of the interpolation token to generate.
+   * @param interpolationStart a cursor that points to the start of this interpolation.
+   * @param prematureEndPredicate a function that should return true if the next characters indicate
+   *     an end to the interpolation before its normal closing marker.
+   */
+  private _consumeInterpolation(
+      interpolationTokenType: TokenType, interpolationStart: CharacterCursor,
+      prematureEndPredicate: (() => boolean)|null): void {
+    const parts: string[] = [];
+    this._beginToken(interpolationTokenType, interpolationStart);
+    parts.push(this._interpolationConfig.start);
+
+    // Find the end of the interpolation, ignoring content inside quotes.
+    const expressionStart = this._cursor.clone();
+    let inQuote: number|null = null;
+    let inComment = false;
+    while (this._cursor.peek() !== chars.$EOF &&
+           (prematureEndPredicate === null || !prematureEndPredicate())) {
+      const current = this._cursor.clone();
+
+      if (this._isTagStart()) {
+        // We are starting what looks like an HTML element in the middle of this interpolation.
+        // Reset the cursor to before the `<` character and end the interpolation token.
+        // (This is actually wrong but here for backward compatibility).
+        this._cursor = current;
+        parts.push(this._getProcessedChars(expressionStart, current));
+        this._endToken(parts);
+        return;
+      }
+
+      if (inQuote === null) {
+        if (this._attemptStr(this._interpolationConfig.end)) {
+          // We are not in a string, and we hit the end interpolation marker
+          parts.push(this._getProcessedChars(expressionStart, current));
+          parts.push(this._interpolationConfig.end);
+          this._endToken(parts);
+          return;
+        } else if (this._attemptStr('//')) {
+          // Once we are in a comment we ignore any quotes
+          inComment = true;
+        }
+      }
+
+      const char = this._cursor.peek();
+      this._cursor.advance();
+      if (char === chars.$BACKSLASH) {
+        // Skip the next character because it was escaped.
+        this._cursor.advance();
+      } else if (char === inQuote) {
+        // Exiting the current quoted string
+        inQuote = null;
+      } else if (!inComment && inQuote === null && chars.isQuote(char)) {
+        // Entering a new quoted string
+        inQuote = char;
+      }
+    }
+
+    // We hit EOF without finding a closing interpolation marker
+    parts.push(this._getProcessedChars(expressionStart, this._cursor));
+    this._endToken(parts);
+  }
+
+  private _getProcessedChars(start: CharacterCursor, end: CharacterCursor): string {
+    return this._processCarriageReturns(end.getChars(start));
   }
 
   private _isTextEnd(): boolean {
-    if (this._cursor.peek() === chars.$LT || this._cursor.peek() === chars.$EOF) {
+    if (this._isTagStart() || this._cursor.peek() === chars.$EOF) {
       return true;
     }
 
@@ -734,6 +865,25 @@ class _Tokenizer {
       }
     }
 
+    return false;
+  }
+
+  /**
+   * Returns true if the current cursor is pointing to the start of a tag
+   * (opening/closing/comments/cdata/etc).
+   */
+  private _isTagStart(): boolean {
+    if (this._cursor.peek() === chars.$LT) {
+      // We assume that `<` followed by whitespace is not the start of an HTML element.
+      const tmp = this._cursor.clone();
+      tmp.advance();
+      // If the next character is alphabetic, ! nor / then it is a tag start
+      const code = tmp.peek();
+      if ((chars.$a <= code && code <= chars.$z) || (chars.$A <= code && code <= chars.$Z) ||
+          code === chars.$SLASH || code === chars.$BANG) {
+        return true;
+      }
+    }
     return false;
   }
 
@@ -788,8 +938,9 @@ function isNotWhitespace(code: number): boolean {
 }
 
 function isNameEnd(code: number): boolean {
-  return chars.isWhitespace(code) || code === chars.$GT || code === chars.$SLASH ||
-      code === chars.$SQ || code === chars.$DQ || code === chars.$EQ;
+  return chars.isWhitespace(code) || code === chars.$GT || code === chars.$LT ||
+      code === chars.$SLASH || code === chars.$SQ || code === chars.$DQ || code === chars.$EQ ||
+      code === chars.$EOF;
 }
 
 function isPrefixEnd(code: number): boolean {
@@ -798,19 +949,19 @@ function isPrefixEnd(code: number): boolean {
 }
 
 function isDigitEntityEnd(code: number): boolean {
-  return code == chars.$SEMICOLON || code == chars.$EOF || !chars.isAsciiHexDigit(code);
+  return code === chars.$SEMICOLON || code === chars.$EOF || !chars.isAsciiHexDigit(code);
 }
 
 function isNamedEntityEnd(code: number): boolean {
-  return code == chars.$SEMICOLON || code == chars.$EOF || !chars.isAsciiLetter(code);
+  return code === chars.$SEMICOLON || code === chars.$EOF || !chars.isAsciiLetter(code);
 }
 
 function isExpansionCaseStart(peek: number): boolean {
-  return peek === chars.$EQ || chars.isAsciiLetter(peek) || chars.isDigit(peek);
+  return peek !== chars.$RBRACE;
 }
 
 function compareCharCodeCaseInsensitive(code1: number, code2: number): boolean {
-  return toUpperCaseCharCode(code1) == toUpperCaseCharCode(code2);
+  return toUpperCaseCharCode(code1) === toUpperCaseCharCode(code2);
 }
 
 function toUpperCaseCharCode(code: number): number {
@@ -822,8 +973,10 @@ function mergeTextTokens(srcTokens: Token[]): Token[] {
   let lastDstToken: Token|undefined = undefined;
   for (let i = 0; i < srcTokens.length; i++) {
     const token = srcTokens[i];
-    if (lastDstToken && lastDstToken.type == TokenType.TEXT && token.type == TokenType.TEXT) {
-      lastDstToken.parts[0] ! += token.parts[0];
+    if ((lastDstToken && lastDstToken.type === TokenType.TEXT && token.type === TokenType.TEXT) ||
+        (lastDstToken && lastDstToken.type === TokenType.ATTR_VALUE_TEXT &&
+         token.type === TokenType.ATTR_VALUE_TEXT)) {
+      lastDstToken.parts[0]! += token.parts[0];
       lastDstToken.sourceSpan.end = token.sourceSpan.end;
     } else {
       lastDstToken = token;
@@ -879,7 +1032,18 @@ class PlainCharacterCursor implements CharacterCursor {
       this.file = fileOrCursor.file;
       this.input = fileOrCursor.input;
       this.end = fileOrCursor.end;
-      this.state = {...fileOrCursor.state};
+
+      const state = fileOrCursor.state;
+      // Note: avoid using `{...fileOrCursor.state}` here as that has a severe performance penalty.
+      // In ES5 bundles the object spread operator is translated into the `__assign` helper, which
+      // is not optimized by VMs as efficiently as a raw object literal. Since this constructor is
+      // called in tight loops, this difference matters.
+      this.state = {
+        peek: state.peek,
+        offset: state.offset,
+        line: state.line,
+        column: state.column,
+      };
     } else {
       if (!range) {
         throw new Error(
@@ -897,34 +1061,53 @@ class PlainCharacterCursor implements CharacterCursor {
     }
   }
 
-  clone(): PlainCharacterCursor { return new PlainCharacterCursor(this); }
+  clone(): PlainCharacterCursor {
+    return new PlainCharacterCursor(this);
+  }
 
-  peek() { return this.state.peek; }
-  charsLeft() { return this.end - this.state.offset; }
-  diff(other: this) { return this.state.offset - other.state.offset; }
+  peek() {
+    return this.state.peek;
+  }
+  charsLeft() {
+    return this.end - this.state.offset;
+  }
+  diff(other: this) {
+    return this.state.offset - other.state.offset;
+  }
 
-  advance(): void { this.advanceState(this.state); }
+  advance(): void {
+    this.advanceState(this.state);
+  }
 
-  init(): void { this.updatePeek(this.state); }
+  init(): void {
+    this.updatePeek(this.state);
+  }
 
   getSpan(start?: this, leadingTriviaCodePoints?: number[]): ParseSourceSpan {
     start = start || this;
+    let fullStart = start;
     if (leadingTriviaCodePoints) {
-      start = start.clone() as this;
       while (this.diff(start) > 0 && leadingTriviaCodePoints.indexOf(start.peek()) !== -1) {
+        if (fullStart === start) {
+          start = start.clone() as this;
+        }
         start.advance();
       }
     }
-    return new ParseSourceSpan(
-        new ParseLocation(start.file, start.state.offset, start.state.line, start.state.column),
-        new ParseLocation(this.file, this.state.offset, this.state.line, this.state.column));
+    const startLocation = this.locationFromCursor(start);
+    const endLocation = this.locationFromCursor(this);
+    const fullStartLocation =
+        fullStart !== start ? this.locationFromCursor(fullStart) : startLocation;
+    return new ParseSourceSpan(startLocation, endLocation, fullStartLocation);
   }
 
   getChars(start: this): string {
     return this.input.substring(start.state.offset, this.state.offset);
   }
 
-  charAt(pos: number): number { return this.input.charCodeAt(pos); }
+  charAt(pos: number): number {
+    return this.input.charCodeAt(pos);
+  }
 
   protected advanceState(state: CursorState) {
     if (state.offset >= this.end) {
@@ -945,6 +1128,11 @@ class PlainCharacterCursor implements CharacterCursor {
   protected updatePeek(state: CursorState): void {
     state.peek = state.offset >= this.end ? chars.$EOF : this.charAt(state.offset);
   }
+
+  private locationFromCursor(cursor: this): ParseLocation {
+    return new ParseLocation(
+        cursor.file, cursor.state.offset, cursor.state.line, cursor.state.column);
+  }
 }
 
 class EscapedCharacterCursor extends PlainCharacterCursor {
@@ -957,25 +1145,27 @@ class EscapedCharacterCursor extends PlainCharacterCursor {
       super(fileOrCursor);
       this.internalState = {...fileOrCursor.internalState};
     } else {
-      super(fileOrCursor, range !);
+      super(fileOrCursor, range!);
       this.internalState = this.state;
     }
   }
 
-  advance(): void {
+  override advance(): void {
     this.state = this.internalState;
     super.advance();
     this.processEscapeSequence();
   }
 
-  init(): void {
+  override init(): void {
     super.init();
     this.processEscapeSequence();
   }
 
-  clone(): EscapedCharacterCursor { return new EscapedCharacterCursor(this); }
+  override clone(): EscapedCharacterCursor {
+    return new EscapedCharacterCursor(this);
+  }
 
-  getChars(start: this): string {
+  override getChars(start: this): string {
     const cursor = start.clone();
     let chars = '';
     while (cursor.internalState.offset < this.internalState.offset) {
@@ -1080,7 +1270,7 @@ class EscapedCharacterCursor extends PlainCharacterCursor {
   }
 
   protected decodeHexDigits(start: EscapedCharacterCursor, length: number): number {
-    const hex = this.input.substr(start.internalState.offset, length);
+    const hex = this.input.slice(start.internalState.offset, start.internalState.offset + length);
     const charCode = parseInt(hex, 16);
     if (!isNaN(charCode)) {
       return charCode;

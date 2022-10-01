@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -9,7 +9,7 @@
 import {ApplicationRef, NgModuleRef} from '@angular/core';
 
 import {bindAction, profile} from '../../util';
-import {buildTree, emptyTree} from '../util';
+import {buildTree, emptyTree, initTreeUtils} from '../util';
 
 import {AppModule, TreeComponent} from './tree';
 
@@ -40,9 +40,11 @@ export function init(moduleRef: NgModuleRef<AppModule>) {
 
   const injector = moduleRef.injector;
   appRef = injector.get(ApplicationRef);
-  const numberOfChecksEl = document.getElementById('numberOfChecks') !;
+  const numberOfChecksEl = document.getElementById('numberOfChecks')!;
 
   tree = appRef.components[0].instance;
+
+  initTreeUtils();
 
   bindAction('#destroyDom', destroyDom);
   bindAction('#createDom', createDom);

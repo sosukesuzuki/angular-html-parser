@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -11,6 +11,12 @@ import {Injectable, NgZone, Renderer2, RendererFactory2, RendererStyleFlags2, Re
 
 const ANIMATION_PREFIX = '@';
 const DISABLE_ANIMATIONS_FLAG = '@.disabled';
+
+// Define a recursive type to allow for nested arrays of `AnimationTriggerMetadata`. Note that an
+// interface declaration is used as TypeScript prior to 3.7 does not support recursive type
+// references, see https://github.com/microsoft/TypeScript/pull/33050 for details.
+type NestedAnimationTriggerMetadata = AnimationTriggerMetadata|RecursiveAnimationTriggerMetadata;
+interface RecursiveAnimationTriggerMetadata extends Array<NestedAnimationTriggerMetadata> {}
 
 @Injectable()
 export class AnimationRendererFactory implements RendererFactory2 {
@@ -24,12 +30,13 @@ export class AnimationRendererFactory implements RendererFactory2 {
   constructor(
       private delegate: RendererFactory2, private engine: AnimationEngine, private _zone: NgZone) {
     engine.onRemovalComplete = (element: any, delegate: Renderer2) => {
-      // Note: if an component element has a leave animation, and the component
-      // a host leave animation, the view engine will call `removeChild` for the parent
+      // Note: if a component element has a leave animation, and a host leave animation,
+      // the view engine will call `removeChild` for the parent
       // component renderer as well as for the child component renderer.
       // Therefore, we need to check if we already removed the element.
-      if (delegate && delegate.parentNode(element)) {
-        delegate.removeChild(element.parentNode, element);
+      const parentNode = delegate?.parentNode(element);
+      if (parentNode) {
+        delegate.removeChild(parentNode, element);
       }
     };
   }
@@ -55,10 +62,17 @@ export class AnimationRendererFactory implements RendererFactory2 {
     this._currentId++;
 
     this.engine.register(namespaceId, hostElement);
-    const animationTriggers = type.data['animation'] as AnimationTriggerMetadata[];
-    animationTriggers.forEach(
-        trigger => this.engine.registerTrigger(
-            componentId, namespaceId, hostElement, trigger.name, trigger));
+
+    const registerTrigger = (trigger: NestedAnimationTriggerMetadata) => {
+      if (Array.isArray(trigger)) {
+        trigger.forEach(registerTrigger);
+      } else {
+        this.engine.registerTrigger(componentId, namespaceId, hostElement, trigger.name, trigger);
+      }
+    };
+    const animationTriggers = type.data['animation'] as NestedAnimationTriggerMetadata[];
+    animationTriggers.forEach(registerTrigger);
+
     return new AnimationRenderer(this, namespaceId, delegate, this.engine);
   }
 
@@ -71,7 +85,9 @@ export class AnimationRendererFactory implements RendererFactory2 {
 
   private _scheduleCountTask() {
     // always use promise to schedule microtask instead of use Zone
-    this.promise.then(() => { this._microtaskId++; });
+    this.promise.then(() => {
+      this._microtaskId++;
+    });
   }
 
   /** @internal */
@@ -112,16 +128,20 @@ export class AnimationRendererFactory implements RendererFactory2 {
     }
   }
 
-  whenRenderingDone(): Promise<any> { return this.engine.whenRenderingDone(); }
+  whenRenderingDone(): Promise<any> {
+    return this.engine.whenRenderingDone();
+  }
 }
 
 export class BaseAnimationRenderer implements Renderer2 {
   constructor(
       protected namespaceId: string, public delegate: Renderer2, public engine: AnimationEngine) {
-    this.destroyNode = this.delegate.destroyNode ? (n) => delegate.destroyNode !(n) : null;
+    this.destroyNode = this.delegate.destroyNode ? (n) => delegate.destroyNode!(n) : null;
   }
 
-  get data() { return this.delegate.data; }
+  get data() {
+    return this.delegate.data;
+  }
 
   destroyNode: ((n: any) => void)|null;
 
@@ -134,18 +154,23 @@ export class BaseAnimationRenderer implements Renderer2 {
     return this.delegate.createElement(name, namespace);
   }
 
-  createComment(value: string) { return this.delegate.createComment(value); }
+  createComment(value: string) {
+    return this.delegate.createComment(value);
+  }
 
-  createText(value: string) { return this.delegate.createText(value); }
+  createText(value: string) {
+    return this.delegate.createText(value);
+  }
 
   appendChild(parent: any, newChild: any): void {
     this.delegate.appendChild(parent, newChild);
     this.engine.onInsert(this.namespaceId, newChild, parent, false);
   }
 
-  insertBefore(parent: any, newChild: any, refChild: any): void {
+  insertBefore(parent: any, newChild: any, refChild: any, isMove: boolean = true): void {
     this.delegate.insertBefore(parent, newChild, refChild);
-    this.engine.onInsert(this.namespaceId, newChild, parent, true);
+    // If `isMove` true than we should animate this insert.
+    this.engine.onInsert(this.namespaceId, newChild, parent, isMove);
   }
 
   removeChild(parent: any, oldChild: any, isHostElement: boolean): void {
@@ -156,9 +181,13 @@ export class BaseAnimationRenderer implements Renderer2 {
     return this.delegate.selectRootElement(selectorOrNode, preserveContent);
   }
 
-  parentNode(node: any) { return this.delegate.parentNode(node); }
+  parentNode(node: any) {
+    return this.delegate.parentNode(node);
+  }
 
-  nextSibling(node: any) { return this.delegate.nextSibling(node); }
+  nextSibling(node: any) {
+    return this.delegate.nextSibling(node);
+  }
 
   setAttribute(el: any, name: string, value: string, namespace?: string|null|undefined): void {
     this.delegate.setAttribute(el, name, value, namespace);
@@ -168,9 +197,13 @@ export class BaseAnimationRenderer implements Renderer2 {
     this.delegate.removeAttribute(el, name, namespace);
   }
 
-  addClass(el: any, name: string): void { this.delegate.addClass(el, name); }
+  addClass(el: any, name: string): void {
+    this.delegate.addClass(el, name);
+  }
 
-  removeClass(el: any, name: string): void { this.delegate.removeClass(el, name); }
+  removeClass(el: any, name: string): void {
+    this.delegate.removeClass(el, name);
+  }
 
   setStyle(el: any, style: string, value: any, flags?: RendererStyleFlags2|undefined): void {
     this.delegate.setStyle(el, style, value, flags);
@@ -188,7 +221,9 @@ export class BaseAnimationRenderer implements Renderer2 {
     }
   }
 
-  setValue(node: any, value: string): void { this.delegate.setValue(node, value); }
+  setValue(node: any, value: string): void {
+    this.delegate.setValue(node, value);
+  }
 
   listen(target: any, eventName: string, callback: (event: any) => boolean | void): () => void {
     return this.delegate.listen(target, eventName, callback);
@@ -207,24 +242,25 @@ export class AnimationRenderer extends BaseAnimationRenderer implements Renderer
     this.namespaceId = namespaceId;
   }
 
-  setProperty(el: any, name: string, value: any): void {
+  override setProperty(el: any, name: string, value: any): void {
     if (name.charAt(0) == ANIMATION_PREFIX) {
       if (name.charAt(1) == '.' && name == DISABLE_ANIMATIONS_FLAG) {
         value = value === undefined ? true : !!value;
         this.disableAnimations(el, value as boolean);
       } else {
-        this.engine.process(this.namespaceId, el, name.substr(1), value);
+        this.engine.process(this.namespaceId, el, name.slice(1), value);
       }
     } else {
       this.delegate.setProperty(el, name, value);
     }
   }
 
-  listen(target: 'window'|'document'|'body'|any, eventName: string, callback: (event: any) => any):
-      () => void {
+  override listen(
+      target: 'window'|'document'|'body'|any, eventName: string,
+      callback: (event: any) => any): () => void {
     if (eventName.charAt(0) == ANIMATION_PREFIX) {
       const element = resolveElementFromTarget(target);
-      let name = eventName.substr(1);
+      let name = eventName.slice(1);
       let phase = '';
       // @listener.phase is for trigger animation callbacks
       // @@listener is for animation builder callbacks
@@ -240,7 +276,7 @@ export class AnimationRenderer extends BaseAnimationRenderer implements Renderer
   }
 }
 
-function resolveElementFromTarget(target: 'window' | 'document' | 'body' | any): any {
+function resolveElementFromTarget(target: 'window'|'document'|'body'|any): any {
   switch (target) {
     case 'body':
       return document.body;
@@ -256,6 +292,6 @@ function resolveElementFromTarget(target: 'window' | 'document' | 'body' | any):
 function parseTriggerCallbackName(triggerName: string) {
   const dotIndex = triggerName.indexOf('.');
   const trigger = triggerName.substring(0, dotIndex);
-  const phase = triggerName.substr(dotIndex + 1);
+  const phase = triggerName.slice(dotIndex + 1);
   return [trigger, phase];
 }

@@ -6,23 +6,22 @@ import { catchError, startWith } from 'rxjs/operators';
 
 import { TwainService } from './twain.service';
 
-// #docregion component
 @Component({
   selector: 'twain-quote',
   // #docregion template
   template: `
     <p class="twain"><i>{{quote | async}}</i></p>
-    <button (click)="getQuote()">Next quote</button>
+    <button type="button" (click)="getQuote()">Next quote</button>
     <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>`,
   // #enddocregion template
   styles: [
-    `.twain { font-style: italic; } .error { color: red; }`
+    '.twain { font-style: italic; } .error { color: red; }'
   ]
 
 })
 export class TwainComponent implements OnInit {
-  errorMessage: string;
-  quote: Observable<string>;
+  errorMessage!: string;
+  quote!: Observable<string>;
 
   constructor(private twainService: TwainService) {}
 
@@ -45,4 +44,3 @@ export class TwainComponent implements OnInit {
   }
 
 }
-// #enddocregion component

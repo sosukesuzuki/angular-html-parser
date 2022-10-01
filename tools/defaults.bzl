@@ -1,17 +1,34 @@
 """Re-export of some bazel rules with repository-wide defaults."""
 
-load("@build_bazel_rules_nodejs//:defs.bzl", _nodejs_binary = "nodejs_binary", _npm_package = "npm_package")
-load("@npm_bazel_jasmine//:index.bzl", _jasmine_node_test = "jasmine_node_test")
-load("@npm_bazel_karma//:index.bzl", _karma_web_test = "karma_web_test", _karma_web_test_suite = "karma_web_test_suite", _ts_web_test = "ts_web_test", _ts_web_test_suite = "ts_web_test_suite")
-load("@npm_bazel_typescript//:index.bzl", _ts_library = "ts_library")
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("@build_bazel_rules_nodejs//:index.bzl", _nodejs_binary = "nodejs_binary", _nodejs_test = "nodejs_test", _npm_package_bin = "npm_package_bin", _pkg_npm = "pkg_npm")
+load("@npm//@bazel/jasmine:index.bzl", _jasmine_node_test = "jasmine_node_test")
+load("@npm//@bazel/concatjs:index.bzl", _concatjs_devserver = "concatjs_devserver", _ts_config = "ts_config", _ts_library = "ts_library")
+load("@npm//@bazel/rollup:index.bzl", _rollup_bundle = "rollup_bundle")
+load("@npm//@bazel/terser:index.bzl", "terser_minified")
+load("@npm//@bazel/protractor:index.bzl", _protractor_web_test_suite = "protractor_web_test_suite")
+load("@npm//typescript:index.bzl", "tsc")
 load("//packages/bazel:index.bzl", _ng_module = "ng_module", _ng_package = "ng_package")
-load("//packages/bazel/src:ng_rollup_bundle.bzl", _ng_rollup_bundle = "ng_rollup_bundle")
+load("@npm//@angular/build-tooling/bazel/app-bundling:index.bzl", _app_bundle = "app_bundle")
+load("@npm//@angular/build-tooling/bazel/http-server:index.bzl", _http_server = "http_server")
+load("@npm//@angular/build-tooling/bazel/karma:index.bzl", _karma_web_test = "karma_web_test", _karma_web_test_suite = "karma_web_test_suite")
+load("@npm//@angular/build-tooling/bazel/api-golden:index.bzl", _api_golden_test = "api_golden_test", _api_golden_test_npm_package = "api_golden_test_npm_package")
+load("@npm//@angular/build-tooling/bazel:extract_js_module_output.bzl", "extract_js_module_output")
+load("@npm//@angular/build-tooling/bazel:extract_types.bzl", _extract_types = "extract_types")
+load("@npm//@angular/build-tooling/bazel/esbuild:index.bzl", _esbuild = "esbuild", _esbuild_config = "esbuild_config")
+load("@npm//tsec:index.bzl", _tsec_test = "tsec_test")
 
 _DEFAULT_TSCONFIG_TEST = "//packages:tsconfig-test"
-_INTERNAL_NG_MODULE_API_EXTRACTOR = "//packages/bazel/src/api-extractor:api_extractor"
 _INTERNAL_NG_MODULE_COMPILER = "//packages/bazel/src/ngc-wrapped"
 _INTERNAL_NG_MODULE_XI18N = "//packages/bazel/src/ngc-wrapped:xi18n"
-_INTERNAL_NG_PACKAGER_PACKAGER = "//packages/bazel/src/ng_package:packager"
+_INTERNAL_NG_PACKAGE_PACKAGER = "//packages/bazel/src/ng_package:packager"
+_INTERNAL_NG_PACKAGE_DEFAULT_ROLLUP_CONFIG_TMPL = "//packages/bazel/src/ng_package:rollup.config.js"
+_INTERNAL_NG_PACKAGE_DEFAULT_ROLLUP = "//packages/bazel/src/ng_package:rollup_for_ng_package"
+
+esbuild = _esbuild
+esbuild_config = _esbuild_config
+http_server = _http_server
+extract_types = _extract_types
 
 # Packages which are versioned together on npm
 ANGULAR_SCOPED_PACKAGES = ["@angular/%s" % p for p in [
@@ -31,11 +48,10 @@ ANGULAR_SCOPED_PACKAGES = ["@angular/%s" % p for p in [
     # Current plan for Angular v8 is to not include @angular/http in ng update
     # "http",
     "platform-server",
-    "platform-webworker",
-    "platform-webworker-dynamic",
     "upgrade",
     "router",
     "language-service",
+    "localize",
     "service-worker",
 ]]
 
@@ -76,7 +92,17 @@ def _default_module_name(testonly):
 
     return None
 
-def ts_library(tsconfig = None, testonly = False, deps = [], module_name = None, **kwargs):
+def ts_devserver(**kwargs):
+    """Default values for ts_devserver"""
+    serving_path = kwargs.pop("serving_path", "/app_bundle.js")
+    _concatjs_devserver(
+        serving_path = serving_path,
+        **kwargs
+    )
+
+ts_config = _ts_config
+
+def ts_library(name, tsconfig = None, testonly = False, deps = [], module_name = None, package_name = None, **kwargs):
     """Default values for ts_library"""
     deps = deps + ["@npm//tslib"]
     if testonly:
@@ -90,15 +116,46 @@ def ts_library(tsconfig = None, testonly = False, deps = [], module_name = None,
     if not module_name:
         module_name = _default_module_name(testonly)
 
+    # If no `package_name` is explicitly set, we use the default module name as package
+    # name, so that the target can be resolved within NodeJS executions, by activating
+    # the Bazel NodeJS linker. See: https://github.com/bazelbuild/rules_nodejs/pull/2799.
+    if not package_name:
+        package_name = _default_module_name(testonly)
+
     _ts_library(
+        name = name,
         tsconfig = tsconfig,
         testonly = testonly,
         deps = deps,
+        # For prodmode, the target is set to `ES2020`. `@bazel/typecript` sets `ES2015` by
+        # default. Note that this should be in sync with the `ng_module` tsconfig generation.
+        # https://github.com/bazelbuild/rules_nodejs/blob/901df3868e3ceda177d3ed181205e8456a5592ea/third_party/github.com/bazelbuild/rules_typescript/internal/common/tsconfig.bzl#L195
+        # https://github.com/bazelbuild/rules_nodejs/blob/9b36274dba34204625579463e3da054a9f42cb47/packages/typescript/internal/build_defs.bzl#L85.
+        prodmode_target = "es2020",
+        # `module_name` is used for AMD module names within emitted JavaScript files.
         module_name = module_name,
+        # `package_name` can be set to allow for the Bazel NodeJS linker to run. This
+        # allows for resolution of the given target within the `node_modules/`.
+        package_name = package_name,
         **kwargs
     )
 
-def ng_module(name, tsconfig = None, entry_point = None, testonly = False, deps = [], module_name = None, bundle_dts = True, **kwargs):
+    # The `ts_library` targets by default only expose the type definitions as `DefaultInfo`.
+    # This is an auto-generated target that can be used to access the plain ES2015 devmode output.
+    # TODO(devversion): Should be renamed once we have devmode & prodmode combined.
+    native.filegroup(
+        # Note: When changing the suffix of this target, update the `jasmine_node_test` bootstrap
+        # logic which has special logic for resolving such targets.
+        name = "%s_es2015" % name,
+        srcs = [":%s" % name],
+        testonly = testonly,
+        # Note: Ironically this is named `es5_sources` but it refers to the devmode output.
+        # This is just an artifact of many iterations in `@bazel/concatjs`. This is being
+        # solved together with us combining devmode & prodmode.
+        output_group = "es5_sources",
+    )
+
+def ng_module(name, tsconfig = None, entry_point = None, testonly = False, deps = [], module_name = None, package_name = None, **kwargs):
     """Default values for ng_module"""
     deps = deps + ["@npm//tslib"]
     if testonly:
@@ -111,6 +168,13 @@ def ng_module(name, tsconfig = None, entry_point = None, testonly = False, deps 
 
     if not module_name:
         module_name = _default_module_name(testonly)
+
+    # If no `package_name` is explicitly set, we use the default module name as package
+    # name, so that the target can be resolved within NodeJS executions, by activating
+    # the Bazel NodeJS linker. See: https://github.com/bazelbuild/rules_nodejs/pull/2799.
+    if not package_name:
+        package_name = _default_module_name(testonly)
+
     if not entry_point:
         entry_point = "public_api.ts"
     _ng_module(
@@ -119,12 +183,15 @@ def ng_module(name, tsconfig = None, entry_point = None, testonly = False, deps 
         tsconfig = tsconfig,
         entry_point = entry_point,
         testonly = testonly,
-        bundle_dts = bundle_dts,
         deps = deps,
         compiler = _INTERNAL_NG_MODULE_COMPILER,
-        api_extractor = _INTERNAL_NG_MODULE_API_EXTRACTOR,
         ng_xi18n = _INTERNAL_NG_MODULE_XI18N,
+        # `module_name` is used for AMD module names within emitted JavaScript files.
         module_name = module_name,
+        # `package_name` can be set to allow for the Bazel NodeJS linker to run. This
+        # allows for resolution of the given target within the `node_modules/`.
+        package_name = package_name,
+        perf_flag = "//packages/compiler-cli:ng_perf",
         **kwargs
     )
 
@@ -134,142 +201,250 @@ def ng_package(name, readme_md = None, license_banner = None, deps = [], **kwarg
         readme_md = "//packages:README.md"
     if not license_banner:
         license_banner = "//packages:license-banner.txt"
-    deps = deps + [
-        "@npm//tslib",
-    ]
+    visibility = kwargs.pop("visibility", None)
+
+    common_substitutions = dict(kwargs.pop("substitutions", {}), **PKG_GROUP_REPLACEMENTS)
+    substitutions = dict(common_substitutions, **{
+        "0.0.0-PLACEHOLDER": "0.0.0",
+    })
+    stamped_substitutions = dict(common_substitutions, **{
+        "0.0.0-PLACEHOLDER": "{BUILD_SCM_VERSION}",
+    })
 
     _ng_package(
         name = name,
         deps = deps,
+        # We never set a `package_name` for NPM packages, neither do we enable validation.
+        # This is necessary because the source targets of the NPM packages all have
+        # package names set and setting a similar `package_name` on the NPM package would
+        # result in duplicate linker mappings that will conflict. e.g. consider the following
+        # scenario: We have a `ts_library` for `@angular/core`. We will configure a package
+        # name for the target so that it can be resolved in NodeJS executions from `node_modules`.
+        # If we'd also set a `package_name` for the associated `pkg_npm` target, there would be
+        # two mappings for `@angular/core` and the linker will complain. For a better development
+        # experience, we want the mapping to resolve to the direct outputs of the `ts_library`
+        # instead of requiring tests and other targets to assemble the NPM package first.
+        # TODO(devversion): consider removing this if `rules_nodejs` allows for duplicate
+        # linker mappings where transitive-determined mappings are skipped on conflicts.
+        # https://github.com/bazelbuild/rules_nodejs/issues/2810.
+        package_name = None,
+        validate = False,
         readme_md = readme_md,
         license_banner = license_banner,
-        replacements = PKG_GROUP_REPLACEMENTS,
-        ng_packager = _INTERNAL_NG_PACKAGER_PACKAGER,
+        substitutions = select({
+            "//:stamp": stamped_substitutions,
+            "//conditions:default": substitutions,
+        }),
+        ng_packager = _INTERNAL_NG_PACKAGE_PACKAGER,
+        rollup_config_tmpl = _INTERNAL_NG_PACKAGE_DEFAULT_ROLLUP_CONFIG_TMPL,
+        rollup = _INTERNAL_NG_PACKAGE_DEFAULT_ROLLUP,
+        visibility = visibility,
         **kwargs
     )
 
-def npm_package(name, replacements = {}, **kwargs):
-    """Default values for npm_package"""
-    _npm_package(
+    pkg_tar(
+        name = name + "_archive",
+        srcs = [":%s" % name],
+        extension = "tar.gz",
+        strip_prefix = "./%s" % name,
+        # should not be built unless it is a dependency of another rule
+        tags = ["manual"],
+        visibility = visibility,
+    )
+
+def pkg_npm(name, use_prodmode_output = False, **kwargs):
+    """Default values for pkg_npm"""
+    visibility = kwargs.pop("visibility", None)
+
+    common_substitutions = dict(kwargs.pop("substitutions", {}), **PKG_GROUP_REPLACEMENTS)
+    substitutions = dict(common_substitutions, **{
+        "0.0.0-PLACEHOLDER": "0.0.0",
+    })
+    stamped_substitutions = dict(common_substitutions, **{
+        "0.0.0-PLACEHOLDER": "{BUILD_SCM_VERSION}",
+    })
+
+    deps = kwargs.pop("deps", [])
+
+    # The `pkg_npm` rule brings in devmode (`JSModuleInfo`) and prodmode (`JSEcmaScriptModuleInfo`)
+    # output into the the NPM package We do not intend to ship the prodmode ECMAScript `.mjs`
+    # files, but the `JSModuleInfo` outputs (which correspond to devmode output). Depending on
+    # the `use_prodmode_output` macro attribute, we either ship the ESM output of dependencies,
+    # or continue shipping the devmode ES5 output.
+    # TODO: Clean this up in the future if we have combined devmode and prodmode output.
+    # https://github.com/bazelbuild/rules_nodejs/commit/911529fd364eb3ee1b8ecdc568a9fcf38a8b55ca.
+    # https://github.com/bazelbuild/rules_nodejs/blob/stable/packages/typescript/internal/build_defs.bzl#L334-L337.
+    extract_js_module_output(
+        name = "%s_js_module_output" % name,
+        provider = "JSEcmaScriptModuleInfo" if use_prodmode_output else "JSModuleInfo",
+        include_declarations = True,
+        include_default_files = True,
+        forward_linker_mappings = False,
+        include_external_npm_packages = False,
+        deps = deps,
+    )
+
+    _pkg_npm(
         name = name,
-        replacements = dict(replacements, **PKG_GROUP_REPLACEMENTS),
+        # We never set a `package_name` for NPM packages, neither do we enable validation.
+        # This is necessary because the source targets of the NPM packages all have
+        # package names set and setting a similar `package_name` on the NPM package would
+        # result in duplicate linker mappings that will conflict. e.g. consider the following
+        # scenario: We have a `ts_library` for `@angular/core`. We will configure a package
+        # name for the target so that it can be resolved in NodeJS executions from `node_modules`.
+        # If we'd also set a `package_name` for the associated `pkg_npm` target, there would be
+        # two mappings for `@angular/core` and the linker will complain. For a better development
+        # experience, we want the mapping to resolve to the direct outputs of the `ts_library`
+        # instead of requiring tests and other targets to assemble the NPM package first.
+        # TODO(devversion): consider removing this if `rules_nodejs` allows for duplicate
+        # linker mappings where transitive-determined mappings are skipped on conflicts.
+        # https://github.com/bazelbuild/rules_nodejs/issues/2810.
+        package_name = None,
+        validate = False,
+        substitutions = select({
+            "//:stamp": stamped_substitutions,
+            "//conditions:default": substitutions,
+        }),
+        visibility = visibility,
+        deps = [":%s_js_module_output" % name],
         **kwargs
     )
 
-def ts_web_test(bootstrap = [], deps = [], runtime_deps = [], **kwargs):
-    """Default values for ts_web_test"""
-    if not bootstrap:
-        bootstrap = ["//:web_test_bootstrap_scripts"]
-    local_deps = [
-        "@npm//:node_modules/tslib/tslib.js",
-        "//tools/rxjs:rxjs_umd_modules",
-    ] + deps
-    local_runtime_deps = [
-        "//tools/testing:browser",
-    ] + runtime_deps
-
-    _ts_web_test(
-        runtime_deps = local_runtime_deps,
-        bootstrap = bootstrap,
-        deps = local_deps,
-        **kwargs
+    pkg_tar(
+        name = name + "_archive",
+        srcs = [":%s" % name],
+        extension = "tar.gz",
+        strip_prefix = "./%s" % name,
+        # should not be built unless it is a dependency of another rule
+        tags = ["manual"],
+        visibility = visibility,
     )
 
-def ts_web_test_suite(bootstrap = [], deps = [], runtime_deps = [], **kwargs):
-    """Default values for ts_web_test_suite"""
-    if not bootstrap:
-        bootstrap = ["//:web_test_bootstrap_scripts"]
-    local_deps = [
+def karma_web_test_suite(name, **kwargs):
+    """Default values for karma_web_test_suite"""
+
+    # Default value for bootstrap
+    bootstrap = kwargs.pop("bootstrap", [
+        "//:web_test_bootstrap_scripts",
+    ])
+
+    # Add common deps
+    deps = kwargs.pop("deps", []) + [
+        "@npm//karma-sauce-launcher",
         "@npm//:node_modules/tslib/tslib.js",
         "//tools/rxjs:rxjs_umd_modules",
-    ] + deps
-    local_runtime_deps = [
-        "//tools/testing:browser",
-    ] + runtime_deps
+        "//packages/zone.js:npm_package",
+    ]
 
-    _ts_web_test_suite(
-        runtime_deps = local_runtime_deps,
+    # Add common runtime deps
+    runtime_deps = kwargs.pop("runtime_deps", []) + [
+        "//tools/testing:browser",
+    ]
+
+    data = kwargs.pop("data", [])
+    tags = kwargs.pop("tags", [])
+
+    _karma_web_test_suite(
+        name = name,
+        runtime_deps = runtime_deps,
         bootstrap = bootstrap,
-        deps = local_deps,
-        # Run unit tests on local Chromium by default.
-        # You can exclude tests based on tags, e.g. to skip Firefox testing,
-        #   `yarn bazel test --test_tag_filters=-browser:firefox-local [targets]`
+        deps = deps,
         browsers = [
-            "@io_bazel_rules_webtesting//browsers:chromium-local",
-            # Don't test on local Firefox by default, for faster builds.
-            # We think that bugs in Angular tend to be caught the same in any
-            # evergreen browser.
-            # "@io_bazel_rules_webtesting//browsers:firefox-local",
-            # TODO(alexeagle): add remote browsers on SauceLabs
+            "@npm//@angular/build-tooling/bazel/browsers/chromium:chromium",
+            "@npm//@angular/build-tooling/bazel/browsers/firefox:firefox",
         ],
+        data = data,
+        tags = tags,
         **kwargs
     )
 
-def karma_web_test(bootstrap = [], deps = [], data = [], runtime_deps = [], **kwargs):
-    """Default values for karma_web_test"""
-    if not bootstrap:
-        bootstrap = ["//:web_test_bootstrap_scripts"]
-    local_deps = [
-        "@npm//karma-browserstack-launcher",
-        "@npm//:node_modules/tslib/tslib.js",
-        "//tools/rxjs:rxjs_umd_modules",
-    ] + deps
-    local_runtime_deps = [
-        "//tools/testing:browser",
-    ] + runtime_deps
-
+    # Add a saucelabs target for these karma tests
     _karma_web_test(
-        runtime_deps = local_runtime_deps,
+        name = "saucelabs_%s" % name,
+        # Default timeout is moderate (5min). This causes the test to be terminated while
+        # Saucelabs browsers keep running. Ultimately resulting in failing tests and browsers
+        # unnecessarily being acquired. Our specified Saucelabs idle timeout is 10min, so we use
+        # Bazel's long timeout (15min). This ensures that Karma can shut down properly.
+        timeout = "long",
+        runtime_deps = runtime_deps,
         bootstrap = bootstrap,
         config_file = "//:karma-js.conf.js",
-        deps = local_deps,
+        deps = deps,
         data = data + [
             "//:browser-providers.conf.js",
-            "//tools:jasmine-seed-generator.js",
+        ],
+        karma = "//tools/saucelabs:karma-saucelabs",
+        tags = tags + [
+            "exclusive",
+            "manual",
+            "no-remote-exec",
+            "saucelabs",
         ],
         configuration_env_vars = ["KARMA_WEB_TEST_MODE"],
         **kwargs
     )
 
-def karma_web_test_suite(bootstrap = [], deps = [], **kwargs):
-    """Default values for karma_web_test_suite"""
-    if not bootstrap:
-        bootstrap = ["//:web_test_bootstrap_scripts"]
-    local_deps = [
-        "@npm//:node_modules/tslib/tslib.js",
-        "//tools/rxjs:rxjs_umd_modules",
-    ] + deps
+def protractor_web_test_suite(**kwargs):
+    """Default values for protractor_web_test_suite"""
 
-    _karma_web_test_suite(
-        bootstrap = bootstrap,
-        deps = local_deps,
-        # Run unit tests on local Chromium by default.
-        # You can exclude tests based on tags, e.g. to skip Firefox testing,
-        #   `yarn bazel test --test_tag_filters=-browser:firefox-local [targets]`
-        browsers = [
-            "@io_bazel_rules_webtesting//browsers:chromium-local",
-            # Don't test on local Firefox by default, for faster builds.
-            # We think that bugs in Angular tend to be caught the same in any
-            # evergreen browser.
-            # "@io_bazel_rules_webtesting//browsers:firefox-local",
-            # TODO(alexeagle): add remote browsers on SauceLabs
-        ],
+    _protractor_web_test_suite(
+        browsers = ["@npm//@angular/build-tooling/bazel/browsers/chromium:chromium"],
         **kwargs
     )
 
-def nodejs_binary(data = [], **kwargs):
-    """Default values for nodejs_binary"""
+def nodejs_binary(data = [], templated_args = [], **kwargs):
     _nodejs_binary(
-        # Pass-thru --define=compile=foo as an environment variable
-        configuration_env_vars = ["compile"],
         data = data + ["@npm//source-map-support"],
+        # Disable the linker and rely on patched resolution which works better on Windows
+        # and is less prone to race conditions when targets build concurrently.
+        templated_args = ["--nobazel_run_linker"] + templated_args,
         **kwargs
     )
 
-def jasmine_node_test(deps = [], **kwargs):
-    """Default values for jasmine_node_test"""
-    deps = deps + [
-        # Very common dependencies for tests
+def nodejs_test(templated_args = [], **kwargs):
+    _nodejs_test(
+        # Disable the linker and rely on patched resolution which works better on Windows
+        # and is less prone to race conditions when targets build concurrently.
+        templated_args = ["--nobazel_run_linker"] + templated_args,
+        **kwargs
+    )
+
+def npm_package_bin(args = [], **kwargs):
+    _npm_package_bin(
+        # Disable the linker and rely on patched resolution which works better on Windows
+        # and is less prone to race conditions when targets build concurrently.
+        args = ["--nobazel_run_linker"] + args,
+        **kwargs
+    )
+
+def jasmine_node_test(bootstrap = [], **kwargs):
+    """Default values for jasmine_node_test
+
+    Args:
+      bootstrap: A list of labels of scripts to run before the entry_point.
+
+                 The labels can either be individual files or a filegroup that contain a single
+                 file.
+
+                 The label is automatically added to the deps of jasmine_node_test.
+                 If the label ends in `_es2015` which by convention selects the es2015 outputs
+                 of a ts_library rule, then corresponding ts_library target sans `_es2015`
+                 is also added to the deps of jasmine_node_test.
+
+                 For example with,
+
+                 jasmine_node_test(
+                     name = "test",
+                     bootstrap = ["//tools/testing:node_es2015"],
+                     deps = [":test_lib"],
+                 )
+
+                 the `//tools/testing:node` target will automatically get added to deps
+                 by this macro. This removes the need for duplicate deps on the
+                 target and makes the usage of this rule less verbose."""
+
+    # Very common dependencies for tests
+    deps = kwargs.pop("deps", []) + [
         "@npm//chokidar",
         "@npm//domino",
         "@npm//jasmine-core",
@@ -278,20 +453,149 @@ def jasmine_node_test(deps = [], **kwargs):
         "@npm//tslib",
         "@npm//xhr2",
     ]
+    configuration_env_vars = kwargs.pop("configuration_env_vars", [])
+
+    # Disable the linker and rely on patched resolution which works better on Windows
+    # and is less prone to race conditions when targets build concurrently.
+    templated_args = ["--nobazel_run_linker"] + kwargs.pop("templated_args", [])
+
+    for label in bootstrap:
+        deps.append(label)
+        templated_args.append("--node_options=--require=$$(rlocation $(rootpath %s))" % label)
+        if label.endswith("_es2015"):
+            # If this label is a filegroup derived from a ts_library then automatically
+            # add the ts_library target (which is the label sans `_es2015`) to deps so we pull
+            # in all of its transitive deps. This removes the need for duplicate deps on the
+            # target and makes the usage of this rule less verbose.
+            deps.append(label[:-len("_es2015")])
+
     _jasmine_node_test(
         deps = deps,
-        # Pass-thru --define=compile=foo as an environment variable
-        configuration_env_vars = ["compile"],
+        configuration_env_vars = configuration_env_vars,
+        templated_args = templated_args,
         **kwargs
     )
 
-def ng_rollup_bundle(deps = [], **kwargs):
-    """Default values for ng_rollup_bundle"""
-    deps = deps + [
-        "@npm//tslib",
-        "@npm//reflect-metadata",
-    ]
-    _ng_rollup_bundle(
-        deps = deps,
+def app_bundle(**kwargs):
+    """Default values for app_bundle"""
+    _app_bundle(**kwargs)
+
+# TODO: Consider removing this rule in favor of `esbuild` for more consistent bundling.
+def rollup_bundle(name, testonly = False, sourcemap = "true", **kwargs):
+    """A drop in replacement for the rules nodejs [legacy rollup_bundle].
+
+    Runs [rollup_bundle], [terser_minified] and [babel] for downleveling to es5
+    to produce a number of output bundles.
+
+    es2015 iife                  : "%{name}.es2015.js"
+    es2015 iife minified         : "%{name}.min.es2015.js"
+    es2015 iife minified (debug) : "%{name}.min_debug.es2015.js"
+    esm                          : "%{name}.esm.js"
+    esm                          : "%{name}.min.esm.js"
+    es5 iife                     : "%{name}.js"
+    es5 iife minified            : "%{name}.min.js"
+    es5 iife minified (debug)    : "%{name}.min_debug.js"
+    es5 umd                      : "%{name}.es5umd.js"
+    es5 umd minified             : "%{name}.min.es5umd.js"
+    es2015 umd                   : "%{name}.umd.js"
+    es2015 umd minified          : "%{name}.min.umd.js"
+
+    ".js.map" files are also produced for each bundle.
+
+    [legacy rollup_bundle]: https://github.com/bazelbuild/rules_nodejs/blob/0.38.3/internal/rollup/rollup_bundle.bzl
+    [rollup_bundle]: https://bazelbuild.github.io/rules_nodejs/Rollup.html
+    [terser_minified]: https://bazelbuild.github.io/rules_nodejs/Terser.html
+    [babel]: https://babeljs.io/
+    """
+
+    # Common arguments for all terser_minified targets
+    common_terser_args = {
+        "args": ["--comments"],
+        "sourcemap": False,
+    }
+
+    # esm
+    _rollup_bundle(name = name + ".esm", testonly = testonly, format = "esm", sourcemap = sourcemap, **kwargs)
+    terser_minified(name = name + ".min.esm", testonly = testonly, src = name + ".esm", **common_terser_args)
+    native.filegroup(name = name + ".min.esm.js", testonly = testonly, srcs = [name + ".min.esm"])
+
+    # es2015
+    _rollup_bundle(name = name + ".es2015", testonly = testonly, format = "iife", sourcemap = sourcemap, **kwargs)
+    terser_minified(name = name + ".min.es2015", testonly = testonly, src = name + ".es2015", **common_terser_args)
+    native.filegroup(name = name + ".min.es2015.js", testonly = testonly, srcs = [name + ".min.es2015"])
+    terser_minified(name = name + ".min_debug.es2015", testonly = testonly, src = name + ".es2015", **common_terser_args)
+    native.filegroup(name = name + ".min_debug.es2015.js", testonly = testonly, srcs = [name + ".min_debug.es2015"])
+
+    # es5
+    tsc(
+        name = name,
+        testonly = testonly,
+        outs = [
+            name + ".js",
+        ],
+        args = [
+            "$(execpath :%s.es2015.js)" % name,
+            "--types",
+            "--skipLibCheck",
+            "--target",
+            "es5",
+            "--lib",
+            "es2015,dom",
+            "--allowJS",
+            "--outFile",
+            "$(execpath :%s.js)" % name,
+        ],
+        data = [
+            name + ".es2015.js",
+        ],
+    )
+    terser_minified(name = name + ".min", testonly = testonly, src = name + "", **common_terser_args)
+    native.filegroup(name = name + ".min.js", testonly = testonly, srcs = [name + ".min"])
+    terser_minified(name = name + ".min_debug", testonly = testonly, src = name + "", debug = True, **common_terser_args)
+    native.filegroup(name = name + ".min_debug.js", testonly = testonly, srcs = [name + ".min_debug"])
+
+    # umd
+    _rollup_bundle(name = name + ".umd", testonly = testonly, format = "umd", sourcemap = sourcemap, **kwargs)
+    terser_minified(name = name + ".min.umd", testonly = testonly, src = name + ".umd", **common_terser_args)
+    native.filegroup(name = name + ".min.umd.js", testonly = testonly, srcs = [name + ".min.umd"])
+    tsc(
+        name = name + ".es5umd",
+        testonly = testonly,
+        outs = [
+            name + ".es5umd.js",
+        ],
+        args = [
+            "$(execpath :%s.umd.js)" % name,
+            "--types",
+            "--skipLibCheck",
+            "--target",
+            "es5",
+            "--lib",
+            "es2015,dom",
+            "--allowJS",
+            "--outFile",
+            "$(execpath :%s.es5umd.js)" % name,
+        ],
+        data = [
+            name + ".umd.js",
+        ],
+    )
+    terser_minified(name = name + ".min.es5umd", testonly = testonly, src = name + ".es5umd", **common_terser_args)
+    native.filegroup(name = name + ".min.es5umd.js", testonly = testonly, srcs = [name + ".min.es5umd"])
+
+def api_golden_test(**kwargs):
+    _api_golden_test(
+        **kwargs
+    )
+
+def api_golden_test_npm_package(**kwargs):
+    _api_golden_test_npm_package(
+        **kwargs
+    )
+
+def tsec_test(**kwargs):
+    """Default values for tsec_test"""
+    _tsec_test(
+        use_runfiles_on_windows = True,  # We explicitly enable runfiles in .bazelrc
         **kwargs
     )

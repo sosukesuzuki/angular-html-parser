@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {Directive, EmbeddedViewRef, Input, OnChanges, SimpleChange, SimpleChanges, TemplateRef, ViewContainerRef} from '@angular/core';
+import {Directive, EmbeddedViewRef, Injector, Input, OnChanges, SimpleChanges, TemplateRef, ViewContainerRef} from '@angular/core';
 
 /**
  * @ngModule CommonModule
@@ -32,7 +32,10 @@ import {Directive, EmbeddedViewRef, Input, OnChanges, SimpleChange, SimpleChange
  *
  * @publicApi
  */
-@Directive({selector: '[ngTemplateOutlet]'})
+@Directive({
+  selector: '[ngTemplateOutlet]',
+  standalone: true,
+})
 export class NgTemplateOutlet implements OnChanges {
   private _viewRef: EmbeddedViewRef<any>|null = null;
 
@@ -49,61 +52,34 @@ export class NgTemplateOutlet implements OnChanges {
    */
   @Input() public ngTemplateOutlet: TemplateRef<any>|null = null;
 
+  /** Injector to be used within the embedded view. */
+  @Input() public ngTemplateOutletInjector: Injector|null = null;
+
   constructor(private _viewContainerRef: ViewContainerRef) {}
 
+  /** @nodoc */
   ngOnChanges(changes: SimpleChanges) {
-    const recreateView = this._shouldRecreateView(changes);
+    if (changes['ngTemplateOutlet'] || changes['ngTemplateOutletInjector']) {
+      const viewContainerRef = this._viewContainerRef;
 
-    if (recreateView) {
       if (this._viewRef) {
-        this._viewContainerRef.remove(this._viewContainerRef.indexOf(this._viewRef));
+        viewContainerRef.remove(viewContainerRef.indexOf(this._viewRef));
       }
 
       if (this.ngTemplateOutlet) {
-        this._viewRef = this._viewContainerRef.createEmbeddedView(
-            this.ngTemplateOutlet, this.ngTemplateOutletContext);
+        const {
+          ngTemplateOutlet: template,
+          ngTemplateOutletContext: context,
+          ngTemplateOutletInjector: injector
+        } = this;
+        this._viewRef = viewContainerRef.createEmbeddedView(
+            template, context, injector ? {injector} : undefined);
+      } else {
+        this._viewRef = null;
       }
-    } else {
-      if (this._viewRef && this.ngTemplateOutletContext) {
-        this._updateExistingContext(this.ngTemplateOutletContext);
-      }
-    }
-  }
-
-  /**
-   * We need to re-create existing embedded view if:
-   * - templateRef has changed
-   * - context has changes
-   *
-   * We mark context object as changed when the corresponding object
-   * shape changes (new properties are added or existing properties are removed).
-   * In other words we consider context with the same properties as "the same" even
-   * if object reference changes (see https://github.com/angular/angular/issues/13407).
-   */
-  private _shouldRecreateView(changes: SimpleChanges): boolean {
-    const ctxChange = changes['ngTemplateOutletContext'];
-    return !!changes['ngTemplateOutlet'] || (ctxChange && this._hasContextShapeChanged(ctxChange));
-  }
-
-  private _hasContextShapeChanged(ctxChange: SimpleChange): boolean {
-    const prevCtxKeys = Object.keys(ctxChange.previousValue || {});
-    const currCtxKeys = Object.keys(ctxChange.currentValue || {});
-
-    if (prevCtxKeys.length === currCtxKeys.length) {
-      for (let propName of currCtxKeys) {
-        if (prevCtxKeys.indexOf(propName) === -1) {
-          return true;
-        }
-      }
-      return false;
-    } else {
-      return true;
-    }
-  }
-
-  private _updateExistingContext(ctx: Object): void {
-    for (let propName of Object.keys(ctx)) {
-      (<any>this._viewRef !.context)[propName] = (<any>this.ngTemplateOutletContext)[propName];
+    } else if (
+        this._viewRef && changes['ngTemplateOutletContext'] && this.ngTemplateOutletContext) {
+      this._viewRef.context = this.ngTemplateOutletContext;
     }
   }
 }

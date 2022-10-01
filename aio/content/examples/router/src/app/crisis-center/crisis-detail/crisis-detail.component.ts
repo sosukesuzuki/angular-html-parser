@@ -1,11 +1,11 @@
 // #docplaster
 // #docregion
-import { Component, OnInit, HostBinding } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Observable } from 'rxjs';
 
-import { Crisis }         from '../crisis';
-import { DialogService }  from '../../dialog.service';
+import { Crisis } from '../crisis';
+import { DialogService } from '../../dialog.service';
 
 @Component({
   selector: 'app-crisis-detail',
@@ -13,8 +13,8 @@ import { DialogService }  from '../../dialog.service';
   styleUrls: ['./crisis-detail.component.css']
 })
 export class CrisisDetailComponent implements OnInit {
-  crisis: Crisis;
-  editName: string;
+  crisis!: Crisis;
+  editName = '';
 
   constructor(
     private route: ActivatedRoute,
@@ -25,9 +25,10 @@ export class CrisisDetailComponent implements OnInit {
 // #docregion ngOnInit
   ngOnInit() {
     this.route.data
-      .subscribe((data: { crisis: Crisis }) => {
-        this.editName = data.crisis.name;
-        this.crisis = data.crisis;
+      .subscribe(data => {
+        const crisis: Crisis = data['crisis'];
+        this.editName = crisis.name;
+        this.crisis = crisis;
       });
   }
 // #enddocregion ngOnInit
@@ -56,7 +57,7 @@ export class CrisisDetailComponent implements OnInit {
   // #enddocregion canDeactivate
 
   gotoCrises() {
-    let crisisId = this.crisis ? this.crisis.id : null;
+    const crisisId = this.crisis ? this.crisis.id : null;
     // Pass along the crisis id if available
     // so that the CrisisListComponent can select that crisis.
     // Add a totally useless `foo` parameter for kicks.

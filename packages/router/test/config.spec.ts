@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {validateConfig} from '../src/config';
 import {PRIMARY_OUTLET} from '../src/shared';
+import {validateConfig} from '../src/utils/config';
 
 describe('config', () => {
   describe('validateConfig', () => {
@@ -32,12 +32,12 @@ describe('config', () => {
     it('should throw for undefined route in children', () => {
       expect(() => {
         validateConfig([{
-          path: 'a',
-          children: [
-            {path: 'b', component: ComponentB},
-            ,
-          ]
-        }] as any);
+                         path: 'a',
+                         children: [
+                           {path: 'b', component: ComponentB},
+                           ,
+                         ]
+                       }] as any);
       }).toThrowError(/Invalid configuration of route 'a'/);
     });
 
@@ -47,73 +47,88 @@ describe('config', () => {
           {path: 'a', component: ComponentA},
           [{path: 'b', component: ComponentB}, {path: 'c', component: ComponentC}] as any
         ]);
-      }).toThrowError(`Invalid configuration of route '': Array cannot be specified`);
+      }).toThrowError();
     });
 
     it('should throw when redirectTo and children are used together', () => {
       expect(() => {
         validateConfig(
             [{path: 'a', redirectTo: 'b', children: [{path: 'b', component: ComponentA}]}]);
-      })
-          .toThrowError(
-              `Invalid configuration of route 'a': redirectTo and children cannot be used together`);
+      }).toThrowError();
     });
 
     it('should validate children and report full path', () => {
-      expect(() => validateConfig([{path: 'a', children: [{path: 'b'}]}]))
-          .toThrowError(
-              `Invalid configuration of route 'a/b'. One of the following must be provided: component, redirectTo, children or loadChildren`);
+      expect(() => validateConfig([{path: 'a', children: [{path: 'b'}]}])).toThrowError();
     });
 
     it('should properly report deeply nested path', () => {
-      expect(() => validateConfig([{
-               path: 'a',
-               children: [{path: 'b', children: [{path: 'c', children: [{path: 'd'}]}]}]
-             }]))
-          .toThrowError(
-              `Invalid configuration of route 'a/b/c/d'. One of the following must be provided: component, redirectTo, children or loadChildren`);
+      expect(
+          () => validateConfig([
+            {path: 'a', children: [{path: 'b', children: [{path: 'c', children: [{path: 'd'}]}]}]}
+          ]))
+          .toThrowError();
     });
 
     it('should throw when redirectTo and loadChildren are used together', () => {
-      expect(() => { validateConfig([{path: 'a', redirectTo: 'b', loadChildren: 'value'}]); })
-          .toThrowError(
-              `Invalid configuration of route 'a': redirectTo and loadChildren cannot be used together`);
+      expect(() => {
+        validateConfig([{path: 'a', redirectTo: 'b', loadChildren: jasmine.createSpy('value')}]);
+      }).toThrowError();
     });
 
     it('should throw when children and loadChildren are used together', () => {
-      expect(() => { validateConfig([{path: 'a', children: [], loadChildren: 'value'}]); })
-          .toThrowError(
-              `Invalid configuration of route 'a': children and loadChildren cannot be used together`);
+      expect(() => {
+        validateConfig([{path: 'a', children: [], loadChildren: jasmine.createSpy('value')}]);
+      }).toThrowError();
     });
 
     it('should throw when component and redirectTo are used together', () => {
-      expect(() => { validateConfig([{path: 'a', component: ComponentA, redirectTo: 'b'}]); })
-          .toThrowError(
-              `Invalid configuration of route 'a': redirectTo and component cannot be used together`);
+      expect(() => {
+        validateConfig([{path: 'a', component: ComponentA, redirectTo: 'b'}]);
+      })
+          .toThrowError(new RegExp(
+              `Invalid configuration of route 'a': redirectTo and component/loadComponent cannot be used together`));
+    });
+
+    it('should throw when redirectTo and loadComponent are used together', () => {
+      expect(() => {
+        validateConfig([{path: 'a', redirectTo: 'b', loadComponent: () => ComponentA}]);
+      }).toThrowError();
+    });
+
+    it('should throw when component and loadComponent are used together', () => {
+      expect(() => {
+        validateConfig([{path: 'a', component: ComponentA, loadComponent: () => ComponentA}]);
+      }).toThrowError();
+    });
+
+    it('should throw when component and redirectTo are used together', () => {
+      expect(() => {
+        validateConfig([{path: 'a', redirectTo: 'b', canActivate: []}]);
+      }).toThrowError();
     });
 
     it('should throw when path and matcher are used together', () => {
-      expect(() => { validateConfig([{path: 'a', matcher: <any>'someFunc', children: []}]); })
-          .toThrowError(
-              `Invalid configuration of route 'a': path and matcher cannot be used together`);
+      expect(() => {
+        validateConfig([{path: 'a', matcher: <any>'someFunc', children: []}]);
+      }).toThrowError();
     });
 
     it('should throw when path and matcher are missing', () => {
-      expect(() => { validateConfig([{component: null, redirectTo: 'b'}] as any); })
-          .toThrowError(
-              `Invalid configuration of route '': routes must have either a path or a matcher specified`);
+      expect(() => {
+        validateConfig([{component: null, redirectTo: 'b'}] as any);
+      }).toThrowError();
     });
 
     it('should throw when none of component and children or direct are missing', () => {
-      expect(() => { validateConfig([{path: 'a'}]); })
-          .toThrowError(
-              `Invalid configuration of route 'a'. One of the following must be provided: component, redirectTo, children or loadChildren`);
+      expect(() => {
+        validateConfig([{path: 'a'}]);
+      }).toThrowError();
     });
 
     it('should throw when path starts with a slash', () => {
       expect(() => {
         validateConfig([<any>{path: '/a', redirectTo: 'b'}]);
-      }).toThrowError(`Invalid configuration of route '/a': path cannot start with a slash`);
+      }).toThrowError();
     });
 
     it('should throw when emptyPath is used with redirectTo without explicitly providing matching',
@@ -123,14 +138,10 @@ describe('config', () => {
          }).toThrowError(/Invalid configuration of route '{path: "", redirectTo: "b"}'/);
        });
 
-    it('should throw when pathMatch is invalid', () => {
-      expect(() => { validateConfig([{path: 'a', pathMatch: 'invalid', component: ComponentB}]); })
-          .toThrowError(
-              /Invalid configuration of route 'a': pathMatch can only be set to 'prefix' or 'full'/);
-    });
-
     it('should throw when path/outlet combination is invalid', () => {
-      expect(() => { validateConfig([{path: 'a', outlet: 'aux'}]); })
+      expect(() => {
+        validateConfig([{path: 'a', outlet: 'aux'}]);
+      })
           .toThrowError(
               /Invalid configuration of route 'a': a componentless route without children or loadChildren cannot have a named outlet set/);
       expect(() => validateConfig([{path: 'a', outlet: '', children: []}])).not.toThrow();
@@ -139,9 +150,11 @@ describe('config', () => {
     });
 
     it('should not throw when path/outlet combination is valid', () => {
-      expect(() => { validateConfig([{path: 'a', outlet: 'aux', children: []}]); }).not.toThrow();
       expect(() => {
-        validateConfig([{path: 'a', outlet: 'aux', loadChildren: 'child'}]);
+        validateConfig([{path: 'a', outlet: 'aux', children: []}]);
+      }).not.toThrow();
+      expect(() => {
+        validateConfig([{path: 'a', outlet: 'aux', loadChildren: jasmine.createSpy('child')}]);
       }).not.toThrow();
     });
   });

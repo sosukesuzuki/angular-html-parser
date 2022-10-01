@@ -1,16 +1,19 @@
 // #docregion
-import { Component }          from '@angular/core';
+import { Component } from '@angular/core';
 
-import { MissionService }     from './mission.service';
+import { MissionService } from './mission.service';
 
 @Component({
   selector: 'app-mission-control',
   template: `
     <h2>Mission Control</h2>
-    <button (click)="announce()">Announce mission</button>
-    <app-astronaut *ngFor="let astronaut of astronauts"
+    <button type="button" (click)="announce()">Announce mission</button>
+
+    <app-astronaut
+      *ngFor="let astronaut of astronauts"
       [astronaut]="astronaut">
     </app-astronaut>
+
     <h3>History</h3>
     <ul>
       <li *ngFor="let event of history">{{event}}</li>
@@ -34,7 +37,7 @@ export class MissionControlComponent {
   }
 
   announce() {
-    let mission = this.missions[this.nextMission++];
+    const mission = this.missions[this.nextMission++];
     this.missionService.announceMission(mission);
     this.history.push(`Mission "${mission}" announced`);
     if (this.nextMission >= this.missions.length) { this.nextMission = 0; }

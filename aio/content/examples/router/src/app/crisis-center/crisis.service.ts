@@ -21,7 +21,7 @@ export class CrisisService {
 
   getCrisis(id: number | string) {
     return this.getCrises().pipe(
-      map(crises => crises.find(crisis => crisis.id === +id))
+      map(crises => crises.find(crisis => crisis.id === +id)!)
     );
   }
 
@@ -29,7 +29,7 @@ export class CrisisService {
   addCrisis(name: string) {
     name = name.trim();
     if (name) {
-      let crisis = { id: CrisisService.nextCrisisId++, name };
+      const crisis = { id: CrisisService.nextCrisisId++, name };
       CRISES.push(crisis);
       this.crises$.next(CRISES);
     }

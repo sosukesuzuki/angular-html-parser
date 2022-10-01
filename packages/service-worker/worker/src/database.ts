@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -10,6 +10,11 @@
  * An abstract table, with the ability to read/write objects stored under keys.
  */
 export interface Table {
+  /**
+   * The name of this table in the database.
+   */
+  name: string;
+
   /**
    * Delete a key from the table.
    */
@@ -49,7 +54,7 @@ export interface Database {
   /**
    * Open a `Table`.
    */
-  open(table: string): Promise<Table>;
+  open(table: string, cacheQueryOptions?: CacheQueryOptions): Promise<Table>;
 }
 
 /**

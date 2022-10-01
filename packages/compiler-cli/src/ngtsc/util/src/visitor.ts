@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import * as ts from 'typescript';
+import ts from 'typescript';
 
 /**
  * Result type of visiting a node that's typically an entry in a list, which allows specifying that
@@ -45,10 +45,8 @@ export abstract class Visitor {
    * Visit a class declaration, returning at least the transformed declaration and optionally other
    * nodes to insert before the declaration.
    */
-  visitClassDeclaration(node: ts.ClassDeclaration):
-      VisitListEntryResult<ts.Statement, ts.ClassDeclaration> {
-    return {node};
-  }
+  abstract visitClassDeclaration(node: ts.ClassDeclaration):
+      VisitListEntryResult<ts.Statement, ts.ClassDeclaration>;
 
   private _visitListEntryNode<T extends ts.Statement>(
       node: T, visitor: (node: T) => VisitListEntryResult<ts.Statement, T>): T {
@@ -68,7 +66,9 @@ export abstract class Visitor {
   /**
    * Visit types of nodes which don't have their own explicit visitor.
    */
-  visitOtherNode<T extends ts.Node>(node: T): T { return node; }
+  visitOtherNode<T extends ts.Node>(node: T): T {
+    return node;
+  }
 
   /**
    * @internal
@@ -81,51 +81,53 @@ export abstract class Visitor {
     node = ts.visitEachChild(node, child => this._visit(child, context), context) as T;
 
     if (ts.isClassDeclaration(node)) {
-      visitedNode = this._visitListEntryNode(
-          node, (node: ts.ClassDeclaration) => this.visitClassDeclaration(node)) as typeof node;
+      visitedNode =
+          this._visitListEntryNode(
+              node, (node: ts.ClassDeclaration) => this.visitClassDeclaration(node)) as typeof node;
     } else {
       visitedNode = this.visitOtherNode(node);
     }
 
     // If the visited node has a `statements` array then process them, maybe replacing the visited
     // node and adding additional statements.
-    if (hasStatements(visitedNode)) {
+    if (ts.isBlock(visitedNode) || ts.isSourceFile(visitedNode)) {
       visitedNode = this._maybeProcessStatements(visitedNode);
     }
 
     return visitedNode;
   }
 
-  private _maybeProcessStatements<T extends ts.Node&{statements: ts.NodeArray<ts.Statement>}>(
-      node: T): T {
+  private _maybeProcessStatements<T extends ts.Block|ts.SourceFile>(node: T): T {
     // Shortcut - if every statement doesn't require nodes to be prepended or appended,
     // this is a no-op.
     if (node.statements.every(stmt => !this._before.has(stmt) && !this._after.has(stmt))) {
       return node;
     }
 
-    // There are statements to prepend, so clone the original node.
-    const clone = ts.getMutableClone(node);
-
     // Build a new list of statements and patch it onto the clone.
     const newStatements: ts.Statement[] = [];
-    clone.statements.forEach(stmt => {
+    node.statements.forEach(stmt => {
       if (this._before.has(stmt)) {
-        newStatements.push(...(this._before.get(stmt) !as ts.Statement[]));
+        newStatements.push(...(this._before.get(stmt)! as ts.Statement[]));
         this._before.delete(stmt);
       }
       newStatements.push(stmt);
       if (this._after.has(stmt)) {
-        newStatements.push(...(this._after.get(stmt) !as ts.Statement[]));
+        newStatements.push(...(this._after.get(stmt)! as ts.Statement[]));
         this._after.delete(stmt);
       }
     });
-    clone.statements = ts.createNodeArray(newStatements, node.statements.hasTrailingComma);
-    return clone;
-  }
-}
 
-function hasStatements(node: ts.Node): node is ts.Node&{statements: ts.NodeArray<ts.Statement>} {
-  const block = node as{statements?: any};
-  return block.statements !== undefined && Array.isArray(block.statements);
+    const statementsArray =
+        ts.factory.createNodeArray(newStatements, node.statements.hasTrailingComma);
+
+    if (ts.isBlock(node)) {
+      return ts.factory.updateBlock(node, statementsArray) as T;
+    } else {
+      return ts.factory.updateSourceFile(
+                 node, statementsArray, node.isDeclarationFile, node.referencedFiles,
+                 node.typeReferenceDirectives, node.hasNoDefaultLib, node.libReferenceDirectives) as
+          T;
+    }
+  }
 }

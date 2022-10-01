@@ -1,12 +1,13 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
 import {Injector} from '@angular/core';
+
 import {IInjectorService} from './angular1';
 import {$INJECTOR, INJECTOR_KEY} from './constants';
 import {getTypeName, isFunction, validateInjectionKey} from './util';
@@ -17,7 +18,7 @@ import {getTypeName, isFunction, validateInjectionKey} from './util';
  * A helper function to allow an Angular service to be accessible from AngularJS.
  *
  * *Part of the [upgrade/static](api?query=upgrade%2Fstatic)
- * library for hybrid upgrade apps that support AoT compilation*
+ * library for hybrid upgrade apps that support AOT compilation*
  *
  * This helper function returns a factory function that provides access to the Angular
  * service identified by the `token` parameter.
@@ -79,8 +80,12 @@ export function downgradeInjectable(token: any, downgradedModule: string = ''): 
 
     validateInjectionKey($injector, downgradedModule, injectorKey, attemptedAction);
 
-    const injector: Injector = $injector.get(injectorKey);
-    return injector.get(token);
+    try {
+      const injector: Injector = $injector.get(injectorKey);
+      return injector.get(token);
+    } catch (err) {
+      throw new Error(`Error while ${attemptedAction}: ${(err as Error).message || err}`);
+    }
   };
   (factory as any)['$inject'] = [$INJECTOR];
 

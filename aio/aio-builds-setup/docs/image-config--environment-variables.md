@@ -22,11 +22,11 @@ you don't need to specify values for those.
   The domain name of the server.
 
 - `AIO_GITHUB_ORGANIZATION`:
-  The GitHub organization whose teams are whitelisted for accepting build artifacts.
+  The GitHub organization whose teams are trusted for accepting build artifacts.
   See also `AIO_GITHUB_TEAM_SLUGS`.
 
 - `AIO_GITHUB_REPO`:
-  The Github repository for which PRs will be hosted.
+  The GitHub repository for which PRs will be hosted.
 
 - `AIO_GITHUB_TEAM_SLUGS`:
   A comma-separated list of teams, whose authors are allowed to preview PRs.

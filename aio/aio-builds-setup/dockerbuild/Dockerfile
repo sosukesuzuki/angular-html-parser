@@ -1,5 +1,5 @@
 # Image metadata and config
-FROM debian:stretch
+FROM debian:bullseye
 
 LABEL name="angular.io PR preview" \
       description="This image implements the PR preview functionality for angular.io." \
@@ -37,10 +37,10 @@ ARG TEST_AIO_NGINX_PORT_HTTPS=4433
 ARG      AIO_SIGNIFICANT_FILES_PATTERN='^(?:aio|packages)/(?!.*[._]spec\\.[jt]s$)'
 ARG TEST_AIO_SIGNIFICANT_FILES_PATTERN=$AIO_SIGNIFICANT_FILES_PATTERN
 ARG      AIO_TRUSTED_PR_LABEL="aio: preview"
-ARG TEST_AIO_TRUSTED_PR_LABEL="aio: preview"
+ARG TEST_AIO_TRUSTED_PR_LABEL=$AIO_TRUSTED_PR_LABEL
 ARG      AIO_PREVIEW_SERVER_HOSTNAME=preview.localhost
-ARG TEST_AIO_PREVIEW_SERVER_HOSTNAME=preview.localhost
-ARG      AIO_ARTIFACT_MAX_SIZE=26214400
+ARG TEST_AIO_PREVIEW_SERVER_HOSTNAME=$AIO_PREVIEW_SERVER_HOSTNAME
+ARG      AIO_ARTIFACT_MAX_SIZE=36700160
 ARG TEST_AIO_ARTIFACT_MAX_SIZE=200
 ARG      AIO_PREVIEW_SERVER_PORT=3000
 ARG TEST_AIO_PREVIEW_SERVER_PORT=3001
@@ -73,23 +73,28 @@ RUN mkdir /var/log/aio
 
 # Add extra package sources
 RUN apt-get update -y && apt-get install -y curl
-RUN curl --silent --show-error --location https://deb.nodesource.com/setup_10.x | bash -
+RUN curl --silent --show-error --location https://deb.nodesource.com/setup_14.x | bash -
 RUN curl --silent --show-error https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -
 RUN echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list
-RUN echo "deb http://ftp.debian.org/debian stretch-backports main" | tee /etc/apt/sources.list.d/backports.list
 
 
 # Install packages
+# NOTE: Many packages make older versions unavailable on the repositories, so we cannot pin to
+#       specific versions :(
+#       See, for example:
+#       - https://github.com/nodesource/distributions/issues/33
+#       - https://askubuntu.com/questions/715104/how-can-i-downgrade-openssl-via-apt-get
 RUN apt-get update -y && apt-get install -y \
-    cron=3.0pl1-128+deb9u1 \
-    dnsmasq=2.76-5+deb9u2 \
-    nano=2.7.4-1 \
-    nginx=1.10.3-1+deb9u2 \
-    nodejs=10.15.3-1nodesource1 \
-    openssl=1.1.0j-1~deb9u1 \
-    rsyslog=8.24.0-1 \
-    yarn=1.15.2-1
-RUN yarn global add pm2@3.5.0
+    cron \
+    dnsmasq \
+    nano \
+    nginx \
+    nodejs \
+    openssl \
+    rsyslog \
+    vim \
+    yarn=1.22.18-1
+RUN yarn global add pm2@5.2.0
 
 
 # Set up log rotation
@@ -162,8 +167,7 @@ RUN find $AIO_SCRIPTS_SH_DIR -maxdepth 1 -type f -printf "%P\n" \
 
 # Set up the Node.js scripts
 COPY scripts-js/ $AIO_SCRIPTS_JS_DIR/
-WORKDIR $AIO_SCRIPTS_JS_DIR/
-RUN yarn install --production --frozen-lockfile
+RUN yarn --cwd="$AIO_SCRIPTS_JS_DIR/" install --production --frozen-lockfile
 
 
 # Set up health check

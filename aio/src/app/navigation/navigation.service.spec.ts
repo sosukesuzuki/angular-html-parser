@@ -41,16 +41,16 @@ describe('NavigationService', () => {
       navService.navigationViews.subscribe(views => viewsEvents.push(views));
 
       expect(viewsEvents).toEqual([]);
-      httpMock.expectOne({}).flush({ TopBar: [ { url: 'a' }] });
-      expect(viewsEvents).toEqual([{ TopBar: [ { url: 'a' }] }]);
+      httpMock.expectOne({}).flush({ TopBar: [ { title: '', url: 'a' }] });
+      expect(viewsEvents).toEqual([{ TopBar: [ { title: '', url: 'a' }] }]);
     });
 
     it('navigationViews observable should complete', () => {
       let completed = false;
-      navService.navigationViews.subscribe(undefined, undefined, () => completed = true);
+      navService.navigationViews.subscribe({complete: () => completed = true});
 
       httpMock.expectOne({method: 'get', url: navigationPath}).flush({});
-      expect(completed).toBe(true, 'observable completed');
+      expect(completed).withContext('observable completed').toBe(true);
     });
 
     it('should return the same object to all subscribers', () => {
@@ -82,11 +82,11 @@ describe('NavigationService', () => {
       { title: 'a', tooltip: 'a tip' },
       { title: 'b' },
       { title: 'c!'},
-      { url: 'foo' }
+      { title: '', url: 'foo' }
     ];
 
     beforeEach(() => {
-      navService.navigationViews.subscribe(views => view = views['sideNav']);
+      navService.navigationViews.subscribe(views => view = views.sideNav);
       httpMock.expectOne({}).flush({sideNav});
     });
 
@@ -144,7 +144,7 @@ describe('NavigationService', () => {
           url: 'b',
           view: 'SideNav',
           nodes: [
-            sideNavNodes[0].children![0],
+            sideNavNodes[0].children?.[0] as NavigationNode,
             sideNavNodes[0]
           ]
         }
@@ -156,8 +156,8 @@ describe('NavigationService', () => {
           url: 'd',
           view: 'SideNav',
           nodes: [
-            sideNavNodes[0].children![0].children![1],
-            sideNavNodes[0].children![0],
+            sideNavNodes[0].children?.[0].children?.[1] as NavigationNode,
+            sideNavNodes[0].children?.[0] as NavigationNode,
             sideNavNodes[0]
           ]
         }
@@ -201,24 +201,24 @@ describe('NavigationService', () => {
           url: 'c',
           view: 'SideNav',
           nodes: [
-            sideNavNodes[0].children![0].children![0],
-            sideNavNodes[0].children![0],
+            sideNavNodes[0].children?.[0].children?.[0] as NavigationNode,
+            sideNavNodes[0].children?.[0] as NavigationNode,
             sideNavNodes[0]
           ]
         }
       };
 
       locationService.go('c');
-      expect(currentNodes).toEqual(cnode, 'location: c');
+      expect(currentNodes).withContext('location: c').toEqual(cnode);
 
       locationService.go('c#foo');
-      expect(currentNodes).toEqual(cnode, 'location: c#foo');
+      expect(currentNodes).withContext('location: c#foo').toEqual(cnode);
 
       locationService.go('c?foo=1');
-      expect(currentNodes).toEqual(cnode, 'location: c?foo=1');
+      expect(currentNodes).withContext('location: c?foo=1').toEqual(cnode);
 
       locationService.go('c#foo?bar=1&baz=2');
-      expect(currentNodes).toEqual(cnode, 'location: c#foo?bar=1&baz=2');
+      expect(currentNodes).withContext('location: c#foo?bar=1&baz=2').toEqual(cnode);
     });
   });
 
@@ -254,7 +254,7 @@ describe('NavigationService', () => {
         {...v, ...{ tooltip: v.title + '.'}})
       );
 
-      navService.navigationViews.subscribe(views => actualDocVersions = views['docVersions']);
+      navService.navigationViews.subscribe(views => actualDocVersions = views.docVersions);
     });
 
     it('should extract the docVersions', () => {

@@ -1,35 +1,75 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {CompileShallowModuleMetadata, identifierName} from '../compile_metadata';
-import {InjectableCompiler} from '../injectable_compiler';
-import {mapLiteral} from '../output/map_util';
+import {R3DeclareNgModuleFacade} from '../compiler_facade_interface';
 import * as o from '../output/output_ast';
-import {OutputContext} from '../util';
 
-import {R3DependencyMetadata, compileFactoryFunction} from './r3_factory';
 import {Identifiers as R3} from './r3_identifiers';
-import {R3Reference, convertMetaToOutput, mapToMapExpression} from './util';
+import {jitOnlyGuardedExpression, R3CompiledExpression, R3Reference, refsToArray} from './util';
+import {DefinitionMap} from './view/util';
 
-export interface R3NgModuleDef {
-  expression: o.Expression;
-  type: o.Type;
-  additionalStatements: o.Statement[];
+/**
+ * How the selector scope of an NgModule (its declarations, imports, and exports) should be emitted
+ * as a part of the NgModule definition.
+ */
+export enum R3SelectorScopeMode {
+  /**
+   * Emit the declarations inline into the module definition.
+   *
+   * This option is useful in certain contexts where it's known that JIT support is required. The
+   * tradeoff here is that this emit style prevents directives and pipes from being tree-shaken if
+   * they are unused, but the NgModule is used.
+   */
+  Inline,
+
+  /**
+   * Emit the declarations using a side effectful function call, `ɵɵsetNgModuleScope`, that is
+   * guarded with the `ngJitMode` flag.
+   *
+   * This form of emit supports JIT and can be optimized away if the `ngJitMode` flag is set to
+   * false, which allows unused directives and pipes to be tree-shaken.
+   */
+  SideEffect,
+
+  /**
+   * Don't generate selector scopes at all.
+   *
+   * This is useful for contexts where JIT support is known to be unnecessary.
+   */
+  Omit,
 }
 
 /**
- * Metadata required by the module compiler to generate a `ngModuleDef` for a type.
+ * Metadata required by the module compiler to generate a module def (`ɵmod`) for a type.
  */
 export interface R3NgModuleMetadata {
   /**
    * An expression representing the module type being compiled.
    */
-  type: o.Expression;
+  type: R3Reference;
+
+  /**
+   * An expression representing the module type being compiled, intended for use within a class
+   * definition itself.
+   *
+   * This can differ from the outer `type` if the class is being compiled by ngcc and is inside
+   * an IIFE structure that uses a different name internally.
+   */
+  internalType: o.Expression;
+
+  /**
+   * An expression intended for use by statements that are adjacent (i.e. tightly coupled) to but
+   * not internal to a class definition.
+   *
+   * This can differ from the outer `type` if the class is being compiled by ngcc and is inside
+   * an IIFE structure that uses a different name internally.
+   */
+  adjacentType: o.Expression;
 
   /**
    * An array of expressions representing the bootstrap components specified by the module.
@@ -42,9 +82,20 @@ export interface R3NgModuleMetadata {
   declarations: R3Reference[];
 
   /**
+   * Those declarations which should be visible to downstream consumers. If not specified, all
+   * declarations are made visible to downstream consumers.
+   */
+  publicDeclarationTypes: o.Expression[]|null;
+
+  /**
    * An array of expressions representing the imports of the module.
    */
   imports: R3Reference[];
+
+  /**
+   * Whether or not to include `imports` in generated type declarations.
+   */
+  includeImportTypes: boolean;
 
   /**
    * An array of expressions representing the exports of the module.
@@ -52,11 +103,9 @@ export interface R3NgModuleMetadata {
   exports: R3Reference[];
 
   /**
-   * Whether to emit the selector scope values (declarations, imports, exports) inline into the
-   * module definition, or to generate additional statements which patch them on. Inline emission
-   * does not allow components to be tree-shaken, but is useful for JIT mode.
+   * How to emit the selector scope values (declarations, imports, exports).
    */
-  emitInline: boolean;
+  selectorScopeMode: R3SelectorScopeMode;
 
   /**
    * Whether to generate closure wrappers for bootstrap, declarations, imports, and exports.
@@ -73,80 +122,152 @@ export interface R3NgModuleMetadata {
 }
 
 /**
+ * The shape of the object literal that is passed to the `ɵɵdefineNgModule()` call.
+ */
+interface R3NgModuleDefMap {
+  /**
+   * An expression representing the module type being compiled.
+   */
+  type: o.Expression;
+  /**
+   * An expression evaluating to an array of expressions representing the bootstrap components
+   * specified by the module.
+   */
+  bootstrap?: o.Expression;
+  /**
+   * An expression evaluating to an array of expressions representing the directives and pipes
+   * declared by the module.
+   */
+  declarations?: o.Expression;
+  /**
+   * An expression evaluating to an array of expressions representing the imports of the module.
+   */
+  imports?: o.Expression;
+  /**
+   * An expression evaluating to an array of expressions representing the exports of the module.
+   */
+  exports?: o.Expression;
+  /**
+   * A literal array expression containing the schemas that declare elements to be allowed in the
+   * NgModule.
+   */
+  schemas?: o.LiteralArrayExpr;
+  /**
+   * An expression evaluating to the unique ID of an NgModule.
+   * */
+  id?: o.Expression;
+}
+
+/**
  * Construct an `R3NgModuleDef` for the given `R3NgModuleMetadata`.
  */
-export function compileNgModule(meta: R3NgModuleMetadata): R3NgModuleDef {
+export function compileNgModule(meta: R3NgModuleMetadata): R3CompiledExpression {
   const {
-    type: moduleType,
+    adjacentType,
+    internalType,
     bootstrap,
     declarations,
     imports,
     exports,
     schemas,
     containsForwardDecls,
-    emitInline,
+    selectorScopeMode,
     id
   } = meta;
 
-  const additionalStatements: o.Statement[] = [];
-  const definitionMap = {
-    type: moduleType
-  } as{
-    type: o.Expression,
-    bootstrap: o.Expression,
-    declarations: o.Expression,
-    imports: o.Expression,
-    exports: o.Expression,
-    schemas: o.LiteralArrayExpr,
-    id: o.Expression
-  };
+  const statements: o.Statement[] = [];
+  const definitionMap = new DefinitionMap<R3NgModuleDefMap>();
+  definitionMap.set('type', internalType);
 
-  // Only generate the keys in the metadata if the arrays have values.
-  if (bootstrap.length) {
-    definitionMap.bootstrap = refsToArray(bootstrap, containsForwardDecls);
+  if (bootstrap.length > 0) {
+    definitionMap.set('bootstrap', refsToArray(bootstrap, containsForwardDecls));
   }
 
-  // If requested to emit scope information inline, pass the declarations, imports and exports to
-  // the `ɵɵdefineNgModule` call. The JIT compilation uses this.
-  if (emitInline) {
-    if (declarations.length) {
-      definitionMap.declarations = refsToArray(declarations, containsForwardDecls);
+  if (selectorScopeMode === R3SelectorScopeMode.Inline) {
+    // If requested to emit scope information inline, pass the `declarations`, `imports` and
+    // `exports` to the `ɵɵdefineNgModule()` call directly.
+
+    if (declarations.length > 0) {
+      definitionMap.set('declarations', refsToArray(declarations, containsForwardDecls));
     }
 
-    if (imports.length) {
-      definitionMap.imports = refsToArray(imports, containsForwardDecls);
+    if (imports.length > 0) {
+      definitionMap.set('imports', refsToArray(imports, containsForwardDecls));
     }
 
-    if (exports.length) {
-      definitionMap.exports = refsToArray(exports, containsForwardDecls);
+    if (exports.length > 0) {
+      definitionMap.set('exports', refsToArray(exports, containsForwardDecls));
     }
-  }
-
-  // If not emitting inline, the scope information is not passed into `ɵɵdefineNgModule` as it would
-  // prevent tree-shaking of the declarations, imports and exports references.
-  else {
+  } else if (selectorScopeMode === R3SelectorScopeMode.SideEffect) {
+    // In this mode, scope information is not passed into `ɵɵdefineNgModule` as it
+    // would prevent tree-shaking of the declarations, imports and exports references. Instead, it's
+    // patched onto the NgModule definition with a `ɵɵsetNgModuleScope` call that's guarded by the
+    // `ngJitMode` flag.
     const setNgModuleScopeCall = generateSetNgModuleScopeCall(meta);
     if (setNgModuleScopeCall !== null) {
-      additionalStatements.push(setNgModuleScopeCall);
+      statements.push(setNgModuleScopeCall);
     }
+  } else {
+    // Selector scope emit was not requested, so skip it.
   }
 
-  if (schemas && schemas.length) {
-    definitionMap.schemas = o.literalArr(schemas.map(ref => ref.value));
+  if (schemas !== null && schemas.length > 0) {
+    definitionMap.set('schemas', o.literalArr(schemas.map(ref => ref.value)));
   }
 
-  if (id) {
-    definitionMap.id = id;
+  if (id !== null) {
+    definitionMap.set('id', id);
+
+    // Generate a side-effectful call to register this NgModule by its id, as per the semantics of
+    // NgModule ids.
+    statements.push(o.importExpr(R3.registerNgModuleType).callFn([adjacentType, id]).toStmt());
   }
 
-  const expression = o.importExpr(R3.defineNgModule).callFn([mapToMapExpression(definitionMap)]);
-  const type = new o.ExpressionType(o.importExpr(R3.NgModuleDefWithMeta, [
-    new o.ExpressionType(moduleType), tupleTypeOf(declarations), tupleTypeOf(imports),
-    tupleTypeOf(exports)
+  const expression =
+      o.importExpr(R3.defineNgModule).callFn([definitionMap.toLiteralMap()], undefined, true);
+  const type = createNgModuleType(meta);
+
+  return {expression, type, statements};
+}
+
+/**
+ * This function is used in JIT mode to generate the call to `ɵɵdefineNgModule()` from a call to
+ * `ɵɵngDeclareNgModule()`.
+ */
+export function compileNgModuleDeclarationExpression(meta: R3DeclareNgModuleFacade): o.Expression {
+  const definitionMap = new DefinitionMap<R3NgModuleDefMap>();
+  definitionMap.set('type', new o.WrappedNodeExpr(meta.type));
+  if (meta.bootstrap !== undefined) {
+    definitionMap.set('bootstrap', new o.WrappedNodeExpr(meta.bootstrap));
+  }
+  if (meta.declarations !== undefined) {
+    definitionMap.set('declarations', new o.WrappedNodeExpr(meta.declarations));
+  }
+  if (meta.imports !== undefined) {
+    definitionMap.set('imports', new o.WrappedNodeExpr(meta.imports));
+  }
+  if (meta.exports !== undefined) {
+    definitionMap.set('exports', new o.WrappedNodeExpr(meta.exports));
+  }
+  if (meta.schemas !== undefined) {
+    definitionMap.set('schemas', new o.WrappedNodeExpr(meta.schemas));
+  }
+  if (meta.id !== undefined) {
+    definitionMap.set('id', new o.WrappedNodeExpr(meta.id));
+  }
+  return o.importExpr(R3.defineNgModule).callFn([definitionMap.toLiteralMap()]);
+}
+
+export function createNgModuleType(
+    {type: moduleType, declarations, exports, imports, includeImportTypes, publicDeclarationTypes}:
+        R3NgModuleMetadata): o.ExpressionType {
+  return new o.ExpressionType(o.importExpr(R3.NgModuleDeclaration, [
+    new o.ExpressionType(moduleType.type),
+    publicDeclarationTypes === null ? tupleTypeOf(declarations) :
+                                      tupleOfTypes(publicDeclarationTypes),
+    includeImportTypes ? tupleTypeOf(imports) : o.NONE_TYPE,
+    tupleTypeOf(exports),
   ]));
-
-
-  return {expression, type, additionalStatements};
 }
 
 /**
@@ -156,112 +277,46 @@ export function compileNgModule(meta: R3NgModuleMetadata): R3NgModuleDef {
  * symbols to become tree-shakeable.
  */
 function generateSetNgModuleScopeCall(meta: R3NgModuleMetadata): o.Statement|null {
-  const {type: moduleType, declarations, imports, exports, containsForwardDecls} = meta;
+  const {adjacentType: moduleType, declarations, imports, exports, containsForwardDecls} = meta;
 
-  const scopeMap = {} as{
-    declarations: o.Expression,
-    imports: o.Expression,
-    exports: o.Expression,
-  };
+  const scopeMap = new DefinitionMap<
+      {declarations: o.Expression, imports: o.Expression, exports: o.Expression}>();
 
-  if (declarations.length) {
-    scopeMap.declarations = refsToArray(declarations, containsForwardDecls);
+  if (declarations.length > 0) {
+    scopeMap.set('declarations', refsToArray(declarations, containsForwardDecls));
   }
 
-  if (imports.length) {
-    scopeMap.imports = refsToArray(imports, containsForwardDecls);
+  if (imports.length > 0) {
+    scopeMap.set('imports', refsToArray(imports, containsForwardDecls));
   }
 
-  if (exports.length) {
-    scopeMap.exports = refsToArray(exports, containsForwardDecls);
+  if (exports.length > 0) {
+    scopeMap.set('exports', refsToArray(exports, containsForwardDecls));
   }
 
-  if (Object.keys(scopeMap).length === 0) {
+  if (Object.keys(scopeMap.values).length === 0) {
     return null;
   }
 
+  // setNgModuleScope(...)
   const fnCall = new o.InvokeFunctionExpr(
       /* fn */ o.importExpr(R3.setNgModuleScope),
-      /* args */[moduleType, mapToMapExpression(scopeMap)],
-      /* type */ undefined,
-      /* sourceSpan */ undefined,
-      /* pure */ true);
-  return fnCall.toStmt();
-}
+      /* args */[moduleType, scopeMap.toLiteralMap()]);
 
-export interface R3InjectorDef {
-  expression: o.Expression;
-  type: o.Type;
-  statements: o.Statement[];
-}
+  // (ngJitMode guard) && setNgModuleScope(...)
+  const guardedCall = jitOnlyGuardedExpression(fnCall);
 
-export interface R3InjectorMetadata {
-  name: string;
-  type: o.Expression;
-  deps: R3DependencyMetadata[]|null;
-  providers: o.Expression|null;
-  imports: o.Expression[];
-}
+  // function() { (ngJitMode guard) && setNgModuleScope(...); }
+  const iife = new o.FunctionExpr(
+      /* params */[],
+      /* statements */[guardedCall.toStmt()]);
 
-export function compileInjector(meta: R3InjectorMetadata): R3InjectorDef {
-  const result = compileFactoryFunction({
-    name: meta.name,
-    type: meta.type,
-    deps: meta.deps,
-    injectFn: R3.inject,
-  });
-  const definitionMap = {
-    factory: result.factory,
-  } as{factory: o.Expression, providers: o.Expression, imports: o.Expression};
+  // (function() { (ngJitMode guard) && setNgModuleScope(...); })()
+  const iifeCall = new o.InvokeFunctionExpr(
+      /* fn */ iife,
+      /* args */[]);
 
-  if (meta.providers !== null) {
-    definitionMap.providers = meta.providers;
-  }
-
-  if (meta.imports.length > 0) {
-    definitionMap.imports = o.literalArr(meta.imports);
-  }
-
-  const expression = o.importExpr(R3.defineInjector).callFn([mapToMapExpression(definitionMap)]);
-  const type =
-      new o.ExpressionType(o.importExpr(R3.InjectorDef, [new o.ExpressionType(meta.type)]));
-  return {expression, type, statements: result.statements};
-}
-
-// TODO(alxhub): integrate this with `compileNgModule`. Currently the two are separate operations.
-export function compileNgModuleFromRender2(
-    ctx: OutputContext, ngModule: CompileShallowModuleMetadata,
-    injectableCompiler: InjectableCompiler): void {
-  const className = identifierName(ngModule.type) !;
-
-  const rawImports = ngModule.rawImports ? [ngModule.rawImports] : [];
-  const rawExports = ngModule.rawExports ? [ngModule.rawExports] : [];
-
-  const injectorDefArg = mapLiteral({
-    'factory':
-        injectableCompiler.factoryFor({type: ngModule.type, symbol: ngModule.type.reference}, ctx),
-    'providers': convertMetaToOutput(ngModule.rawProviders, ctx),
-    'imports': convertMetaToOutput([...rawImports, ...rawExports], ctx),
-  });
-
-  const injectorDef = o.importExpr(R3.defineInjector).callFn([injectorDefArg]);
-
-  ctx.statements.push(new o.ClassStmt(
-      /* name */ className,
-      /* parent */ null,
-      /* fields */[new o.ClassField(
-          /* name */ 'ngInjectorDef',
-          /* type */ o.INFERRED_TYPE,
-          /* modifiers */[o.StmtModifier.Static],
-          /* initializer */ injectorDef, )],
-      /* getters */[],
-      /* constructorMethod */ new o.ClassMethod(null, [], []),
-      /* methods */[]));
-}
-
-function accessExportScope(module: o.Expression): o.Expression {
-  const selectorScope = new o.ReadPropExpr(module, 'ngModuleDef');
-  return new o.ReadPropExpr(selectorScope, 'exported');
+  return iifeCall.toStmt();
 }
 
 function tupleTypeOf(exp: R3Reference[]): o.Type {
@@ -269,7 +324,7 @@ function tupleTypeOf(exp: R3Reference[]): o.Type {
   return exp.length > 0 ? o.expressionType(o.literalArr(types)) : o.NONE_TYPE;
 }
 
-function refsToArray(refs: R3Reference[], shouldForwardDeclare: boolean): o.Expression {
-  const values = o.literalArr(refs.map(ref => ref.value));
-  return shouldForwardDeclare ? o.fn([], [new o.ReturnStatement(values)]) : values;
+function tupleOfTypes(types: o.Expression[]): o.Type {
+  const typeofTypes = types.map(type => o.typeofExpr(type));
+  return types.length > 0 ? o.expressionType(o.literalArr(typeofTypes)) : o.NONE_TYPE;
 }

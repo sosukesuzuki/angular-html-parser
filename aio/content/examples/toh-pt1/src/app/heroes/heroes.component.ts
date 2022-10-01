@@ -18,17 +18,15 @@ export class HeroesComponent implements OnInit {
   // #enddocregion add-hero
   */
   // #docregion
-  // #docregion hero-property-1
   hero: Hero = {
     id: 1,
     name: 'Windstorm'
   };
-  // #enddocregion hero-property-1
   // #docregion v1
 
   constructor() { }
 
-  ngOnInit() {
+  ngOnInit(): void {
   }
 
 }

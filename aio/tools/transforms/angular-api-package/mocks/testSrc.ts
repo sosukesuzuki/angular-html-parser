@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -22,13 +22,14 @@ export * from './importedSrc';
  * This is MyClass
  */
 export class MyClass {
-  message: String;
+  message: string;
 
   /**
    * Create a new MyClass
-   * @param {String} name The name to say hello to
+   *
+   * @param name The name to say hello to
    */
-  constructor(name) { this.message = 'hello ' + name; }
+  constructor(name: string) { this.message = 'hello ' + name; }
 
   /**
    * Return a greeting message

@@ -2,8 +2,8 @@
 
 
 Whenever a PR job is run on CircleCI, we want to build `angular.io` and host the build artifacts on
-a publicly accessible server so that collaborators (developers, designers, authors, etc) can preview
-the changes without having to checkout and build the app locally.
+a publicly accessible server so that collaborators, such as the developers, designers, or authors,
+can preview the changes without having to check out and build the app locally.
 
 This document discusses the security considerations associated with moving build artifacts as
 part of the CI process and serving them publicly.
@@ -69,7 +69,7 @@ This section describes how each of the aforementioned sub-tasks is accomplished:
    We perform a number of preliminary checks:
    - Was the webhook triggered by the designated CircleCI job (currently `aio_preview`)?
    - Was the build successful?
-   - Are the associated GitHub organisation and repository what we expect (e.g. `angular/angular`)?
+   - Are the associated GitHub organization and repository what we expect (e.g. `angular/angular`)?
    - Has the PR touched any files that might affect the angular.io app (currently the `aio/` or
      `packages/` directories, ignoring spec files)?
 
@@ -98,7 +98,7 @@ This section describes how each of the aforementioned sub-tasks is accomplished:
       Such a label can only have been added by a maintainer (with the necessary rights) and
       designates that they have manually verified the PR contents.
    2. We can verify (again using the GitHub API) the author's membership in one of the
-      whitelisted/trusted GitHub teams. For this operation, we need a Personal Access Token with the
+      trusted GitHub teams. For this operation, we need a Personal Access Token with the
       `read:org` scope issued by a user that can "see" the specified GitHub organization.
       Here too, we use the token by @mary-poppins.
 
@@ -136,7 +136,7 @@ This section describes how each of the aforementioned sub-tasks is accomplished:
 ## Assumptions / Things to keep in mind
 
 - Other than the initial webhook trigger, which provides a build number, all requests for data come
-  from the preview-server making requests to well defined API endpoints (e.g. CircleCI and Github).
+  from the preview-server making requests to well-defined API endpoints (e.g. CircleCI and Github).
   This means that any secret access keys need only be stored on the preview-server and not on any of
   the CI build infrastructure (e.g. CircleCI).
 

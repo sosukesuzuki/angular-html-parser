@@ -1,9 +1,8 @@
-/* tslint:disable:member-ordering */
 // #docplaster
-import { Component, Input, OnInit } from '@angular/core';
-import { ActivatedRoute, Router }   from '@angular/router';
+import { Component, OnInit } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 
-import { Hero }              from '../model/hero';
+import { Hero } from '../model/hero';
 import { HeroDetailService } from './hero-detail.service';
 
 // #docregion prototype
@@ -17,13 +16,13 @@ export class HeroDetailComponent implements OnInit {
   // #docregion ctor
   constructor(
     private heroDetailService: HeroDetailService,
-    private route:  ActivatedRoute,
+    private route: ActivatedRoute,
     private router: Router) {
   }
   // #enddocregion ctor
 // #enddocregion prototype
 
-  @Input() hero: Hero;
+  hero!: Hero;
 
   // #docregion ng-on-init
   ngOnInit(): void {
@@ -32,7 +31,7 @@ export class HeroDetailComponent implements OnInit {
   }
   // #enddocregion ng-on-init
 
-  private getHero(id: string): void {
+  private getHero(id: string | null): void {
     // when no id or id===0, create new blank hero
     if (!id) {
       this.hero = { id: 0, name: '' } as Hero;

@@ -1,32 +1,42 @@
 // #docplaster
-// #docregion import-async
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
-// #enddocregion import-async
-import { By }              from '@angular/platform-browser';
-import { DebugElement }    from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { BannerComponent } from './banner-external.component';
 
 describe('BannerComponent (external files)', () => {
   let component: BannerComponent;
-  let fixture:   ComponentFixture<BannerComponent>;
-  let h1:        HTMLElement;
+  let fixture: ComponentFixture<BannerComponent>;
+  let h1: HTMLElement;
+
+  describe('setup that may fail', () => {
+    // #docregion setup-may-fail
+    beforeEach(async () => {
+      await TestBed.configureTestingModule({
+        declarations: [ BannerComponent ],
+      }); // missing call to compileComponents()
+      fixture = TestBed.createComponent(BannerComponent);
+    });
+    // #enddocregion setup-may-fail
+
+    it('should create', () => {
+      expect(fixture.componentInstance).toBeDefined();
+    });
+  });
 
   describe('Two beforeEach', () => {
     // #docregion async-before-each
-    beforeEach(async(() => {
-      TestBed.configureTestingModule({
+    beforeEach(async () => {
+      await TestBed.configureTestingModule({
         declarations: [ BannerComponent ],
-      })
-      .compileComponents();  // compile template and css
-    }));
+      }).compileComponents();  // compile template and css
+    });
     // #enddocregion async-before-each
 
     // synchronous beforeEach
     // #docregion sync-before-each
     beforeEach(() => {
       fixture = TestBed.createComponent(BannerComponent);
-      component = fixture.componentInstance; // BannerComponent test instance
+      component = fixture.componentInstance;  // BannerComponent test instance
       h1 = fixture.nativeElement.querySelector('h1');
     });
     // #enddocregion sync-before-each
@@ -36,17 +46,14 @@ describe('BannerComponent (external files)', () => {
 
   describe('One beforeEach', () => {
     // #docregion one-before-each
-    beforeEach(async(() => {
-      TestBed.configureTestingModule({
+    beforeEach(async () => {
+      await TestBed.configureTestingModule({
         declarations: [ BannerComponent ],
-      })
-      .compileComponents()
-      .then(() => {
-        fixture = TestBed.createComponent(BannerComponent);
-        component = fixture.componentInstance;
-        h1 = fixture.nativeElement.querySelector('h1');
-      });
-    }));
+      }).compileComponents();
+      fixture = TestBed.createComponent(BannerComponent);
+      component = fixture.componentInstance;
+      h1 = fixture.nativeElement.querySelector('h1');
+    });
     // #enddocregion one-before-each
 
     tests();
@@ -69,4 +76,3 @@ describe('BannerComponent (external files)', () => {
     });
   }
 });
-

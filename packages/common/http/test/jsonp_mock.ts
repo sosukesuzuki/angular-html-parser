@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
 export class MockScriptElement {
-  constructor() {}
+  constructor(public ownerDocument: MockDocument) {}
 
   listeners: {
     load?: (event: Event) => void,
@@ -18,19 +18,27 @@ export class MockScriptElement {
     this.listeners[event] = handler as any;
   }
 
-  removeEventListener(event: 'load'|'error'): void { delete this.listeners[event]; }
+  removeEventListener(event: 'load'|'error'): void {
+    delete this.listeners[event];
+  }
 }
 
 export class MockDocument {
   // TODO(issue/24571): remove '!'.
-  mock !: MockScriptElement | null;
+  mock!: MockScriptElement|null;
   readonly body: any = this;
 
+  implementation = {
+    createHTMLDocument: () => new MockDocument(),
+  };
+
   createElement(tag: 'script'): HTMLScriptElement {
-    return new MockScriptElement() as any as HTMLScriptElement;
+    return new MockScriptElement(this) as any as HTMLScriptElement;
   }
 
-  appendChild(node: any): void { this.mock = node; }
+  appendChild(node: any): void {
+    this.mock = node;
+  }
 
   removeNode(node: any): void {
     if (this.mock === node) {
@@ -38,7 +46,23 @@ export class MockDocument {
     }
   }
 
-  mockLoad(): void { this.mock !.listeners.load !(null as any); }
+  adoptNode(node: any) {
+    node.ownerDocument = this;
+  }
 
-  mockError(err: Error) { this.mock !.listeners.error !(err); }
+  mockLoad(): void {
+    // Mimic behavior described by
+    // https://html.spec.whatwg.org/multipage/scripting.html#execute-the-script-block
+    if (this.mock!.ownerDocument === this) {
+      this.mock!.listeners.load!(null as any);
+    }
+  }
+
+  mockError(err: Error) {
+    // Mimic behavior described by
+    // https://html.spec.whatwg.org/multipage/scripting.html#execute-the-script-block
+    if (this.mock!.ownerDocument === this) {
+      this.mock!.listeners.error!(err);
+    }
+  }
 }

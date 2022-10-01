@@ -1,33 +1,24 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-/**
- * This file is used to control if the default rendering pipeline should be `ViewEngine` or `Ivy`.
- *
- * For more information on how to run and debug tests with either Ivy or View Engine (legacy),
- * please see [BAZEL.md](./docs/BAZEL.md).
- */
-
-let _devMode: boolean = true;
-let _runModeLocked: boolean = false;
-
+import {global} from './global';
 
 /**
- * Returns whether Angular is in development mode. After called once,
- * the value is locked and won't change any more.
+ * Returns whether Angular is in development mode.
  *
- * By default, this is true, unless a user calls `enableProdMode` before calling this.
+ * By default, this is true, unless `enableProdMode` is invoked prior to calling this method or the
+ * application is built using the Angular CLI with the `optimization` option.
+ * @see {@link cli/build ng build}
  *
  * @publicApi
  */
 export function isDevMode(): boolean {
-  _runModeLocked = true;
-  return _devMode;
+  return typeof ngDevMode === 'undefined' || !!ngDevMode;
 }
 
 /**
@@ -38,11 +29,16 @@ export function isDevMode(): boolean {
  * does not result in additional changes to any bindings (also known as
  * unidirectional data flow).
  *
+ * Using this method is discouraged as the Angular CLI will set production mode when using the
+ * `optimization` option.
+ * @see {@link cli/build ng build}
+ *
  * @publicApi
  */
 export function enableProdMode(): void {
-  if (_runModeLocked) {
-    throw new Error('Cannot enable prod mode after platform setup.');
+  // The below check is there so when ngDevMode is set via terser
+  // `global['ngDevMode'] = false;` is also dropped.
+  if (typeof ngDevMode === 'undefined' || ngDevMode) {
+    global['ngDevMode'] = false;
   }
-  _devMode = false;
 }

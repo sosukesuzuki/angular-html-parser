@@ -1,628 +1,376 @@
-# Lifecycle Hooks
+# Lifecycle hooks
 
-A component has a lifecycle managed by Angular.
+A component instance has a lifecycle that starts when Angular instantiates the component class and renders the component view along with its child views.
+The lifecycle continues with change detection, as Angular checks to see when data-bound properties change, and updates both the view and the component instance as needed.
+The lifecycle ends when Angular destroys the component instance and removes its rendered template from the DOM.
+Directives have a similar lifecycle, as Angular creates, updates, and destroys instances in the course of execution.
 
-Angular creates and renders components along with their children, checks when their data-bound properties change, and destroys them before removing them from the DOM.
+Your application can use [lifecycle hook methods](guide/glossary#lifecycle-hook "Definition of lifecycle hook") to tap into key events in the lifecycle of a component or directive to initialize new instances, initiate change detection when needed, respond to updates during change detection, and clean up before deletion of instances.
 
-Angular offers **lifecycle hooks**
-that provide visibility into these key life moments and the ability to act when they occur.
+## Prerequisites
 
-A directive has the same set of lifecycle hooks.
+Before working with lifecycle hooks, you should have a basic understanding of the following:
 
-{@a hooks-overview}
+*   [TypeScript programming](https://www.typescriptlang.org)
+*   Angular app-design fundamentals, as described in [Angular Concepts](guide/architecture "Introduction to fundamental app-design concepts")
 
-## Component lifecycle hooks overview
+<a id="hooks-overview"></a>
 
-Directive and component instances have a lifecycle
-as Angular creates, updates, and destroys them.
-Developers can tap into key moments in that lifecycle by implementing
-one or more of the *lifecycle hook* interfaces in the Angular `core` library.
+## Responding to lifecycle events
 
-Each interface has a single hook method whose name is the interface name prefixed with `ng`.
-For example, the `OnInit` interface has a hook method named `ngOnInit()`
-that Angular calls shortly after creating the component:
+Respond to events in the lifecycle of a component or directive by implementing one or more of the *lifecycle hook* interfaces in the Angular `core` library.
+The hooks give you the opportunity to act on a component or directive instance at the appropriate moment, as Angular creates, updates, or destroys that instance.
 
-<code-example path="lifecycle-hooks/src/app/peek-a-boo.component.ts" region="ngOnInit" header="peek-a-boo.component.ts (excerpt)"></code-example>
+Each interface defines the prototype for a single hook method, whose name is the interface name prefixed with `ng`.
+For example, the `OnInit` interface has a hook method named `ngOnInit()`.
+If you implement this method in your component or directive class, Angular calls it shortly after checking the input properties for that component or directive for the first time.
 
-No directive or component will implement all of the lifecycle hooks.
-Angular only calls a directive/component hook method *if it is defined*.
+<code-example header="peek-a-boo.directive.ts (excerpt)" path="lifecycle-hooks/src/app/peek-a-boo.directive.ts" region="ngOnInit"></code-example>
 
-{@a hooks-purpose-timing}
+You don't have to implement all \(or any\) of the lifecycle hooks, just the ones you need.
 
-## Lifecycle sequence
+<a id="hooks-purpose-timing"></a>
 
-*After* creating a component/directive by calling its constructor, Angular
-calls the lifecycle hook methods in the following sequence at specific moments:
+### Lifecycle event sequence
 
-<table width="100%">
-  <col width="20%"></col>
-  <col width="80%"></col>
-  <tr>
-    <th>Hook</th>
-    <th>Purpose and Timing</th>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <code>ngOnChanges()</code>
-    </td>
-    <td>
+After your application instantiates a component or directive by calling its constructor, Angular calls the hook methods you have implemented at the appropriate point in the lifecycle of that instance.
 
-      Respond when Angular (re)sets data-bound input properties.
-      The method receives a `SimpleChanges` object of current and previous property values.
+Angular executes hook methods in the following sequence.
+Use them to perform the following kinds of operations.
 
-      Called before `ngOnInit()` and whenever one or more data-bound input properties change.
+| Hook method               | Purpose                                                                                                                                                                                                                                                                                                                                                | Timing |
+|:---                       |:---                                                                                                                                                                                                                                                                                                                                                    |:---    |
+| `ngOnChanges()`           | Respond when Angular sets or resets data-bound input properties. The method receives a `SimpleChanges` object of current and previous property values. <br /> <div class="alert is-helpful"> **NOTE**: <br /> This happens frequently, so any operation you perform here impacts performance significantly. </div> See details in [Using change detection hooks](#onchanges) in this document. | Called before `ngOnInit()` \(if the component has bound inputs\) and whenever one or more data-bound input properties change. <br /> <div class="alert is-helpful"> **NOTE**: <br /> If your component has no inputs or you use it without providing any inputs, the framework will not call `ngOnChanges()`. </div> |
+| `ngOnInit()`              | Initialize the directive or component after Angular first displays the data-bound properties and sets the directive or component's input properties. See details in [Initializing a component or directive](#oninit) in this document.                                                                                                                 | Called once, after the first `ngOnChanges()`. `ngOnInit()` is still called even when `ngOnChanges()` is not \(which is the case when there are no template-bound inputs\).                                                                                              |
+| `ngDoCheck()`             | Detect and act upon changes that Angular can't or won't detect on its own. See details and example in [Defining custom change detection](#docheck) in this document.                                                                                                                                                                                   | Called immediately after `ngOnChanges()` on every change detection run, and immediately after `ngOnInit()` on the first run.                                                                                                                                            |
+| `ngAfterContentInit()`    | Respond after Angular projects external content into the component's view, or into the view that a directive is in. <br /> See details and example in [Responding to changes in content](#aftercontent) in this document.                                                                                                                              | Called *once* after the first `ngDoCheck()`.                                                                                                                                                                                                                            |
+| `ngAfterContentChecked()` | Respond after Angular checks the content projected into the directive or component. <br /> See details and example in [Responding to projected content changes](#aftercontent) in this document.                                                                                                                                                       | Called after `ngAfterContentInit()` and every subsequent `ngDoCheck()`.                                                                                                                                                                                                 |
+| `ngAfterViewInit()`       | Respond after Angular initializes the component's views and child views, or the view that contains the directive. <br /> See details and example in [Responding to view changes](#afterview) in this document.                                                                                                                                         | Called *once* after the first `ngAfterContentChecked()`.                                                                                                                                                                                                                |
+| `ngAfterViewChecked()`    | Respond after Angular checks the component's views and child views, or the view that contains the directive.                                                                                                                                                                                                                                           | Called after the `ngAfterViewInit()` and every subsequent `ngAfterContentChecked()`.                                                                                                                                                                                    |
+| `ngOnDestroy()`           | Cleanup just before Angular destroys the directive or component. Unsubscribe Observables and detach event handlers to avoid memory leaks. See details in [Cleaning up on instance destruction](#ondestroy) in this document.                                                                                                                           | Called immediately before Angular destroys the directive or component.                                                                                                                                                                                                  |
 
-    </td>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <code>ngOnInit()</code>
-    </td>
-    <td>
+<a id="the-sample"></a>
 
-      Initialize the directive/component after Angular first displays the data-bound properties
-      and sets the directive/component's input properties.
+### Lifecycle example set
 
-      Called _once_, after the _first_ `ngOnChanges()`.
+The <live-example></live-example> demonstrates the use of lifecycle hooks through a series of exercises presented as components under the control of the root `AppComponent`.
+In each case a *parent* component serves as a test rig for a *child* component that illustrates one or more of the lifecycle hook methods.
 
-    </td>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <code>ngDoCheck()</code>
-    </td>
-    <td>
+The following table lists the exercises with brief descriptions.
+The sample code is also used to illustrate specific tasks in the following sections.
 
-      Detect and act upon changes that Angular can't or won't detect on its own.
+| Component                     | Details |
+|:---                           |:---     |
+| [Peek-a-boo](#peek-a-boo)     | Demonstrates every lifecycle hook. Each hook method writes to the on-screen log.                                                                                                                                          |
+| [Spy](#spy)                   | Shows how to use lifecycle hooks with a custom directive. The `SpyDirective` implements the `ngOnInit()` and `ngOnDestroy()` hooks, and uses them to watch and report when an element goes in or out of the current view. |
+| [OnChanges](#onchanges)       | Demonstrates how Angular calls the `ngOnChanges()` hook every time one of the component input properties changes, and shows how to interpret the `changes` object passed to the hook method.                              |
+| [DoCheck](#docheck)           | Implements the `ngDoCheck()` method with custom change detection. Watch the hook post changes to a log to see how often Angular calls this hook.                                                                          |
+| [AfterView](#afterview)       | Shows what Angular means by a [view](guide/glossary#view "Definition of view."). Demonstrates the `ngAfterViewInit()` and `ngAfterViewChecked()` hooks.                                                                   |
+| [AfterContent](#aftercontent) | Shows how to project external content into a component and how to distinguish projected content from a component's view children. Demonstrates the `ngAfterContentInit()` and `ngAfterContentChecked()` hooks.            |
+| [Counter](#counter)           | Demonstrates a combination of a component and a directive, each with its own hooks.                                                                                                                                       |
 
-      Called during every change detection run, immediately after `ngOnChanges()` and `ngOnInit()`.
+<a id="oninit"></a>
 
-    </td>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <code>ngAfterContentInit()</code>
-    </td>
-    <td>
+## Initializing a component or directive
 
-      Respond after Angular projects external content into the component's view / the view that a directive is in.
+Use the `ngOnInit()` method to perform the following initialization tasks.
 
-      Called _once_ after the first `ngDoCheck()`.
+| Initialization tasks                                         | Details |
+|:---                                                          |:---     |
+| Perform complex initializations outside of the constructor   | Components should be cheap and safe to construct. You should not, for example, fetch data in a component constructor. You shouldn't worry that a new component will try to contact a remote server when created under test or before you decide to display it. <br /> An `ngOnInit()` is a good place for a component to fetch its initial data. For an example, see the [Tour of Heroes tutorial](tutorial/toh-pt4#oninit).                                                                                                                    |
+| Set up the component after Angular sets the input properties | Constructors should do no more than set the initial local variables to simple values. <br /> Keep in mind that a directive's data-bound input properties are not set until *after construction*. If you need to initialize the directive based on those properties, set them when `ngOnInit()` runs. <div class="alert is-helpful"> The `ngOnChanges()` method is your first opportunity to access those properties. Angular calls `ngOnChanges()` before `ngOnInit()`, but also many times after that. It only calls `ngOnInit()` once. </div> |
 
-    </td>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <code>ngAfterContentChecked()</code>
-    </td>
-    <td>
+<a id="ondestroy"></a>
 
-      Respond after Angular checks the content projected into the directive/component.
+## Cleaning up on instance destruction
 
-      Called after the `ngAfterContentInit()` and every subsequent `ngDoCheck()`.
+Put cleanup logic in `ngOnDestroy()`, the logic that must run before Angular destroys the directive.
 
-    </td>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <code>ngAfterViewInit()</code>
-    </td>
-    <td>
-
-      Respond after Angular initializes the component's views and child views / the view that a directive is in.
-
-      Called _once_ after the first `ngAfterContentChecked()`.
-
-    </td>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <code>ngAfterViewChecked()</code>
-    </td>
-    <td>
-
-      Respond after Angular checks the component's views and child views / the view that a directive is in.
-
-      Called after the `ngAfterViewInit()` and every subsequent `ngAfterContentChecked()`.
-
-    </td>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <code>ngOnDestroy()</code>
-    </td>
-    <td>
-
-      Cleanup just before Angular destroys the directive/component.
-      Unsubscribe Observables and detach event handlers to avoid memory leaks.
-
-      Called _just before_ Angular destroys the directive/component.
-
-    </td>
-  </tr>
-</table>
-
-{@a interface-optional}
-
-## Interfaces are optional (technically)
-
-The interfaces are optional for JavaScript and Typescript developers from a purely technical perspective.
-The JavaScript language doesn't have interfaces.
-Angular can't see TypeScript interfaces at runtime because they disappear from the transpiled JavaScript.
-
-Fortunately, they aren't necessary.
-You don't have to add the lifecycle hook interfaces to directives and components to benefit from the hooks themselves.
-
-Angular instead inspects directive and component classes and calls the hook methods *if they are defined*.
-Angular finds and calls methods like `ngOnInit()`, with or without the interfaces.
-
-Nonetheless, it's good practice to add interfaces to TypeScript directive classes
-in order to benefit from strong typing and editor tooling.
-
-{@a other-lifecycle-hooks}
-
-## Other Angular lifecycle hooks
-
-Other Angular sub-systems may have their own lifecycle hooks apart from these component hooks.
-
-3rd party libraries might implement their hooks as well in order to give developers more
-control over how these libraries are used.
-
-{@a the-sample}
-
-## Lifecycle examples
-
-The <live-example></live-example>
-demonstrates the lifecycle hooks in action through a series of exercises
-presented as components under the control of the root `AppComponent`.
-
-They follow a common pattern: a *parent* component serves as a test rig for
-a *child* component that illustrates one or more of the lifecycle hook methods.
-
-Here's a brief description of each exercise:
-
-<table width="100%">
-  <col width="20%"></col>
-  <col width="80%"></col>
-  <tr>
-    <th>Component</th>
-    <th>Description</th>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <a href="#peek-a-boo">Peek-a-boo</a>
-    </td>
-    <td>
-
-      Demonstrates every lifecycle hook.
-      Each hook method writes to the on-screen log.
-
-    </td>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <a href="#spy">Spy</a>
-    </td>
-    <td>
-
-      Directives have lifecycle hooks too.
-      A `SpyDirective` can log when the element it spies upon is
-      created or destroyed using the `ngOnInit` and `ngOnDestroy` hooks.
-
-      This example applies the `SpyDirective` to a `<div>` in an `ngFor` *hero* repeater
-      managed by the parent `SpyComponent`.
-
-    </td>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <a href="#onchanges">OnChanges</a>
-    </td>
-    <td>
-
-      See how Angular calls the `ngOnChanges()` hook with a `changes` object
-      every time one of the component input properties changes.
-      Shows how to interpret the `changes` object.
-
-    </td>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <a href="#docheck">DoCheck</a>
-    </td>
-    <td>
-
-      Implements an `ngDoCheck()` method with custom change detection.
-      See how often Angular calls this hook and watch it post changes to a log.
-
-    </td>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <a href="#afterview">AfterView</a>
-    </td>
-    <td>
-
-      Shows what Angular means by a *view*.
-      Demonstrates the `ngAfterViewInit` and `ngAfterViewChecked` hooks.
-
-    </td>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      <a href="#aftercontent">AfterContent</a>
-    </td>
-    <td>
-
-      Shows how to project external content into a component and
-      how to distinguish projected content from a component's view children.
-      Demonstrates the `ngAfterContentInit` and `ngAfterContentChecked` hooks.
-
-    </td>
-  </tr>
-  <tr style='vertical-align:top'>
-    <td>
-      Counter
-    </td>
-    <td>
-
-      Demonstrates a combination of a component and a directive
-      each with its own hooks.
-
-      In this example, a `CounterComponent` logs a change (via `ngOnChanges`)
-      every time the parent component increments its input counter property.
-      Meanwhile, the `SpyDirective` from the previous example is applied
-      to the `CounterComponent` log where it watches log entries being created and destroyed.
-
-    </td>
-  </tr>
-</table>
-
-The remainder of this page discusses selected exercises in further detail.
-
-{@a peek-a-boo}
-
-## Peek-a-boo: all hooks
-
-The `PeekABooComponent` demonstrates all of the hooks in one component.
-
-You would rarely, if ever, implement all of the interfaces like this.
-The peek-a-boo exists to show how Angular calls the hooks in the expected order.
-
-This snapshot reflects the state of the log after the user clicked the *Create...* button and then the *Destroy...* button.
-
-<figure class="lightbox">
-  <div class="card">
-    <img src="generated/images/guide/lifecycle-hooks/peek-a-boo.png" alt="Peek-a-boo">
-  </div>
-</figure>
-
-The sequence of log messages follows the prescribed hook calling order:
-`OnChanges`, `OnInit`, `DoCheck`&nbsp;(3x), `AfterContentInit`, `AfterContentChecked`&nbsp;(3x),
-`AfterViewInit`, `AfterViewChecked`&nbsp;(3x), and `OnDestroy`.
-
-<div class="alert is-helpful">
-
-  The constructor isn't an Angular hook *per se*.
-  The log confirms that input properties (the `name` property in this case) have no assigned values at construction.
-
-</div>
-
-Had the user clicked the *Update Hero* button, the log would show another `OnChanges` and two more triplets of
-`DoCheck`, `AfterContentChecked` and `AfterViewChecked`.
-Clearly these three hooks fire *often*. Keep the logic in these hooks as lean as possible!
-
-The next examples focus on hook details.
-
-
-{@a spy}
-
-## Spying *OnInit* and *OnDestroy*
-
-Go undercover with these two spy hooks to discover when an element is initialized or destroyed.
-
-This is the perfect infiltration job for a directive.
-The heroes will never know they're being watched.
-
-<div class="alert is-helpful">
-
-  Kidding aside, pay attention to two key points:
-
-  1. Angular calls hook methods for *directives* as well as components.<br><br>
-
-  2. A spy directive can provide insight into a DOM object that you cannot change directly.
-  Obviously you can't touch the implementation of a native `<div>`.
-  You can't modify a third party component either.
-  But you can watch both with a directive.
-
-</div>
-
-The sneaky spy directive is simple, consisting almost entirely of `ngOnInit()` and `ngOnDestroy()` hooks
-that log messages to the parent via an injected `LoggerService`.
-
-<code-example path="lifecycle-hooks/src/app/spy.directive.ts" region="spy-directive" header="src/app/spy.directive.ts"></code-example>
-
-You can apply the spy to any native or component element and it'll be initialized and destroyed
-at the same time as that element.
-Here it is attached to the repeated hero `<div>`:
-
-<code-example path="lifecycle-hooks/src/app/spy.component.html" region="template" header="src/app/spy.component.html"></code-example>
-
-Each spy's birth and death marks the birth and death of the attached hero `<div>`
-with an entry in the *Hook Log* as seen here:
-
-<figure class="lightbox">
-  <div class="card">
-    <img src='generated/images/guide/lifecycle-hooks/spy-directive.gif' alt="Spy Directive">
-  </div>
-</figure>
-
-Adding a hero results in a new hero `<div>`. The spy's `ngOnInit()` logs that event.
-
-The *Reset* button clears the `heroes` list.
-Angular removes all hero `<div>` elements from the DOM and destroys their spy directives at the same time.
-The spy's `ngOnDestroy()` method reports its last moments.
-
-The `ngOnInit()` and `ngOnDestroy()` methods have more vital roles to play in real applications.
-
-{@a oninit}
-
-### _OnInit()_
-
-Use `ngOnInit()` for two main reasons:
-
-1. To perform complex initializations shortly after construction.
-1. To set up the component after Angular sets the input properties.
-
-Experienced developers agree that components should be cheap and safe to construct.
-
-<div class="alert is-helpful">
-
-  Misko Hevery, Angular team lead,
-  [explains why](http://misko.hevery.com/code-reviewers-guide/flaw-constructor-does-real-work/)
-  you should avoid complex constructor logic.
-
-</div>
-
-Don't fetch data in a component constructor.
-You shouldn't worry that a new component will try to contact a remote server when
-created under test or before you decide to display it.
-Constructors should do no more than set the initial local variables to simple values.
-
-An `ngOnInit()` is a good place for a component to fetch its initial data. The
-[Tour of Heroes Tutorial](tutorial/toh-pt4#oninit) guide shows how.
-
-
-Remember also that a directive's data-bound input properties are not set until _after construction_.
-That's a problem if you need to initialize the directive based on those properties.
-They'll have been set when `ngOnInit()` runs.
-
-<div class="alert is-helpful">
-
-  The `ngOnChanges()` method is your first opportunity to access those properties.
-  Angular calls `ngOnChanges()` before `ngOnInit()` and many times after that.
-  It only calls `ngOnInit()` once.
-
-</div>
-
-You can count on Angular to call the `ngOnInit()` method _soon_ after creating the component.
-That's where the heavy initialization logic belongs.
-
-{@a ondestroy}
-
-### _OnDestroy()_
-
-Put cleanup logic in `ngOnDestroy()`, the logic that *must* run before Angular destroys the directive.
-
-This is the time to notify another part of the application that the component is going away.
-
-This is the place to free resources that won't be garbage collected automatically.
-Unsubscribe from Observables and DOM events. Stop interval timers.
-Unregister all callbacks that this directive registered with global or application services.
+This is the place to free resources that won't be garbage-collected automatically.
 You risk memory leaks if you neglect to do so.
 
-{@a onchanges}
+*   Unsubscribe from Observables and DOM events
+*   Stop interval timers
+*   Unregister all callbacks that the directive registered with global or application services
 
-## _OnChanges()_
+The `ngOnDestroy()` method is also the time to notify another part of the application that the component is going away.
 
-Angular calls its `ngOnChanges()` method whenever it detects changes to ***input properties*** of the component (or directive).
-This example monitors the `OnChanges` hook.
+## General examples
 
-<code-example path="lifecycle-hooks/src/app/on-changes.component.ts" region="ng-on-changes" header="on-changes.component.ts (excerpt)"></code-example>
+The following examples demonstrate the call sequence and relative frequency of the various lifecycle events, and how the hooks can be used separately or together for components and directives.
 
-The `ngOnChanges()` method takes an object that maps each changed property name to a
-[SimpleChange](api/core/SimpleChange) object holding the current and previous property values.
+<a id="peek-a-boo"></a>
+
+### Sequence and frequency of all lifecycle events
+
+To show how Angular calls the hooks in the expected order, the `PeekABooComponent` demonstrates all of the hooks in one component.
+
+In practice you would rarely, if ever, implement all of the interfaces the way this demo does.
+
+The following snapshot reflects the state of the log after the user clicked the **Create&hellip;** button and then the **Destroy&hellip;** button.
+
+<div class="lightbox">
+
+<img alt="Peek-a-boo" src="generated/images/guide/lifecycle-hooks/peek-a-boo.png">
+
+</div>
+
+The sequence of log messages follows the prescribed hook calling order:
+
+| Hook order | Log message           |
+|:---        |:---                   |
+| 1          | `OnChanges`           |
+| 2          | `OnInit`              |
+| 3          | `DoCheck`             |
+| 4          | `AfterContentInit`    |
+| 5          | `AfterContentChecked` |
+| 6          | `AfterViewInit`       |
+| 7          | `AfterViewChecked`    |
+| 8          | `DoCheck`             |
+| 9          | `AfterContentChecked` |
+| 10         | `AfterViewChecked`    |
+| 11         | `OnDestroy`           |
+
+
+<div class="alert is-helpful">
+
+Notice that the log confirms that input properties \(the `name` property in this case\) have no assigned values at construction.
+The input properties are available to the `onInit()` method for further initialization.
+
+</div>
+
+Had the user clicked the *Update Hero* button, the log would show another `OnChanges` and two more triplets of `DoCheck`, `AfterContentChecked` and `AfterViewChecked`.
+Notice that these three hooks fire *often*, so it is important to keep their logic as lean as possible.
+
+<a id="spy"></a>
+
+### Use directives to watch the DOM
+
+The `Spy` example demonstrates how to use the hook method for directives as well as components.
+The `SpyDirective` implements two hooks, `ngOnInit()` and `ngOnDestroy()`, to discover when a watched element is in the current view.
+
+This template applies the `SpyDirective` to a `<div>` in the `ngFor` *hero* repeater managed by the parent `SpyComponent`.
+
+The example does not perform any initialization or clean-up.
+It just tracks the appearance and disappearance of an element in the view by recording when the directive itself is instantiated and destroyed.
+
+A spy directive like this can provide insight into a DOM object that you cannot change directly.
+You can't access the implementation of a built-in `<div>`, or modify a third party component.
+You do have the option to watch these elements with a directive.
+
+The directive defines `ngOnInit()` and `ngOnDestroy()` hooks
+that log messages to the parent using an injected `LoggerService`.
+
+<code-example header="src/app/spy.directive.ts" path="lifecycle-hooks/src/app/spy.directive.ts" region="spy-directive"></code-example>
+
+Apply the spy to any built-in or component element, and see that it is initialized and destroyed at the same time as that element.
+Here it is attached to the repeated hero `<p>`:
+
+<code-example header="src/app/spy.component.html" path="lifecycle-hooks/src/app/spy.component.html" region="template"></code-example>
+
+Each spy's creation and destruction marks the appearance and disappearance of the attached hero `<p>` with an entry in the *Hook Log*.
+Adding a hero results in a new hero `<p>`.
+The spy's `ngOnInit()` logs that event.
+
+The *Reset* button clears the `heroes` list.
+Angular removes all hero `<p>` elements from the DOM and destroys their spy directives at the same time.
+The spy's `ngOnDestroy()` method reports its last moments.
+
+<a id="counter"></a>
+
+### Use component and directive hooks together
+
+In this example, a `CounterComponent` uses the `ngOnChanges()` method to log a change every time the parent component increments its input `counter` property.
+
+This example applies the `SpyDirective` from the previous example to the `CounterComponent` log, to watch the creation and destruction of log entries.
+
+<a id="onchanges"></a>
+
+## Using change detection hooks
+
+Angular calls the `ngOnChanges()` method of a component or directive whenever it detects changes to the  ***input properties***.
+The *onChanges* example demonstrates this by monitoring the `OnChanges()` hook.
+
+<code-example header="on-changes.component.ts (excerpt)" path="lifecycle-hooks/src/app/on-changes.component.ts" region="ng-on-changes"></code-example>
+
+The `ngOnChanges()` method takes an object that maps each changed property name to a [SimpleChange](api/core/SimpleChange) object holding the current and previous property values.
 This hook iterates over the changed properties and logs them.
 
 The example component, `OnChangesComponent`, has two input properties: `hero` and `power`.
 
-<code-example path="lifecycle-hooks/src/app/on-changes.component.ts" region="inputs" header="src/app/on-changes.component.ts"></code-example>
+<code-example header="src/app/on-changes.component.ts" path="lifecycle-hooks/src/app/on-changes.component.ts" region="inputs"></code-example>
 
-The host `OnChangesParentComponent` binds to them like this:
+The host `OnChangesParentComponent` binds to them as follows.
 
-<code-example path="lifecycle-hooks/src/app/on-changes-parent.component.html" region="on-changes" header="src/app/on-changes-parent.component.html"></code-example>
+<code-example header="src/app/on-changes-parent.component.html" path="lifecycle-hooks/src/app/on-changes-parent.component.html" region="on-changes"></code-example>
 
 Here's the sample in action as the user makes changes.
 
-<figure class="lightbox">
-  <div class="card">
-    <img src='generated/images/guide/lifecycle-hooks/on-changes-anim.gif' alt="OnChanges">
-  </div>
-</figure>
+<div class="lightbox">
 
-The log entries appear as the string value of the *power* property changes.
-But the `ngOnChanges` does not catch changes to `hero.name`
-That's surprising at first.
-
-Angular only calls the hook when the value of the input property changes.
-The value of the `hero` property is the *reference to the hero object*.
-Angular doesn't care that the hero's own `name` property changed.
-The hero object *reference* didn't change so, from Angular's perspective, there is no change to report!
-
-{@a docheck}
-
-## _DoCheck()_
-
-Use the `DoCheck` hook to detect and act upon changes that Angular doesn't catch on its own.
-
-<div class="alert is-helpful">
-
-  Use this method to detect a change that Angular overlooked.
+<img alt="OnChanges" src="generated/images/guide/lifecycle-hooks/on-changes-anim.gif">
 
 </div>
 
-The *DoCheck* sample extends the *OnChanges* sample with the following `ngDoCheck()` hook:
+The log entries appear as the string value of the *power* property changes.
+Notice, however, that the `ngOnChanges()` method does not catch changes to `hero.name`.
+This is because Angular calls the hook only when the value of the input property changes.
+In this case, `hero` is the input property, and the value of the `hero` property is the *reference to the hero object*.
+The object reference did not change when the value of its own `name` property changed.
 
-<code-example path="lifecycle-hooks/src/app/do-check.component.ts" region="ng-do-check" header="DoCheckComponent (ngDoCheck)"></code-example>
+<a id="afterview"></a>
 
-This code inspects certain _values of interest_, capturing and comparing their current state against previous values.
-It writes a special message to the log when there are no substantive changes to the `hero` or the `power`
-so you can see how often `DoCheck` is called. The results are illuminating:
+### Responding to view changes
 
-<figure class="lightbox">
-  <div class="card">
-    <img src='generated/images/guide/lifecycle-hooks/do-check-anim.gif' alt="DoCheck">
-  </div>
-</figure>
+As Angular traverses the [view hierarchy](guide/glossary#view-hierarchy "Definition of view hierarchy definition") during change detection, it needs to be sure that a change in a child does not attempt to cause a change in its own parent.
+Such a change would not be rendered properly, because of how [unidirectional data flow](guide/glossary#unidirectional-data-flow "Definition") works.
 
-While the `ngDoCheck()` hook can detect when the hero's `name` has changed, it has a frightful cost.
-This hook is called with enormous frequency&mdash;after _every_
-change detection cycle no matter where the change occurred.
-It's called over twenty times in this example before the user can do anything.
+If you need to make a change that inverts the expected data flow, you must trigger a new change detection cycle to allow that change to be rendered.
+The examples illustrate how to make such changes safely.
 
-Most of these initial checks are triggered by Angular's first rendering of *unrelated data elsewhere on the page*.
-Mere mousing into another `<input>` triggers a call.
-Relatively few calls reveal actual changes to pertinent data.
-Clearly our implementation must be very lightweight or the user experience suffers.
-
-{@a afterview}
-
-## AfterView
-
-The *AfterView* sample explores the `AfterViewInit()` and `AfterViewChecked()` hooks that Angular calls
-*after* it creates a component's child views.
+The *AfterView* sample explores the `AfterViewInit()` and `AfterViewChecked()` hooks that Angular calls *after* it creates a component's child views.
 
 Here's a child view that displays a hero's name in an `<input>`:
 
-<code-example path="lifecycle-hooks/src/app/after-view.component.ts" region="child-view" header="ChildComponent"></code-example>
+<code-example header="ChildViewComponent" path="lifecycle-hooks/src/app/child-view.component.ts" region="child-view"></code-example>
 
 The `AfterViewComponent` displays this child view *within its template*:
 
-<code-example path="lifecycle-hooks/src/app/after-view.component.ts" region="template" header="AfterViewComponent (template)"></code-example>
+<code-example header="AfterViewComponent (template)" path="lifecycle-hooks/src/app/after-view.component.ts" region="template"></code-example>
 
-The following hooks take action based on changing values *within the child view*,
-which can only be reached by querying for the child view via the property decorated with
-[@ViewChild](api/core/ViewChild).
+The following hooks take action based on changing values *within the child view*, which can only be reached by querying for the child view using the property decorated with [@ViewChild](api/core/ViewChild).
 
+<code-example header="AfterViewComponent (class excerpts)" path="lifecycle-hooks/src/app/after-view.component.ts" region="hooks"></code-example>
 
-<code-example path="lifecycle-hooks/src/app/after-view.component.ts" region="hooks" header="AfterViewComponent (class excerpts)"></code-example>
+<a id="wait-a-tick"></a>
 
-{@a wait-a-tick}
+#### Wait before updating the view
 
-### Abide by the unidirectional data flow rule
-The `doSomething()` method updates the screen when the hero name exceeds 10 characters.
+In this example, the `doSomething()` method updates the screen when the hero name exceeds 10 characters, but waits a tick before updating `comment`.
 
-<code-example path="lifecycle-hooks/src/app/after-view.component.ts" region="do-something" header="AfterViewComponent (doSomething)"></code-example>
+<code-example header="AfterViewComponent (doSomething)" path="lifecycle-hooks/src/app/after-view.component.ts" region="do-something"></code-example>
 
-Why does the `doSomething()` method wait a tick before updating `comment`?
+Both the `AfterViewInit()` and `AfterViewChecked()` hooks fire after the component's view is composed.
+If you modify the code so that the hook updates the component's data-bound `comment` property immediately, you can see that Angular throws an error.
 
-Angular's unidirectional data flow rule forbids updates to the view *after* it has been composed.
-Both of these hooks fire _after_ the component's view has been composed.
+The `LoggerService.tick_then()` statement postpones the log update for one turn of the browser's JavaScript cycle, which triggers a new change-detection cycle.
 
-Angular throws an error if the hook updates the component's data-bound `comment` property immediately (try it!).
-The `LoggerService.tick_then()` postpones the log update
-for one turn of the browser's JavaScript cycle and that's just long enough.
+#### Write lean hook methods to avoid performance problems
 
-Here's *AfterView* in action:
+When you run the *AfterView* sample, notice how frequently Angular calls `AfterViewChecked()` - often when there are no changes of interest.
+Be careful about how much logic or computation you put into one of these methods.
 
-<figure class="lightbox">
-  <div class="card">
-    <img src='generated/images/guide/lifecycle-hooks/after-view-anim.gif' alt="AfterView">
-  </div>
-</figure>
+<div class="lightbox">
 
-Notice that Angular frequently calls `AfterViewChecked()`, often when there are no changes of interest.
-Write lean hook methods to avoid performance problems.
-
-{@a aftercontent}
-
-## AfterContent
-
-The *AfterContent* sample explores the `AfterContentInit()` and `AfterContentChecked()` hooks that Angular calls
-*after* Angular projects external content into the component.
-
-{@a content-projection}
-
-### Content projection
-
-*Content projection* is a way to import HTML content from outside the component and insert that content
-into the component's template in a designated spot.
-
-<div class="alert is-helpful">
-
-  AngularJS developers know this technique as *transclusion*.
+<img alt="AfterView" src="generated/images/guide/lifecycle-hooks/after-view-anim.gif">
 
 </div>
 
-Consider this variation on the [previous _AfterView_](guide/lifecycle-hooks#afterview) example.
-This time, instead of including the child view within the template, it imports the content from
-the `AfterContentComponent`'s parent. Here's the parent's template:
+<a id="aftercontent"></a>
+<a id="aftercontent-hooks"></a>
 
-<code-example path="lifecycle-hooks/src/app/after-content.component.ts" region="parent-template" header="AfterContentParentComponent (template excerpt)"></code-example>
+<a id="content-projection"></a>
+
+### Responding to projected content changes
+
+*Content projection* is a way to import HTML content from outside the component and insert that content  into the component's template in a designated spot.
+Identify content projection in a template by looking for the following constructs.
+
+*   HTML between component element tags
+*   The presence of `<ng-content>` tags in the component's template
+
+<div class="alert is-helpful">
+
+AngularJS developers know this technique as *transclusion*.
+
+</div>
+
+The *AfterContent* sample explores the `AfterContentInit()` and `AfterContentChecked()` hooks that Angular calls *after* Angular projects external content into the component.
+
+Consider this variation on the [previous *AfterView*](#afterview) example.
+This time, instead of including the child view within the template, it imports the content from the `AfterContentComponent` hook's parent.
+The following is the parent's template.
+
+<code-example header="AfterContentParentComponent (template excerpt)" path="lifecycle-hooks/src/app/after-content-parent.component.ts" region="parent-template"></code-example>
 
 Notice that the `<app-child>` tag is tucked between the `<after-content>` tags.
-Never put content between a component's element tags *unless you intend to project that content
-into the component*.
+Never put content between a component's element tags *unless you intend to project that content into the component*.
 
-Now look at the component's template:
+Now look at the component's template.
 
-<code-example path="lifecycle-hooks/src/app/after-content.component.ts" region="template" header="AfterContentComponent (template)"></code-example>
+<code-example header="AfterContentComponent (template)" path="lifecycle-hooks/src/app/after-content.component.ts" region="template"></code-example>
 
 The `<ng-content>` tag is a *placeholder* for the external content.
 It tells Angular where to insert that content.
 In this case, the projected content is the `<app-child>` from the parent.
 
-<figure class="lightbox">
-  <div class="card">
-    <img src='generated/images/guide/lifecycle-hooks/projected-child-view.png' alt="Projected Content">
-  </div>
-</figure>
+<div class="lightbox">
 
-<div class="alert is-helpful">
-
-  The telltale signs of *content projection* are twofold:
-
-  * HTML between component element tags.
-  * The presence of `<ng-content>` tags in the component's template.
+<img alt="Projected Content" src="generated/images/guide/lifecycle-hooks/projected-child-view.png">
 
 </div>
 
-{@a aftercontent-hooks}
-
-### AfterContent hooks
+#### Using AfterContent hooks
 
 *AfterContent* hooks are similar to the *AfterView* hooks.
 The key difference is in the child component.
 
-* The *AfterView* hooks concern `ViewChildren`, the child components whose element tags
-appear *within* the component's template.
+*   The *AfterView* hooks concern `ViewChildren`, the child components whose element tags appear *within* the component's template
+*   The *AfterContent* hooks concern `ContentChildren`, the child components that Angular projected into the component
 
-* The *AfterContent* hooks concern `ContentChildren`, the child components that Angular
-projected into the component.
+The following *AfterContent* hooks take action based on changing values in a *content child*, which can only be reached by querying for them using the property decorated with [@ContentChild](api/core/ContentChild).
 
-The following *AfterContent* hooks take action based on changing values in a *content child*,
-which can only be reached by querying for them via the property decorated with
-[@ContentChild](api/core/ContentChild).
+<code-example header="AfterContentComponent (class excerpts)" path="lifecycle-hooks/src/app/after-content.component.ts" region="hooks"></code-example>
 
-<code-example path="lifecycle-hooks/src/app/after-content.component.ts" region="hooks" header="AfterContentComponent (class excerpts)"></code-example>
+<a id="no-unidirectional-flow-worries"></a>
 
-{@a no-unidirectional-flow-worries}
+<div class="callout is-helpful">
 
-### No unidirectional flow worries with _AfterContent_
+<header>No need to wait for content updates</header>
 
-This component's `doSomething()` method update's the component's data-bound `comment` property immediately.
-There's no [need to wait](guide/lifecycle-hooks#wait-a-tick).
+This component's `doSomething()` method updates the component's data-bound `comment` property immediately.
+There's no need to [delay the update to ensure proper rendering](#wait-a-tick "Delaying updates").
 
-Recall that Angular calls both *AfterContent* hooks before calling either of the *AfterView* hooks.
+Angular calls both *AfterContent* hooks before calling either of the *AfterView* hooks.
 Angular completes composition of the projected content *before* finishing the composition of this component's view.
-There is a small window between the `AfterContent...` and `AfterView...` hooks to modify the host view.
+There is a small window between the `AfterContent...` and `AfterView...` hooks that lets you modify the host view.
+
+</div>
+
+<a id="docheck"></a>
+
+## Defining custom change detection
+
+To monitor changes that occur where `ngOnChanges()` won't catch them, implement your own change check, as shown in the *DoCheck* example.
+This example shows how to use the `ngDoCheck()` hook to detect and act upon changes that Angular doesn't catch on its own.
+
+The *DoCheck* sample extends the *OnChanges* sample with the following `ngDoCheck()` hook:
+
+<code-example header="DoCheckComponent (ngDoCheck)" path="lifecycle-hooks/src/app/do-check.component.ts" region="ng-do-check"></code-example>
+
+This code inspects certain *values of interest*, capturing and comparing their current state against previous values.
+It writes a special message to the log when there are no substantive changes to the `hero` or the `power` so you can see how often `DoCheck()` is called.
+The results are illuminating.
+
+<div class="lightbox">
+
+<img alt="DoCheck" src="generated/images/guide/lifecycle-hooks/do-check-anim.gif">
+
+</div>
+
+While the `ngDoCheck()` hook can detect when the hero's `name` has changed, it is an expensive hook.
+This hook is called with enormous frequency &mdash;after *every* change detection cycle no matter where the change occurred.
+It's called over twenty times in this example before the user can do anything.
+
+Most of these initial checks are triggered by Angular's first rendering of *unrelated data elsewhere on the page*.
+Just moving the cursor into another `<input>` triggers a call.
+Relatively few calls reveal actual changes to pertinent data.
+If you use this hook, your implementation must be extremely lightweight or the user experience suffers.
+
+<!-- links -->
+
+<!-- external links -->
+
+<!-- end links -->
+
+@reviewed 2022-02-28

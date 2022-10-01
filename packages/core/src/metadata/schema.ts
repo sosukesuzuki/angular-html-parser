@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -16,7 +16,9 @@
  *
  * @publicApi
  */
-export interface SchemaMetadata { name: string; }
+export interface SchemaMetadata {
+  name: string;
+}
 
 /**
  * Defines a schema that allows an NgModule to contain the following:
@@ -32,6 +34,10 @@ export const CUSTOM_ELEMENTS_SCHEMA: SchemaMetadata = {
 
 /**
  * Defines a schema that allows any property on any element.
+ *
+ * This schema allows you to ignore the errors related to any unknown elements or properties in a
+ * template. The usage of this schema is generally discouraged because it prevents useful validation
+ * and may hide real errors in your template. Consider using the `CUSTOM_ELEMENTS_SCHEMA` instead.
  *
  * @publicApi
  */

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -187,7 +187,7 @@ describe('attribute binding', () => {
     // NOTE: different browsers will add `//` into the URI.
     expect(a.href.indexOf('unsafe:')).toBe(0);
 
-    const domSanitizer: DomSanitizer = TestBed.get(DomSanitizer);
+    const domSanitizer: DomSanitizer = TestBed.inject(DomSanitizer);
     fixture.componentInstance.badUrl =
         domSanitizer.bypassSecurityTrustUrl('javascript:alert("this is fine")');
     fixture.detectChanges();

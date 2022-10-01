@@ -1,8 +1,8 @@
 // #docregion
-import { Component, OnInit }  from '@angular/core';
-import { ActivatedRoute }     from '@angular/router';
-import { Observable }         from 'rxjs';
-import { map }                from 'rxjs/operators';
+import { Component, OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 @Component({
   selector: 'app-admin-dashboard',
@@ -10,8 +10,8 @@ import { map }                from 'rxjs/operators';
   styleUrls: ['./admin-dashboard.component.css']
 })
 export class AdminDashboardComponent implements OnInit {
-  sessionId: Observable<string>;
-  token: Observable<string>;
+  sessionId!: Observable<string>;
+  token!: Observable<string>;
 
   constructor(private route: ActivatedRoute) {}
 

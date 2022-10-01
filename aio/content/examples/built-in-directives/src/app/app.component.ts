@@ -13,15 +13,18 @@ export class AppComponent implements OnInit {
   isUnchanged = true;
 
   isActive = true;
-  nullCustomer = null;
+  nullCustomer: string | null = null;
   currentCustomer = {
     name: 'Laura'
   };
 
-  item: Item; // defined to demonstrate template context precedence
-  items: Item[];
+  item!: Item; // defined to demonstrate template context precedence
+  items: Item[] = [];
 
-  currentItem: Item;
+  // #docregion item
+  currentItem!: Item;
+  // #enddocregion item
+
 
 
   // trackBy change counting
@@ -29,6 +32,14 @@ export class AppComponent implements OnInit {
   itemsWithTrackByCount = 0;
   itemsWithTrackByCountReset = 0;
   itemIdIncrement = 1;
+
+  // #docregion setClasses
+  currentClasses: Record<string, boolean> = {};
+  // #enddocregion setClasses
+
+  // #docregion setStyles
+  currentStyles: Record<string, string> = {};
+  // #enddocregion setStyles
 
   ngOnInit() {
     this.resetItems();
@@ -41,20 +52,18 @@ export class AppComponent implements OnInit {
     this.currentItem.name = name.toUpperCase();
   }
 
-// #docregion setClasses
-  currentClasses: {};
+  // #docregion setClasses
   setCurrentClasses() {
     // CSS classes: added/removed per current state of component properties
     this.currentClasses =  {
-      'saveable': this.canSave,
-      'modified': !this.isUnchanged,
-      'special':  this.isSpecial
+      saveable: this.canSave,
+      modified: !this.isUnchanged,
+      special:  this.isSpecial
     };
   }
   // #enddocregion setClasses
 
   // #docregion setStyles
-  currentStyles: {};
   setCurrentStyles() {
     // CSS styles: set per current state of component properties
     this.currentStyles = {
@@ -70,11 +79,7 @@ export class AppComponent implements OnInit {
   }
 
   giveNullCustomerValue() {
-    !(this.nullCustomer = null) ? (this.nullCustomer = 'Kelly') : (this.nullCustomer = null);
-  }
-
-  resetNullItem() {
-    this.nullCustomer = null;
+    this.nullCustomer = 'Kelly';
   }
 
   resetItems() {
@@ -84,7 +89,7 @@ export class AppComponent implements OnInit {
   }
 
   resetList() {
-    this.resetItems()
+    this.resetItems();
     this.itemsWithTrackByCountReset = 0;
     this.itemsNoTrackByCount = ++this.itemsNoTrackByCount;
   }
@@ -107,8 +112,11 @@ export class AppComponent implements OnInit {
   trackByItems(index: number, item: Item): number { return item.id; }
 // #enddocregion trackByItems
 
-  trackById(index: number, item: any): number { return item['id']; }
+  trackById(index: number, item: any): number { return item.id; }
 
+  getValue(event: Event): string {
+    return (event.target as HTMLInputElement).value;
+  }
 }
 
 

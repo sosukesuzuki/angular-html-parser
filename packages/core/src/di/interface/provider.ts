@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -247,13 +247,16 @@ export interface FactoryProvider extends FactorySansProvider {
 }
 
 /**
- * Describes how the `Injector` should be configured as static (that is, without reflection).
- * @see ["Dependency Injection Guide"](guide/dependency-injection).
+ * Describes how an `Injector` should be configured as static (that is, without reflection).
+ * A static provider provides tokens to an injector for various types of dependencies.
+ *
+ * @see `Injector.create()`.
+ * @see ["Dependency Injection Guide"](guide/dependency-injection-providers).
  *
  * @publicApi
  */
-export type StaticProvider = ValueProvider | ExistingProvider | StaticClassProvider |
-    ConstructorProvider | FactoryProvider | any[];
+export type StaticProvider =
+    ValueProvider|ExistingProvider|StaticClassProvider|ConstructorProvider|FactoryProvider|any[];
 
 
 /**
@@ -326,11 +329,43 @@ export interface ClassProvider extends ClassSansProvider {
  *
  * @publicApi
  */
-export type Provider = TypeProvider | ValueProvider | ClassProvider | ConstructorProvider |
-    ExistingProvider | FactoryProvider | any[];
+export type Provider = TypeProvider|ValueProvider|ClassProvider|ConstructorProvider|
+    ExistingProvider|FactoryProvider|any[];
 
 /**
  * Describes a function that is used to process provider lists (such as provider
  * overrides).
  */
 export type ProcessProvidersFunction = (providers: Provider[]) => Provider[];
+
+
+/**
+ * A wrapper around an NgModule that associates it with [providers](guide/glossary#provider
+ * "Definition"). Usage without a generic type is deprecated.
+ *
+ * @see [Deprecations](guide/deprecations#modulewithproviders-type-without-a-generic)
+ *
+ * @publicApi
+ */
+export interface ModuleWithProviders<T> {
+  ngModule: Type<T>;
+  providers?: Provider[];
+}
+
+/**
+ * Providers that were imported from NgModules via the `importProvidersFrom` function.
+ *
+ * These providers are meant for use in an application injector (or other environment injectors) and
+ * should not be used in component injectors.
+ *
+ * This type cannot be directly implemented. It's returned from the `importProvidersFrom` function
+ * and serves to prevent the extracted NgModule providers from being used in the wrong contexts.
+ *
+ * @see `importProvidersFrom`
+ *
+ * @publicApi
+ * @developerPreview
+ */
+export interface ImportedNgModuleProviders {
+  ɵproviders: Provider[];
+}

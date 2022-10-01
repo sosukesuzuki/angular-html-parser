@@ -1,26 +1,26 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import {AnimationBuilder, animate, style} from '@angular/animations';
+import {animate, AnimationBuilder, style} from '@angular/animations';
 import {AnimationDriver} from '@angular/animations/browser';
 import {MockAnimationDriver} from '@angular/animations/browser/testing';
 import {Component, ViewChild} from '@angular/core';
-import {TestBed, fakeAsync, flushMicrotasks} from '@angular/core/testing';
+import {fakeAsync, flushMicrotasks, TestBed} from '@angular/core/testing';
 import {NoopAnimationsModule, ɵBrowserAnimationBuilder as BrowserAnimationBuilder} from '@angular/platform-browser/animations';
-
-import {el} from '../../testing/src/browser_util';
 
 {
   describe('BrowserAnimationBuilder', () => {
-    if (isNode) return;
-    let element: any;
-    beforeEach(() => {
-      element = el('<div></div>');
+    if (isNode) {
+      // Jasmine will throw if there are no tests.
+      it('should pass', () => {});
+      return;
+    }
 
+    beforeEach(() => {
       TestBed.configureTestingModule({
         imports: [NoopAnimationsModule],
         providers: [{provide: AnimationDriver, useClass: MockAnimationDriver}]
@@ -45,13 +45,82 @@ import {el} from '../../testing/src/browser_util';
       expect(cmp.builder instanceof BrowserAnimationBuilder).toBeTruthy();
     });
 
+    it('should listen on start and done on the animation builder\'s player after it has been reset',
+       fakeAsync(() => {
+         @Component({
+           selector: 'ani-cmp',
+           template: '...',
+         })
+         class Cmp {
+           @ViewChild('target') public target: any;
+
+           constructor(public builder: AnimationBuilder) {}
+
+           build() {
+             const definition =
+                 this.builder.build([style({opacity: 0}), animate(1000, style({opacity: 1}))]);
+
+             return definition.create(this.target);
+           }
+         }
+
+         TestBed.configureTestingModule({declarations: [Cmp]});
+
+         const fixture = TestBed.createComponent(Cmp);
+         const cmp = fixture.componentInstance;
+         fixture.detectChanges();
+
+         const player = cmp.build();
+
+         let startedCount = 0;
+         player.onStart(() => startedCount++);
+
+         let finishedCount = 0;
+         player.onDone(() => finishedCount++);
+
+         player.init();
+         flushMicrotasks();
+         expect(startedCount).toEqual(0);
+         expect(finishedCount).toEqual(0);
+
+         player.play();
+         flushMicrotasks();
+         expect(startedCount).toEqual(1);
+         expect(finishedCount).toEqual(0);
+
+         player.finish();
+         flushMicrotasks();
+         expect(startedCount).toEqual(1);
+         expect(finishedCount).toEqual(1);
+
+         player.play();
+         player.finish();
+         flushMicrotasks();
+         expect(startedCount).toEqual(1);
+         expect(finishedCount).toEqual(1);
+
+         [0, 1, 2, 3].forEach(i => {
+           player.reset();
+
+           player.play();
+           flushMicrotasks();
+           expect(startedCount).toEqual(i + 2);
+           expect(finishedCount).toEqual(i + 1);
+
+           player.finish();
+           flushMicrotasks();
+           expect(startedCount).toEqual(i + 2);
+           expect(finishedCount).toEqual(i + 2);
+         });
+       }));
+
     it('should listen on start and done on the animation builder\'s player', fakeAsync(() => {
          @Component({
            selector: 'ani-cmp',
            template: '...',
          })
          class Cmp {
-           @ViewChild('target', {static: false}) public target: any;
+           @ViewChild('target') public target: any;
 
            constructor(public builder: AnimationBuilder) {}
 
@@ -103,6 +172,44 @@ import {el} from '../../testing/src/browser_util';
          expect(started).toBeTruthy();
          expect(finished).toBeTruthy();
          expect(destroyed).toBeTruthy();
+       }));
+
+    it('should update `hasStarted()` on `play()` and `reset()`', fakeAsync(() => {
+         @Component({
+           selector: 'ani-another-cmp',
+           template: '...',
+         })
+         class CmpAnother {
+           @ViewChild('target') public target: any;
+
+           constructor(public builder: AnimationBuilder) {}
+
+           build() {
+             const definition =
+                 this.builder.build([style({opacity: 0}), animate(1000, style({opacity: 1}))]);
+
+             return definition.create(this.target);
+           }
+         }
+
+         TestBed.configureTestingModule({declarations: [CmpAnother]});
+
+         const fixture = TestBed.createComponent(CmpAnother);
+         const cmp = fixture.componentInstance;
+         fixture.detectChanges();
+
+         const player = cmp.build();
+
+         expect(player.hasStarted()).toBeFalsy();
+         flushMicrotasks();
+
+         player.play();
+         flushMicrotasks();
+         expect(player.hasStarted()).toBeTruthy();
+
+         player.reset();
+         flushMicrotasks();
+         expect(player.hasStarted()).toBeFalsy();
        }));
   });
 }

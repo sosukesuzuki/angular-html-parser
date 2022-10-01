@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {Injectable} from '../di';
+import {Inject, Injectable, InjectionToken} from '../di';
 import {scheduleMicroTask} from '../util/microtask';
 import {NgZone} from '../zone/ng_zone';
 
@@ -49,9 +49,39 @@ interface WaitCallback {
 }
 
 /**
+ * Internal injection token that can used to access an instance of a Testability class.
+ *
+ * This token acts as a bridge between the core bootstrap code and the `Testability` class. This is
+ * needed to ensure that there are no direct references to the `Testability` class, so it can be
+ * tree-shaken away (if not referenced). For the environments/setups when the `Testability` class
+ * should be available, this token is used to add a provider that references the `Testability`
+ * class. Otherwise, only this token is retained in a bundle, but the `Testability` class is not.
+ */
+export const TESTABILITY = new InjectionToken<Testability>('');
+
+/**
+ * Internal injection token to retrieve Testability getter class instance.
+ */
+export const TESTABILITY_GETTER = new InjectionToken<GetTestability>('');
+
+/**
  * The Testability service provides testing hooks that can be accessed from
- * the browser and by services such as Protractor. Each bootstrapped Angular
- * application on the page will have an instance of Testability.
+ * the browser.
+ *
+ * Angular applications bootstrapped using an NgModule (via `@NgModule.bootstrap` field) will also
+ * instantiate Testability by default (in both development and production modes).
+ *
+ * For applications bootstrapped using the `bootstrapApplication` function, Testability is not
+ * included by default. You can include it into your applications by getting the list of necessary
+ * providers using the `provideProtractorTestingSupport()` function and adding them into the
+ * `options.providers` array. Example:
+ *
+ * ```typescript
+ * import {provideProtractorTestingSupport} from '@angular/platform-browser';
+ *
+ * await bootstrapApplication(RootComponent, providers: [provideProtractorTestingSupport()]);
+ * ```
+ *
  * @publicApi
  */
 @Injectable()
@@ -69,7 +99,15 @@ export class Testability implements PublicTestability {
 
   private taskTrackingZone: {macroTasks: Task[]}|null = null;
 
-  constructor(private _ngZone: NgZone) {
+  constructor(
+      private _ngZone: NgZone, private registry: TestabilityRegistry,
+      @Inject(TESTABILITY_GETTER) testabilityGetter: GetTestability) {
+    // If there was no Testability logic registered in the global scope
+    // before, register the current testability getter as a global one.
+    if (!_testabilityGetter) {
+      setTestabilityGetter(testabilityGetter);
+      testabilityGetter.addToWindow(registry);
+    }
     this._watchAngularEvents();
     _ngZone.run(() => {
       this.taskTrackingZone =
@@ -133,7 +171,7 @@ export class Testability implements PublicTestability {
       // Schedules the call backs in a new frame so that it is always async.
       scheduleMicroTask(() => {
         while (this._callbacks.length !== 0) {
-          let cb = this._callbacks.pop() !;
+          let cb = this._callbacks.pop()!;
           clearTimeout(cb.timeoutId);
           cb.doneCb(this._didWork);
         }
@@ -199,7 +237,7 @@ export class Testability implements PublicTestability {
     if (updateCb && !this.taskTrackingZone) {
       throw new Error(
           'Task tracking zone is required when passing an update callback to ' +
-          'whenStable(). Is "zone.js/dist/task-tracking.js" loaded?');
+          'whenStable(). Is "zone.js/plugins/task-tracking" loaded?');
     }
     // These arguments are 'Function' above to keep the public API simple.
     this.addCallback(doneCb as DoneCallback, timeout, updateCb as UpdateCallback);
@@ -210,7 +248,28 @@ export class Testability implements PublicTestability {
    * Get the number of pending requests
    * @deprecated pending requests are now tracked with zones
    */
-  getPendingRequestCount(): number { return this._pendingCount; }
+  getPendingRequestCount(): number {
+    return this._pendingCount;
+  }
+  /**
+   * Registers an application with a testability hook so that it can be tracked.
+   * @param token token of application, root element
+   *
+   * @internal
+   */
+  registerApplication(token: any) {
+    this.registry.registerApplication(token, this);
+  }
+
+  /**
+   * Unregisters an application.
+   * @param token token of application, root element
+   *
+   * @internal
+   */
+  unregisterApplication(token: any) {
+    this.registry.unregisterApplication(token);
+  }
 
   /**
    * Find providers by name
@@ -228,12 +287,10 @@ export class Testability implements PublicTestability {
  * A global registry of {@link Testability} instances for specific elements.
  * @publicApi
  */
-@Injectable()
+@Injectable({providedIn: 'platform'})
 export class TestabilityRegistry {
   /** @internal */
   _applications = new Map<any, Testability>();
-
-  constructor() { _testabilityGetter.addToWindow(this); }
 
   /**
    * Registers an application with a testability hook so that it can be tracked
@@ -248,28 +305,38 @@ export class TestabilityRegistry {
    * Unregisters an application.
    * @param token token of application, root element
    */
-  unregisterApplication(token: any) { this._applications.delete(token); }
+  unregisterApplication(token: any) {
+    this._applications.delete(token);
+  }
 
   /**
    * Unregisters all applications
    */
-  unregisterAllApplications() { this._applications.clear(); }
+  unregisterAllApplications() {
+    this._applications.clear();
+  }
 
   /**
    * Get a testability hook associated with the application
    * @param elem root element
    */
-  getTestability(elem: any): Testability|null { return this._applications.get(elem) || null; }
+  getTestability(elem: any): Testability|null {
+    return this._applications.get(elem) || null;
+  }
 
   /**
    * Get all registered testabilities
    */
-  getAllTestabilities(): Testability[] { return Array.from(this._applications.values()); }
+  getAllTestabilities(): Testability[] {
+    return Array.from(this._applications.values());
+  }
 
   /**
    * Get all registered applications(root elements)
    */
-  getAllRootElements(): any[] { return Array.from(this._applications.keys()); }
+  getAllRootElements(): any[] {
+    return Array.from(this._applications.keys());
+  }
 
   /**
    * Find testability of a node in the Tree
@@ -278,7 +345,7 @@ export class TestabilityRegistry {
    * current node
    */
   findTestabilityInTree(elem: Node, findInAncestors: boolean = true): Testability|null {
-    return _testabilityGetter.findTestabilityInTree(this, elem, findInAncestors);
+    return _testabilityGetter?.findTestabilityInTree(this, elem, findInAncestors) ?? null;
   }
 }
 
@@ -294,14 +361,6 @@ export interface GetTestability {
       Testability|null;
 }
 
-class _NoopGetTestability implements GetTestability {
-  addToWindow(registry: TestabilityRegistry): void {}
-  findTestabilityInTree(registry: TestabilityRegistry, elem: any, findInAncestors: boolean):
-      Testability|null {
-    return null;
-  }
-}
-
 /**
  * Set the {@link GetTestability} implementation used by the Angular testing framework.
  * @publicApi
@@ -310,4 +369,4 @@ export function setTestabilityGetter(getter: GetTestability): void {
   _testabilityGetter = getter;
 }
 
-let _testabilityGetter: GetTestability = new _NoopGetTestability();
+let _testabilityGetter: GetTestability|undefined;

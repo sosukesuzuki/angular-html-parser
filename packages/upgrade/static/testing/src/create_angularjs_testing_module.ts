@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -93,7 +93,7 @@ export function createAngularJSTestingModule(angularModules: any[]): string {
                 imports: angularModules,
                 providers: [{provide: $INJECTOR, useValue: $injector}]
               });
-              return TestBed.get(Injector);
+              return TestBed.inject(Injector);
             }
           ])
       .name;

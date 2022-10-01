@@ -1,29 +1,22 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
 import {Injectable, ReflectiveInjector, ReflectiveKey} from '@angular/core';
-import {reflector} from '@angular/core/src/reflection/reflection';
-import {ReflectionCapabilities} from '@angular/core/src/reflection/reflection_capabilities';
 import {BrowserDomAdapter} from '@angular/platform-browser/src/browser/browser_adapter';
 import {bindAction, getIntParameter, microBenchmark} from '@angular/testing/src/benchmark_util';
 
 let count = 0;
-
-function setupReflector() {
-  reflector.reflectionCapabilities = new ReflectionCapabilities();
-}
 
 export function main() {
   BrowserDomAdapter.makeCurrent();
   const iterations = getIntParameter('iterations');
 
   // This benchmark does not use bootstrap and needs to create a reflector
-  setupReflector();
   const bindings = [A, B, C, D, E];
   const injector = ReflectiveInjector.resolveAndCreate(bindings);
 
@@ -98,30 +91,42 @@ export function main() {
 
 @Injectable()
 class A {
-  constructor() { count++; }
+  constructor() {
+    count++;
+  }
 }
 
 @Injectable()
 class B {
-  constructor(a: A) { count++; }
+  constructor(a: A) {
+    count++;
+  }
 }
 
 @Injectable()
 class C {
-  constructor(b: B) { count++; }
+  constructor(b: B) {
+    count++;
+  }
 }
 
 @Injectable()
 class D {
-  constructor(c: C, b: B) { count++; }
+  constructor(c: C, b: B) {
+    count++;
+  }
 }
 
 @Injectable()
 class E {
-  constructor(d: D, c: C) { count++; }
+  constructor(d: D, c: C) {
+    count++;
+  }
 }
 
 @Injectable()
 class F {
-  constructor(e: E, d: D) { count++; }
+  constructor(e: E, d: D) {
+    count++;
+  }
 }

@@ -1,3 +1,5 @@
+load("//tools:defaults.bzl", "ts_config", "ts_library")
+
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
@@ -5,15 +7,12 @@ exports_files([
     "tsconfig.json",
 ])
 
-load("@npm_bazel_typescript//:index.bzl", "ts_config")
-load("//tools:defaults.bzl", "ts_library")
-
 ts_library(
     name = "types",
     srcs = glob(["*.ts"]),
     deps = [
+        "//packages/zone.js/lib:zone_d_ts",
         "@npm//@types/hammerjs",
-        "@npm//zone.js",
     ],
 )
 
@@ -24,9 +23,12 @@ ts_config(
 )
 
 ts_config(
-    name = "tsconfig-build-no-strict",
-    src = "tsconfig-build-no-strict.json",
-    deps = [":tsconfig-build.json"],
+    name = "tsec_config",
+    src = "tsconfig-tsec-base.json",
+    deps = [
+        ":tsconfig-build.json",
+        ":tsec-exemption.json",
+    ],
 )
 
 exports_files([

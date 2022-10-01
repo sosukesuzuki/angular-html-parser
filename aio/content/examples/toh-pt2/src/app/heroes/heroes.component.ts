@@ -16,17 +16,15 @@ import { HEROES } from '../mock-heroes';
 // #docregion component
 export class HeroesComponent implements OnInit {
 
-  // #docregion heroes
   heroes = HEROES;
-  // #enddocregion heroes
   // #enddocregion component
   // #docregion on-select
-  selectedHero: Hero;
+  selectedHero?: Hero;
  // #enddocregion on-select
 
   constructor() { }
 
-  ngOnInit() {
+  ngOnInit(): void {
   }
 
   // #docregion on-select
@@ -37,4 +35,3 @@ export class HeroesComponent implements OnInit {
 // #docregion component
 }
 // #enddocregion component
-

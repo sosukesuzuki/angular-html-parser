@@ -1,21 +1,21 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
 import {ParseSourceFile} from '@angular/compiler';
-import * as ts from 'typescript';
-import {ClassDeclaration} from '../../reflection';
+
+import {ClassDeclaration, DeclarationNode} from '../../reflection';
 
 /**
  * Describes the kind of identifier found in a template.
  */
 export enum IdentifierKind {
   Property,
-  Method,
+  Method,  // TODO: No longer being used. To be removed together with `MethodIdentifier`.
   Element,
   Template,
   Attribute,
@@ -43,13 +43,22 @@ interface ExpressionIdentifier extends TemplateIdentifier {
 }
 
 /** Describes a property accessed in a template. */
-export interface PropertyIdentifier extends ExpressionIdentifier { kind: IdentifierKind.Property; }
+export interface PropertyIdentifier extends ExpressionIdentifier {
+  kind: IdentifierKind.Property;
+}
 
-/** Describes a method accessed in a template. */
-export interface MethodIdentifier extends ExpressionIdentifier { kind: IdentifierKind.Method; }
+/**
+ * Describes a method accessed in a template.
+ * @deprecated No longer being used. To be removed.
+ */
+export interface MethodIdentifier extends ExpressionIdentifier {
+  kind: IdentifierKind.Method;
+}
 
 /** Describes an element attribute in a template. */
-export interface AttributeIdentifier extends TemplateIdentifier { kind: IdentifierKind.Attribute; }
+export interface AttributeIdentifier extends TemplateIdentifier {
+  kind: IdentifierKind.Attribute;
+}
 
 /** A reference to a directive node and its selector. */
 interface DirectiveReference {
@@ -85,7 +94,7 @@ export interface ReferenceIdentifier extends TemplateIdentifier {
   /** The target of this reference. If the target is not known, this is `null`. */
   target: {
     /** The template AST node that the reference targets. */
-    node: ElementIdentifier | TemplateIdentifier;
+    node: ElementIdentifier|TemplateIdentifier;
 
     /**
      * The directive on `node` that the reference targets. If no directive is targeted, this is
@@ -96,14 +105,16 @@ export interface ReferenceIdentifier extends TemplateIdentifier {
 }
 
 /** Describes a template variable like "foo" in `<div *ngFor="let foo of foos"></div>`. */
-export interface VariableIdentifier extends TemplateIdentifier { kind: IdentifierKind.Variable; }
+export interface VariableIdentifier extends TemplateIdentifier {
+  kind: IdentifierKind.Variable;
+}
 
 /**
  * Identifiers recorded at the top level of the template, without any context about the HTML nodes
  * they were discovered in.
  */
-export type TopLevelIdentifier = PropertyIdentifier | MethodIdentifier | ElementIdentifier |
-    TemplateNodeIdentifier | ReferenceIdentifier | VariableIdentifier;
+export type TopLevelIdentifier = PropertyIdentifier|ElementIdentifier|TemplateNodeIdentifier|
+    ReferenceIdentifier|VariableIdentifier|MethodIdentifier;
 
 /**
  * Describes the absolute byte offsets of a text anchor in a source code.
@@ -121,8 +132,9 @@ export interface IndexedComponent {
   file: ParseSourceFile;
   template: {
     identifiers: Set<TopLevelIdentifier>,
-    usedComponents: Set<ts.Declaration>,
+    usedComponents: Set<DeclarationNode>,
     isInline: boolean,
     file: ParseSourceFile;
   };
+  errors: Error[];
 }

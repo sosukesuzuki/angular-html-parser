@@ -1,34 +1,86 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import {ConstantPool} from '../../constant_pool';
 import {AttributeMarker} from '../../core';
-import {AST, BindingType, Interpolation} from '../../expression_parser/ast';
+import {AST, ASTWithSource, BindingPipe, BindingType, EmptyExpr, Interpolation} from '../../expression_parser/ast';
 import * as o from '../../output/output_ast';
 import {ParseSourceSpan} from '../../parse_util';
-import {isEmptyExpression} from '../../template_parser/template_parser';
-import {error} from '../../util';
 import * as t from '../r3_ast';
 import {Identifiers as R3} from '../r3_identifiers';
 
 import {hyphenate, parse as parseStyle} from './style_parser';
 import {ValueConverter} from './template';
-import {getInterpolationArgsLength} from './util';
+import {DefinitionMap, getInterpolationArgsLength} from './util';
 
 const IMPORTANT_FLAG = '!important';
+
+/**
+ * Minimum amount of binding slots required in the runtime for style/class bindings.
+ *
+ * Styling in Angular uses up two slots in the runtime LView/TData data structures to
+ * record binding data, property information and metadata.
+ *
+ * When a binding is registered it will place the following information in the `LView`:
+ *
+ * slot 1) binding value
+ * slot 2) cached value (all other values collected before it in string form)
+ *
+ * When a binding is registered it will place the following information in the `TData`:
+ *
+ * slot 1) prop name
+ * slot 2) binding index that points to the previous style/class binding (and some extra config
+ * values)
+ *
+ * Let's imagine we have a binding that looks like so:
+ *
+ * ```
+ * <div [style.width]="x" [style.height]="y">
+ * ```
+ *
+ * Our `LView` and `TData` data-structures look like so:
+ *
+ * ```typescript
+ * LView = [
+ *   // ...
+ *   x, // value of x
+ *   "width: x",
+ *
+ *   y, // value of y
+ *   "width: x; height: y",
+ *   // ...
+ * ];
+ *
+ * TData = [
+ *   // ...
+ *   "width", // binding slot 20
+ *   0,
+ *
+ *   "height",
+ *   20,
+ *   // ...
+ * ];
+ * ```
+ *
+ * */
+export const MIN_STYLING_BINDING_SLOTS_REQUIRED = 2;
 
 /**
  * A styling expression summary that is to be processed by the compiler
  */
 export interface StylingInstruction {
-  sourceSpan: ParseSourceSpan|null;
   reference: o.ExternalReference;
+  /** Calls to individual styling instructions. Used when chaining calls to the same instruction. */
+  calls: StylingInstructionCall[];
+}
+
+export interface StylingInstructionCall {
+  sourceSpan: ParseSourceSpan|null;
+  supportsInterpolation: boolean;
   allocateBindingSlots: number;
-  supportsInterpolation?: boolean;
   params: ((convertFn: (value: any) => o.Expression | o.Expression[]) => o.Expression[]);
 }
 
@@ -38,7 +90,7 @@ export interface StylingInstruction {
 interface BoundStylingEntry {
   hasOverrideFlag: boolean;
   name: string|null;
-  unit: string|null;
+  suffix: string|null;
   sourceSpan: ParseSourceSpan;
   value: AST;
 }
@@ -68,7 +120,6 @@ interface BoundStylingEntry {
  *   classMap(...)
  *   styleProp(...)
  *   classProp(...)
- *   stylingApply(...)
  * }
  *
  * The creation/update methods within the builder class produce these instructions.
@@ -81,6 +132,7 @@ export class StylingBuilder {
    *  (i.e. `[style]`, `[class]`, `[style.prop]` or `[class.name]`)
    */
   public hasBindings = false;
+  public hasBindingsWithPipes = false;
 
   /** the input for [class] (if it exists) */
   private _classMapInput: BoundStylingEntry|null = null;
@@ -112,11 +164,7 @@ export class StylingBuilder {
   private _initialStyleValues: string[] = [];
   private _initialClassValues: string[] = [];
 
-  // certain style properties ALWAYS need sanitization
-  // this is checked each time new styles are encountered
-  private _useDefaultSanitizer = false;
-
-  constructor(private _elementIndexExpr: o.Expression, private _directiveExpr: o.Expression|null) {}
+  constructor(private _directiveExpr: o.Expression|null) {}
 
   /**
    * Registers a given input to the styling builder to be later used when producing AOT code.
@@ -149,12 +197,12 @@ export class StylingBuilder {
 
   registerInputBasedOnName(name: string, expression: AST, sourceSpan: ParseSourceSpan) {
     let binding: BoundStylingEntry|null = null;
-    const nameToMatch = name.substring(0, 5);  // class | style
-    const isStyle = nameToMatch === 'style';
-    const isClass = isStyle ? false : (nameToMatch === 'class');
+    const prefix = name.substring(0, 6);
+    const isStyle = name === 'style' || prefix === 'style.' || prefix === 'style!';
+    const isClass = !isStyle && (name === 'class' || prefix === 'class.' || prefix === 'class!');
     if (isStyle || isClass) {
-      const isMapBased = name.charAt(5) !== '.';         // style.prop or class.prop makes this a no
-      const property = name.substr(isMapBased ? 5 : 6);  // the dot explains why there's a +1
+      const isMapBased = name.charAt(5) !== '.';        // style.prop or class.prop makes this a no
+      const property = name.slice(isMapBased ? 5 : 6);  // the dot explains why there's a +1
       if (isStyle) {
         binding = this.registerStyleInput(property, isMapBased, expression, sourceSpan);
       } else {
@@ -166,26 +214,28 @@ export class StylingBuilder {
 
   registerStyleInput(
       name: string, isMapBased: boolean, value: AST, sourceSpan: ParseSourceSpan,
-      unit?: string|null): BoundStylingEntry|null {
+      suffix?: string|null): BoundStylingEntry|null {
     if (isEmptyExpression(value)) {
       return null;
     }
-    name = normalizePropName(name);
-    const {property, hasOverrideFlag, unit: bindingUnit} = parseProperty(name);
-    const entry: BoundStylingEntry = {
-      name: property,
-      unit: unit || bindingUnit, value, sourceSpan, hasOverrideFlag
-    };
+    // CSS custom properties are case-sensitive so we shouldn't normalize them.
+    // See: https://www.w3.org/TR/css-variables-1/#defining-variables
+    if (!isCssCustomProperty(name)) {
+      name = hyphenate(name);
+    }
+    const {property, hasOverrideFlag, suffix: bindingSuffix} = parseProperty(name);
+    suffix = typeof suffix === 'string' && suffix.length !== 0 ? suffix : bindingSuffix;
+    const entry:
+        BoundStylingEntry = {name: property, suffix: suffix, value, sourceSpan, hasOverrideFlag};
     if (isMapBased) {
-      this._useDefaultSanitizer = true;
       this._styleMapInput = entry;
     } else {
       (this._singleStyleInputs = this._singleStyleInputs || []).push(entry);
-      this._useDefaultSanitizer = this._useDefaultSanitizer || isStyleSanitizable(name);
       registerIntoMap(this._stylesIndex, property);
     }
     this._lastStylingInput = entry;
     this._firstStylingInput = this._firstStylingInput || entry;
+    this._checkForPipes(value);
     this.hasBindings = true;
     return entry;
   }
@@ -197,7 +247,7 @@ export class StylingBuilder {
     }
     const {property, hasOverrideFlag} = parseProperty(name);
     const entry:
-        BoundStylingEntry = {name: property, value, sourceSpan, hasOverrideFlag, unit: null};
+        BoundStylingEntry = {name: property, value, sourceSpan, hasOverrideFlag, suffix: null};
     if (isMapBased) {
       this._classMapInput = entry;
     } else {
@@ -206,8 +256,15 @@ export class StylingBuilder {
     }
     this._lastStylingInput = entry;
     this._firstStylingInput = this._firstStylingInput || entry;
+    this._checkForPipes(value);
     this.hasBindings = true;
     return entry;
+  }
+
+  private _checkForPipes(value: AST) {
+    if ((value instanceof ASTWithSource) && (value.ast instanceof BindingPipe)) {
+      this.hasBindingsWithPipes = true;
+    }
   }
 
   /**
@@ -262,44 +319,11 @@ export class StylingBuilder {
    * responsible for registering initial styles (within a directive hostBindings' creation block),
    * as well as any of the provided attribute values, to the directive host element.
    */
-  buildHostAttrsInstruction(
-      sourceSpan: ParseSourceSpan|null, attrs: o.Expression[],
-      constantPool: ConstantPool): StylingInstruction|null {
+  assignHostAttrs(attrs: o.Expression[], definitionMap: DefinitionMap): void {
     if (this._directiveExpr && (attrs.length || this._hasInitialValues)) {
-      return {
-        sourceSpan,
-        reference: R3.elementHostAttrs,
-        allocateBindingSlots: 0,
-        params: () => {
-          // params => elementHostAttrs(attrs)
-          this.populateInitialStylingAttrs(attrs);
-          const attrArray = !attrs.some(attr => attr instanceof o.WrappedNodeExpr) ?
-              getConstantLiteralFromArray(constantPool, attrs) :
-              o.literalArr(attrs);
-          return [attrArray];
-        }
-      };
+      this.populateInitialStylingAttrs(attrs);
+      definitionMap.set('hostAttrs', o.literalArr(attrs));
     }
-    return null;
-  }
-
-  /**
-   * Builds an instruction with all the expressions and parameters for `styling`.
-   *
-   * The instruction generation code below is used for producing the AOT statement code which is
-   * responsible for registering style/class bindings to an element.
-   */
-  buildStylingInstruction(sourceSpan: ParseSourceSpan|null, constantPool: ConstantPool):
-      StylingInstruction|null {
-    if (this.hasBindings) {
-      return {
-        sourceSpan,
-        allocateBindingSlots: 0,
-        reference: R3.styling,
-        params: () => [],
-      };
-    }
-    return null;
   }
 
   /**
@@ -332,58 +356,73 @@ export class StylingBuilder {
       valueConverter: ValueConverter, isClassBased: boolean,
       stylingInput: BoundStylingEntry): StylingInstruction {
     // each styling binding value is stored in the LView
-    let totalBindingSlotsRequired = 1;
+    // map-based bindings allocate two slots: one for the
+    // previous binding value and another for the previous
+    // className or style attribute value.
+    let totalBindingSlotsRequired = MIN_STYLING_BINDING_SLOTS_REQUIRED;
 
     // these values must be outside of the update block so that they can
     // be evaluated (the AST visit call) during creation time so that any
     // pipes can be picked up in time before the template is built
     const mapValue = stylingInput.value.visit(valueConverter);
     let reference: o.ExternalReference;
-    if (mapValue instanceof Interpolation && isClassBased) {
+    if (mapValue instanceof Interpolation) {
       totalBindingSlotsRequired += mapValue.expressions.length;
-      reference = getClassMapInterpolationExpression(mapValue);
+      reference = isClassBased ? getClassMapInterpolationExpression(mapValue) :
+                                 getStyleMapInterpolationExpression(mapValue);
     } else {
       reference = isClassBased ? R3.classMap : R3.styleMap;
     }
 
     return {
-      sourceSpan: stylingInput.sourceSpan,
       reference,
-      allocateBindingSlots: totalBindingSlotsRequired,
-      supportsInterpolation: isClassBased,
-      params: (convertFn: (value: any) => o.Expression | o.Expression[]) => {
-        const convertResult = convertFn(mapValue);
-        return Array.isArray(convertResult) ? convertResult : [convertResult];
-      }
+      calls: [{
+        supportsInterpolation: true,
+        sourceSpan: stylingInput.sourceSpan,
+        allocateBindingSlots: totalBindingSlotsRequired,
+        params: (convertFn: (value: any) => o.Expression|o.Expression[]) => {
+          const convertResult = convertFn(mapValue);
+          const params = Array.isArray(convertResult) ? convertResult : [convertResult];
+          return params;
+        }
+      }]
     };
   }
 
   private _buildSingleInputs(
-      reference: o.ExternalReference, inputs: BoundStylingEntry[], mapIndex: Map<string, number>,
-      allowUnits: boolean, valueConverter: ValueConverter,
-      getInterpolationExpressionFn?: (value: Interpolation) => o.ExternalReference):
-      StylingInstruction[] {
-    let totalBindingSlotsRequired = 0;
-    return inputs.map(input => {
+      reference: o.ExternalReference, inputs: BoundStylingEntry[], valueConverter: ValueConverter,
+      getInterpolationExpressionFn: ((value: Interpolation) => o.ExternalReference)|null,
+      isClassBased: boolean): StylingInstruction[] {
+    const instructions: StylingInstruction[] = [];
+
+    inputs.forEach(input => {
+      const previousInstruction: StylingInstruction|undefined =
+          instructions[instructions.length - 1];
       const value = input.value.visit(valueConverter);
+      let referenceForCall = reference;
 
       // each styling binding value is stored in the LView
-      let totalBindingSlotsRequired = 1;
+      // but there are two values stored for each binding:
+      //   1) the value itself
+      //   2) an intermediate value (concatenation of style up to this point).
+      //      We need to store the intermediate value so that we don't allocate
+      //      the strings on each CD.
+      let totalBindingSlotsRequired = MIN_STYLING_BINDING_SLOTS_REQUIRED;
 
       if (value instanceof Interpolation) {
         totalBindingSlotsRequired += value.expressions.length;
 
         if (getInterpolationExpressionFn) {
-          reference = getInterpolationExpressionFn(value);
+          referenceForCall = getInterpolationExpressionFn(value);
         }
       }
 
-      return {
+      const call = {
         sourceSpan: input.sourceSpan,
+        allocateBindingSlots: totalBindingSlotsRequired,
         supportsInterpolation: !!getInterpolationExpressionFn,
-        allocateBindingSlots: totalBindingSlotsRequired, reference,
         params: (convertFn: (value: any) => o.Expression | o.Expression[]) => {
-          // params => stylingProp(propName, value)
+          // params => stylingProp(propName, value, suffix)
           const params: o.Expression[] = [];
           params.push(o.literal(input.name));
 
@@ -394,20 +433,35 @@ export class StylingBuilder {
             params.push(convertResult);
           }
 
-          if (allowUnits && input.unit) {
-            params.push(o.literal(input.unit));
+          // [style.prop] bindings may use suffix values (e.g. px, em, etc...), therefore,
+          // if that is detected then we need to pass that in as an optional param.
+          if (!isClassBased && input.suffix !== null) {
+            params.push(o.literal(input.suffix));
           }
 
           return params;
         }
       };
+
+      // If we ended up generating a call to the same instruction as the previous styling property
+      // we can chain the calls together safely to save some bytes, otherwise we have to generate
+      // a separate instruction call. This is primarily a concern with interpolation instructions
+      // where we may start off with one `reference`, but end up using another based on the
+      // number of interpolations.
+      if (previousInstruction && previousInstruction.reference === referenceForCall) {
+        previousInstruction.calls.push(call);
+      } else {
+        instructions.push({reference: referenceForCall, calls: [call]});
+      }
     });
+
+    return instructions;
   }
 
   private _buildClassInputs(valueConverter: ValueConverter): StylingInstruction[] {
     if (this._singleClassInputs) {
       return this._buildSingleInputs(
-          R3.classProp, this._singleClassInputs, this._classesIndex, false, valueConverter);
+          R3.classProp, this._singleClassInputs, valueConverter, null, true);
     }
     return [];
   }
@@ -415,28 +469,10 @@ export class StylingBuilder {
   private _buildStyleInputs(valueConverter: ValueConverter): StylingInstruction[] {
     if (this._singleStyleInputs) {
       return this._buildSingleInputs(
-          R3.styleProp, this._singleStyleInputs, this._stylesIndex, true, valueConverter,
-          getStylePropInterpolationExpression);
+          R3.styleProp, this._singleStyleInputs, valueConverter,
+          getStylePropInterpolationExpression, false);
     }
     return [];
-  }
-
-  private _buildApplyFn(): StylingInstruction {
-    return {
-      sourceSpan: this._lastStylingInput ? this._lastStylingInput.sourceSpan : null,
-      reference: R3.stylingApply,
-      allocateBindingSlots: 0,
-      params: () => { return []; }
-    };
-  }
-
-  private _buildSanitizerFn(): StylingInstruction {
-    return {
-      sourceSpan: this._firstStylingInput ? this._firstStylingInput.sourceSpan : null,
-      reference: R3.styleSanitizer,
-      allocateBindingSlots: 0,
-      params: () => [o.importExpr(R3.defaultStyleSanitizer)]
-    };
   }
 
   /**
@@ -446,9 +482,6 @@ export class StylingBuilder {
   buildUpdateLevelInstructions(valueConverter: ValueConverter) {
     const instructions: StylingInstruction[] = [];
     if (this.hasBindings) {
-      if (this._useDefaultSanitizer) {
-        instructions.push(this._buildSanitizerFn());
-      }
       const styleMapInstruction = this.buildStyleMapInstruction(valueConverter);
       if (styleMapInstruction) {
         instructions.push(styleMapInstruction);
@@ -459,7 +492,6 @@ export class StylingBuilder {
       }
       instructions.push(...this._buildStyleInputs(valueConverter));
       instructions.push(...this._buildClassInputs(valueConverter));
-      instructions.push(this._buildApplyFn());
     }
     return instructions;
   }
@@ -471,40 +503,8 @@ function registerIntoMap(map: Map<string, number>, key: string) {
   }
 }
 
-function isStyleSanitizable(prop: string): boolean {
-  // Note that browsers support both the dash case and
-  // camel case property names when setting through JS.
-  return prop === 'background-image' || prop === 'backgroundImage' || prop === 'background' ||
-      prop === 'border-image' || prop === 'borderImage' || prop === 'filter' ||
-      prop === 'list-style' || prop === 'listStyle' || prop === 'list-style-image' ||
-      prop === 'listStyleImage' || prop === 'clip-path' || prop === 'clipPath';
-}
-
-/**
- * Simple helper function to either provide the constant literal that will house the value
- * here or a null value if the provided values are empty.
- */
-function getConstantLiteralFromArray(
-    constantPool: ConstantPool, values: o.Expression[]): o.Expression {
-  return values.length ? constantPool.getConstLiteral(o.literalArr(values), true) : o.NULL_EXPR;
-}
-
-/**
- * Simple helper function that adds a parameter or does nothing at all depending on the provided
- * predicate and totalExpectedArgs values
- */
-function addParam(
-    params: o.Expression[], predicate: any, value: o.Expression | null, argNumber: number,
-    totalExpectedArgs: number) {
-  if (predicate && value) {
-    params.push(value);
-  } else if (argNumber < totalExpectedArgs) {
-    params.push(o.NULL_EXPR);
-  }
-}
-
 export function parseProperty(name: string):
-    {property: string, unit: string, hasOverrideFlag: boolean} {
+    {property: string, suffix: string|null, hasOverrideFlag: boolean} {
   let hasOverrideFlag = false;
   const overrideIndex = name.indexOf(IMPORTANT_FLAG);
   if (overrideIndex !== -1) {
@@ -512,15 +512,15 @@ export function parseProperty(name: string):
     hasOverrideFlag = true;
   }
 
-  let unit = '';
+  let suffix: string|null = null;
   let property = name;
   const unitIndex = name.lastIndexOf('.');
   if (unitIndex > 0) {
-    unit = name.substr(unitIndex + 1);
+    suffix = name.slice(unitIndex + 1);
     property = name.substring(0, unitIndex);
   }
 
-  return {property, unit, hasOverrideFlag};
+  return {property, suffix, hasOverrideFlag};
 }
 
 /**
@@ -553,6 +553,35 @@ function getClassMapInterpolationExpression(interpolation: Interpolation): o.Ext
 }
 
 /**
+ * Gets the instruction to generate for an interpolated style map.
+ * @param interpolation An Interpolation AST
+ */
+function getStyleMapInterpolationExpression(interpolation: Interpolation): o.ExternalReference {
+  switch (getInterpolationArgsLength(interpolation)) {
+    case 1:
+      return R3.styleMap;
+    case 3:
+      return R3.styleMapInterpolate1;
+    case 5:
+      return R3.styleMapInterpolate2;
+    case 7:
+      return R3.styleMapInterpolate3;
+    case 9:
+      return R3.styleMapInterpolate4;
+    case 11:
+      return R3.styleMapInterpolate5;
+    case 13:
+      return R3.styleMapInterpolate6;
+    case 15:
+      return R3.styleMapInterpolate7;
+    case 17:
+      return R3.styleMapInterpolate8;
+    default:
+      return R3.styleMapInterpolateV;
+  }
+}
+
+/**
  * Gets the instruction to generate for an interpolated style prop.
  * @param interpolation An Interpolation AST
  */
@@ -581,6 +610,17 @@ function getStylePropInterpolationExpression(interpolation: Interpolation) {
   }
 }
 
-function normalizePropName(prop: string): string {
-  return hyphenate(prop);
+/**
+ * Checks whether property name is a custom CSS property.
+ * See: https://www.w3.org/TR/css-variables-1
+ */
+function isCssCustomProperty(name: string): boolean {
+  return name.startsWith('--');
+}
+
+function isEmptyExpression(ast: AST): boolean {
+  if (ast instanceof ASTWithSource) {
+    ast = ast.ast;
+  }
+  return ast instanceof EmptyExpr;
 }

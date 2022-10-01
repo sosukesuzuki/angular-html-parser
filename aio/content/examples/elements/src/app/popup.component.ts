@@ -1,15 +1,13 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+// #docregion
+import { Component, EventEmitter, HostBinding, Input, Output } from '@angular/core';
 import { animate, state, style, transition, trigger } from '@angular/animations';
 
 @Component({
   selector: 'my-popup',
   template: `
     <span>Popup: {{message}}</span>
-    <button (click)="closed.next()">&#x2716;</button>
+    <button type="button" (click)="closed.next()">&#x2716;</button>
   `,
-  host: {
-    '[@state]': 'state',
-  },
   animations: [
     trigger('state', [
       state('opened', style({transform: 'translateY(0%)'})),
@@ -39,16 +37,17 @@ import { animate, state, style, transition, trigger } from '@angular/animations'
   `]
 })
 export class PopupComponent {
-  private state: 'opened' | 'closed' = 'closed';
+  @HostBinding('@state')
+  state: 'opened' | 'closed' = 'closed';
 
   @Input()
+  get message(): string { return this._message; }
   set message(message: string) {
     this._message = message;
     this.state = 'opened';
   }
-  get message(): string { return this._message; }
-  _message: string;
+  private _message = '';
 
   @Output()
-  closed = new EventEmitter();
+  closed = new EventEmitter<void>();
 }

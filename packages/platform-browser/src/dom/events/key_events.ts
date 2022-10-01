@@ -1,15 +1,13 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {DOCUMENT} from '@angular/common';
+import {DOCUMENT, ɵgetDOM as getDOM} from '@angular/common';
 import {Inject, Injectable, NgZone} from '@angular/core';
-
-import {getDOM} from '../dom_adapter';
 
 import {EventManagerPlugin} from './event_manager';
 
@@ -17,6 +15,24 @@ import {EventManagerPlugin} from './event_manager';
  * Defines supported modifiers for key events.
  */
 const MODIFIER_KEYS = ['alt', 'control', 'meta', 'shift'];
+
+// The following values are here for cross-browser compatibility and to match the W3C standard
+// cf https://www.w3.org/TR/DOM-Level-3-Events-key/
+const _keyMap: {[k: string]: string} = {
+  '\b': 'Backspace',
+  '\t': 'Tab',
+  '\x7F': 'Delete',
+  '\x1B': 'Escape',
+  'Del': 'Delete',
+  'Esc': 'Escape',
+  'Left': 'ArrowLeft',
+  'Right': 'ArrowRight',
+  'Up': 'ArrowUp',
+  'Down': 'ArrowDown',
+  'Menu': 'ContextMenu',
+  'Scroll': 'ScrollLock',
+  'Win': 'OS'
+};
 
 /**
  * Retrieves modifiers from key-event objects.
@@ -38,14 +54,18 @@ export class KeyEventsPlugin extends EventManagerPlugin {
    * Initializes an instance of the browser plug-in.
    * @param doc The document in which key events will be detected.
    */
-  constructor(@Inject(DOCUMENT) doc: any) { super(doc); }
+  constructor(@Inject(DOCUMENT) doc: any) {
+    super(doc);
+  }
 
   /**
-    * Reports whether a named key event is supported.
-    * @param eventName The event name to query.
-    * @return True if the named key event is supported.
+   * Reports whether a named key event is supported.
+   * @param eventName The event name to query.
+   * @return True if the named key event is supported.
    */
-  supports(eventName: string): boolean { return KeyEventsPlugin.parseEventName(eventName) != null; }
+  override supports(eventName: string): boolean {
+    return KeyEventsPlugin.parseEventName(eventName) != null;
+  }
 
   /**
    * Registers a handler for a specific element and key event.
@@ -54,9 +74,9 @@ export class KeyEventsPlugin extends EventManagerPlugin {
    * @param handler A function to call when the notification occurs. Receives the
    * event object as an argument.
    * @returns The key event that was registered.
-  */
-  addEventListener(element: HTMLElement, eventName: string, handler: Function): Function {
-    const parsedEvent = KeyEventsPlugin.parseEventName(eventName) !;
+   */
+  override addEventListener(element: HTMLElement, eventName: string, handler: Function): Function {
+    const parsedEvent = KeyEventsPlugin.parseEventName(eventName)!;
 
     const outsideHandler =
         KeyEventsPlugin.eventCallback(parsedEvent['fullKey'], handler, this.manager.getZone());
@@ -66,7 +86,16 @@ export class KeyEventsPlugin extends EventManagerPlugin {
     });
   }
 
-  static parseEventName(eventName: string): {[key: string]: string}|null {
+  /**
+   * Parses the user provided full keyboard event definition and normalizes it for
+   * later internal use. It ensures the string is all lowercase, converts special
+   * characters to a standard spelling, and orders all the values consistently.
+   *
+   * @param eventName The name of the key event to listen for.
+   * @returns an object with the full, normalized string, and the dom event name
+   * or null in the case when the event doesn't match a keyboard event.
+   */
+  static parseEventName(eventName: string): {fullKey: string, domEventName: string}|null {
     const parts: string[] = eventName.toLowerCase().split('.');
 
     const domEventName = parts.shift();
@@ -74,9 +103,14 @@ export class KeyEventsPlugin extends EventManagerPlugin {
       return null;
     }
 
-    const key = KeyEventsPlugin._normalizeKey(parts.pop() !);
+    const key = KeyEventsPlugin._normalizeKey(parts.pop()!);
 
     let fullKey = '';
+    let codeIX = parts.indexOf('code');
+    if (codeIX > -1) {
+      parts.splice(codeIX, 1);
+      fullKey = 'code.';
+    }
     MODIFIER_KEYS.forEach(modifierName => {
       const index: number = parts.indexOf(modifierName);
       if (index > -1) {
@@ -91,31 +125,50 @@ export class KeyEventsPlugin extends EventManagerPlugin {
       return null;
     }
 
-    const result: {[k: string]: string} = {};
+    // NOTE: Please don't rewrite this as so, as it will break JSCompiler property renaming.
+    //       The code must remain in the `result['domEventName']` form.
+    // return {domEventName, fullKey};
+    const result: {fullKey: string, domEventName: string} = {} as any;
     result['domEventName'] = domEventName;
     result['fullKey'] = fullKey;
     return result;
   }
 
-  static getEventFullKey(event: KeyboardEvent): string {
-    let fullKey = '';
-    let key = getDOM().getEventKey(event);
-    key = key.toLowerCase();
-    if (key === ' ') {
-      key = 'space';  // for readability
-    } else if (key === '.') {
-      key = 'dot';  // because '.' is used as a separator in event names
+  /**
+   * Determines whether the actual keys pressed match the configured key code string.
+   * The `fullKeyCode` event is normalized in the `parseEventName` method when the
+   * event is attached to the DOM during the `addEventListener` call. This is unseen
+   * by the end user and is normalized for internal consistency and parsing.
+   *
+   * @param event The keyboard event.
+   * @param fullKeyCode The normalized user defined expected key event string
+   * @returns boolean.
+   */
+  static matchEventFullKeyCode(event: KeyboardEvent, fullKeyCode: string): boolean {
+    let keycode = _keyMap[event.key] || event.key;
+    let key = '';
+    if (fullKeyCode.indexOf('code.') > -1) {
+      keycode = event.code;
+      key = 'code.';
+    }
+    // the keycode could be unidentified so we have to check here
+    if (keycode == null || !keycode) return false;
+    keycode = keycode.toLowerCase();
+    if (keycode === ' ') {
+      keycode = 'space';  // for readability
+    } else if (keycode === '.') {
+      keycode = 'dot';  // because '.' is used as a separator in event names
     }
     MODIFIER_KEYS.forEach(modifierName => {
-      if (modifierName != key) {
+      if (modifierName !== keycode) {
         const modifierGetter = MODIFIER_KEY_GETTERS[modifierName];
         if (modifierGetter(event)) {
-          fullKey += modifierName + '.';
+          key += modifierName + '.';
         }
       }
     });
-    fullKey += key;
-    return fullKey;
+    key += keycode;
+    return key === fullKeyCode;
   }
 
   /**
@@ -125,9 +178,9 @@ export class KeyEventsPlugin extends EventManagerPlugin {
    * @param zone The zone in which the event occurred.
    * @returns A callback function.
    */
-  static eventCallback(fullKey: any, handler: Function, zone: NgZone): Function {
-    return (event: any /** TODO #9100 */) => {
-      if (KeyEventsPlugin.getEventFullKey(event) === fullKey) {
+  static eventCallback(fullKey: string, handler: Function, zone: NgZone): Function {
+    return (event: KeyboardEvent) => {
+      if (KeyEventsPlugin.matchEventFullKeyCode(event, fullKey)) {
         zone.runGuarded(() => handler(event));
       }
     };

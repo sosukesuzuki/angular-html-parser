@@ -1,9 +1,9 @@
 // #docregion
-import { Component }  from '@angular/core';
+import { Component } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { Hero, HeroTaxReturn } from './hero';
-import { HeroesService }       from './heroes.service';
+import { HeroesService } from './heroes.service';
 
 @Component({
   selector: 'app-heroes-list',
@@ -11,8 +11,8 @@ import { HeroesService }       from './heroes.service';
     <div>
       <h3>Hero Tax Returns</h3>
       <ul>
-        <li *ngFor="let hero of heroes | async"
-            (click)="showTaxReturn(hero)">{{hero.name}}
+        <li *ngFor="let hero of heroes | async">
+          <button type="button" (click)="showTaxReturn(hero)">{{hero.name}}</button>
         </li>
       </ul>
       <app-hero-tax-return
@@ -22,7 +22,13 @@ import { HeroesService }       from './heroes.service';
       </app-hero-tax-return>
     </div>
     `,
-  styles: [ 'li {cursor: pointer;}' ]
+  styles: [`
+    li button {
+      font-size: inherit;
+      margin: 0.3rem;
+      padding: 0.5rem;
+    }
+  `]
 })
 export class HeroesListComponent {
   heroes: Observable<Hero[]>;

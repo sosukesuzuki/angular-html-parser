@@ -7,7 +7,7 @@
 - [ ] Make it work with `(keyup.Enter)`.
 
 ## Compiler
-- [ ] Remove ` tslib_1.__decorate([core_1.Input(), tslib_1.__metadata("design:type", Object)], TodoComponent.prototype, "todo", void 0);` from generated output.
+- [X] Remove ` tslib_1.__decorate([core_1.Input(), tslib_1.__metadata("design:type", Object)], TodoComponent.prototype, "todo", void 0);` from generated output.
 - [ ] Allow compilation of `@angular/common` through ivy.
  
 ## Ivy Runtime
@@ -18,11 +18,6 @@
 
 ## Testing
 - [ ] Create a debug mode which would publish components into DOM for easier writing of tests.
-
-
-## Bazel
-
-- [ ] Have action verb on the `ng_rollup_bundle` to display source maps.
 
 # NOTES
 

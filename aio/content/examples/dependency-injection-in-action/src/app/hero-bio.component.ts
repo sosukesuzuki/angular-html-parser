@@ -1,7 +1,7 @@
 // #docregion
 import { Component, Input, OnInit } from '@angular/core';
 
-import { HeroCacheService }         from './hero-cache.service';
+import { HeroCacheService } from './hero-cache.service';
 
 // #docregion component
 @Component({
@@ -16,7 +16,7 @@ import { HeroCacheService }         from './hero-cache.service';
 })
 
 export class HeroBioComponent implements OnInit  {
-  @Input() heroId: number;
+  @Input() heroId = 0;
 
   constructor(private heroCache: HeroCacheService) { }
 

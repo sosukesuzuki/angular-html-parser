@@ -1,9 +1,14 @@
-import { Injector, ReflectiveInjector } from '@angular/core';
+import { Injector } from '@angular/core';
 import { fakeAsync, tick } from '@angular/core/testing';
 import { DOCUMENT } from '@angular/common';
 
 import { ScrollService } from 'app/shared/scroll.service';
-import { ScrollItem, ScrollSpiedElement, ScrollSpiedElementGroup, ScrollSpyService } from 'app/shared/scroll-spy.service';
+import {
+  ScrollItem,
+  ScrollSpiedElement,
+  ScrollSpiedElementGroup,
+  ScrollSpyService,
+} from 'app/shared/scroll-spy.service';
 
 
 describe('ScrollSpiedElement', () => {
@@ -39,7 +44,7 @@ describe('ScrollSpiedElement', () => {
 describe('ScrollSpiedElementGroup', () => {
   describe('#calibrate()', () => {
     it('should calculate `top` for all spied elements', () => {
-      const spy = spyOn(ScrollSpiedElement.prototype, 'calculateTop').and.returnValue(0);
+      const spy = spyOn(ScrollSpiedElement.prototype, 'calculateTop');
       const elems = [{}, {}, {}] as Element[];
       const group = new ScrollSpiedElementGroup(elems);
 
@@ -49,9 +54,9 @@ describe('ScrollSpiedElementGroup', () => {
       const callInfo = spy.calls.all();
 
       expect(spy).toHaveBeenCalledTimes(3);
-      expect(callInfo[0].object.index).toBe(0);
-      expect(callInfo[1].object.index).toBe(1);
-      expect(callInfo[2].object.index).toBe(2);
+      expect((callInfo[0].object as ScrollSpiedElement).index).toBe(0);
+      expect((callInfo[1].object as ScrollSpiedElement).index).toBe(1);
+      expect((callInfo[2].object as ScrollSpiedElement).index).toBe(2);
       expect(callInfo[0].args).toEqual([20, 10]);
       expect(callInfo[1].args).toEqual([20, 10]);
       expect(callInfo[2].args).toEqual([20, 10]);
@@ -68,7 +73,7 @@ describe('ScrollSpiedElementGroup', () => {
       const tops = [50, 150, 100];
 
       spyOn(ScrollSpiedElement.prototype, 'calculateTop').and.callFake(
-        function(this: ScrollSpiedElement, scrollTop: number, topOffset: number) {
+        function(this: ScrollSpiedElement) {
         this.top = tops[this.index];
       });
 
@@ -151,11 +156,11 @@ describe('ScrollSpyService', () => {
   let scrollSpyService: ScrollSpyService;
 
   beforeEach(() => {
-    injector = ReflectiveInjector.resolveAndCreate([
+    injector = Injector.create({providers: [
       { provide: DOCUMENT, useValue: { body: {} } },
       { provide: ScrollService, useValue: { topOffset: 50 } },
-      ScrollSpyService
-    ]);
+      { provide: ScrollSpyService, deps: [DOCUMENT, ScrollService] }
+    ]});
 
     scrollSpyService = injector.get(ScrollSpyService);
   });
@@ -235,7 +240,7 @@ describe('ScrollSpyService', () => {
 
     it('should remember and emit the last active item to new subscribers', () => {
       const items = [{index: 1}, {index: 2}, {index: 3}] as ScrollItem[];
-      let lastActiveItem: ScrollItem|null;
+      let lastActiveItem = null as unknown as ScrollItem|null;
 
       const info = scrollSpyService.spyOn([]);
       const spiedElemGroup = getSpiedElemGroups()[0];
@@ -247,12 +252,12 @@ describe('ScrollSpyService', () => {
       spiedElemGroup.activeScrollItem.next(items[1]);
       info.active.subscribe(item => lastActiveItem = item);
 
-      expect(lastActiveItem!).toBe(items[1]);
+      expect(lastActiveItem).toBe(items[1]);
 
       spiedElemGroup.activeScrollItem.next(null);
       info.active.subscribe(item => lastActiveItem = item);
 
-      expect(lastActiveItem!).toBeNull();
+      expect(lastActiveItem).toBeNull();
     });
 
     it('should only emit distinct values on `active`', () => {

@@ -1,4 +1,3 @@
-/* tslint:disable */
 // Simulate a simple test
 // Reader should look to the testing chapter for the real thing
 
@@ -22,28 +21,26 @@ export class TestComponent {
 /////////////////////////////////////
 function runTests() {
 
-  // #docregion spec
-  const expectedHeroes = [{name: 'A'}, {name: 'B'}]
-  const mockService = <HeroService> {getHeroes: () => expectedHeroes }
+  const expectedHeroes = [{name: 'A'}, {name: 'B'}];
+  const mockService = {getHeroes: () => expectedHeroes } as HeroService;
 
   it('should have heroes when HeroListComponent created', () => {
     // Pass the mock to the constructor as the Angular injector would
     const component = new HeroListComponent(mockService);
     expect(component.heroes.length).toEqual(expectedHeroes.length);
   });
-  // #enddocregion spec
 
   return testResults;
 }
 
 //////////////////////////////////
 // Fake Jasmine infrastructure
-var testName: string;
-var testResults: {pass: string; message: string};
+let testName: string;
+let testResults: {pass: string, message: string};
 
 function expect(actual: any) {
   return {
-    toEqual: function(expected: any){
+    toEqual: (expected: any) => {
       testResults = actual === expected ?
         {pass: 'passed', message: testName} :
         {pass: 'failed', message: `${testName}; expected ${actual} to equal ${expected}.`};

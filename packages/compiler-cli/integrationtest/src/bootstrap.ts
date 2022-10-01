@@ -1,12 +1,15 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {BasicComp} from './basic';
-import {MainModuleNgFactory} from './module.ngfactory';
+import {createNgModule} from '@angular/core';
 
-MainModuleNgFactory.create(null).instance.appRef.bootstrap(BasicComp);
+import {BasicComp} from './basic';
+import {MainModule} from './module';
+
+const ngModuleRef = createNgModule(MainModule);
+ngModuleRef.instance.appRef.bootstrap(BasicComp);

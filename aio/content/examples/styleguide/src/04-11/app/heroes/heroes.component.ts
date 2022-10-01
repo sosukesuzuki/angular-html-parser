@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 
-import { LoggerService }  from '../core/logger.service';
+import { LoggerService } from '../core/logger.service';
 import { SpinnerService } from '../core/spinner/spinner.service';
 
 @Component({
@@ -8,7 +8,7 @@ import { SpinnerService } from '../core/spinner/spinner.service';
   templateUrl: './heroes.component.html'
 })
 export class HeroesComponent {
-  heroes: any[];
+  heroes: any[] = [];
 
   constructor(
     private loggerService: LoggerService,

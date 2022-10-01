@@ -1,18 +1,20 @@
-load("//tools:defaults.bzl", "npm_package")
+load("//tools:defaults.bzl", "pkg_npm")
 
 exports_files([
     "tsconfig.json",
     "migrations.json",
 ])
 
-npm_package(
+pkg_npm(
     name = "npm_package",
-    srcs = ["migrations.json"],
+    srcs = [
+        "migrations.json",
+        "package.json",
+    ],
     visibility = ["//packages/core:__pkg__"],
     deps = [
-        "//packages/core/schematics/migrations/move-document",
-        "//packages/core/schematics/migrations/renderer-to-renderer2",
-        "//packages/core/schematics/migrations/static-queries",
-        "//packages/core/schematics/migrations/template-var-assignment",
+        "//packages/core/schematics/migrations/entry-components",
+        "//packages/core/schematics/migrations/path-match-type",
+        "//packages/core/schematics/migrations/typed-forms",
     ],
 )

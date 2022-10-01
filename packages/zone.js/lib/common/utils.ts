@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -58,7 +58,6 @@ const internalWindow: any = isWindowExists ? window : undefined;
 const _global: any = isWindowExists && internalWindow || typeof self === 'object' && self || global;
 
 const REMOVE_ATTRIBUTE = 'removeAttribute';
-const NULL_ON_PROP_VALUE: [any] = [null];
 
 export function bindArguments(args: any[], source: string): any[] {
   for (let i = args.length - 1; i >= 0; i--) {
@@ -138,7 +137,7 @@ const wrapFn = function(this: unknown, event: Event) {
   const listener = target[eventNameSymbol];
   let result;
   if (isBrowser && target === internalWindow && event.type === 'error') {
-    // window.onerror have different signiture
+    // window.onerror have different signature
     // https://developer.mozilla.org/en-US/docs/Web/API/GlobalEventHandlers/onerror#window.onerror
     // and onerror callback will prevent default when callback return true
     const errorEvent: ErrorEvent = event as any;
@@ -189,8 +188,8 @@ export function patchProperty(obj: any, prop: string, prototype?: any) {
   const originalDescGet = desc.get;
   const originalDescSet = desc.set;
 
-  // substr(2) cuz 'onclick' -> 'click', etc
-  const eventName = prop.substr(2);
+  // slice(2) cuz 'onclick' -> 'click', etc
+  const eventName = prop.slice(2);
 
   let eventNameSymbol = zoneSymbolEventNames[eventName];
   if (!eventNameSymbol) {
@@ -207,22 +206,18 @@ export function patchProperty(obj: any, prop: string, prototype?: any) {
     if (!target) {
       return;
     }
-    let previousValue = (target as any)[eventNameSymbol];
-    if (previousValue) {
+
+    const previousValue = (target as any)[eventNameSymbol];
+    if (typeof previousValue === 'function') {
       target.removeEventListener(eventName, wrapFn);
     }
 
     // issue #978, when onload handler was added before loading zone.js
     // we should remove it with originalDescSet
-    if (originalDescSet) {
-      originalDescSet.apply(target, NULL_ON_PROP_VALUE);
-    }
-
+    originalDescSet && originalDescSet.call(target, null);
+    (target as any)[eventNameSymbol] = newValue;
     if (typeof newValue === 'function') {
-      (target as any)[eventNameSymbol] = newValue;
       target.addEventListener(eventName, wrapFn, false);
-    } else {
-      (target as any)[eventNameSymbol] = null;
     }
   };
 
@@ -231,7 +226,7 @@ export function patchProperty(obj: any, prop: string, prototype?: any) {
   desc.get = function() {
     // in some of windows's onproperty callback, this is undefined
     // so we need to check it
-    let target = this;
+    let target: any = this;
     if (!target && obj === _global) {
       target = _global;
     }
@@ -248,11 +243,11 @@ export function patchProperty(obj: any, prop: string, prototype?: any) {
       // the onclick will be evaluated when first time event was triggered or
       // the property is accessed, https://github.com/angular/zone.js/issues/525
       // so we should use original native get to retrieve the handler
-      let value = originalDescGet && originalDescGet.call(this);
+      let value = originalDescGet.call(this);
       if (value) {
-        desc !.set !.call(this, value);
-        if (typeof(target as any)[REMOVE_ATTRIBUTE] === 'function') {
-          (target as any).removeAttribute(prop);
+        desc!.set!.call(this, value);
+        if (typeof target[REMOVE_ATTRIBUTE] === 'function') {
+          target.removeAttribute(prop);
         }
         return value;
       }
@@ -265,7 +260,7 @@ export function patchProperty(obj: any, prop: string, prototype?: any) {
   obj[onPropPatchedSymbol] = true;
 }
 
-export function patchOnProperties(obj: any, properties: string[] | null, prototype?: any) {
+export function patchOnProperties(obj: any, properties: string[]|null, prototype?: any) {
   if (properties) {
     for (let i = 0; i < properties.length; i++) {
       patchProperty(obj, 'on' + properties[i], prototype);
@@ -273,7 +268,7 @@ export function patchOnProperties(obj: any, properties: string[] | null, prototy
   } else {
     const onProperties = [];
     for (const prop in obj) {
-      if (prop.substr(0, 2) == 'on') {
+      if (prop.slice(0, 2) == 'on') {
         onProperties.push(prop);
       }
     }
@@ -342,7 +337,9 @@ export function patchClass(className: string) {
               this[originalInstanceKey][prop] = fn;
             }
           },
-          get: function() { return this[originalInstanceKey][prop]; }
+          get: function() {
+            return this[originalInstanceKey][prop];
+          }
         });
       }
     }(prop));
@@ -356,14 +353,16 @@ export function patchClass(className: string) {
 }
 
 export function copySymbolProperties(src: any, dest: any) {
-  if (typeof(Object as any).getOwnPropertySymbols !== 'function') {
+  if (typeof (Object as any).getOwnPropertySymbols !== 'function') {
     return;
   }
   const symbols: any = (Object as any).getOwnPropertySymbols(src);
   symbols.forEach((symbol: any) => {
     const desc = Object.getOwnPropertyDescriptor(src, symbol);
     Object.defineProperty(dest, symbol, {
-      get: function() { return src[symbol]; },
+      get: function() {
+        return src[symbol];
+      },
       set: function(value: any) {
         if (desc && (!desc.writable || typeof desc.set !== 'function')) {
           // if src[symbol] is not writable or not have a setter, just return
@@ -384,8 +383,9 @@ export function setShouldCopySymbolProperties(flag: boolean) {
 }
 
 export function patchMethod(
-    target: any, name: string, patchFn: (delegate: Function, delegateName: string, name: string) =>
-                                   (self: any, args: any[]) => any): Function|null {
+    target: any, name: string,
+    patchFn: (delegate: Function, delegateName: string, name: string) => (self: any, args: any[]) =>
+        any): Function|null {
   let proto = target;
   while (proto && !proto.hasOwnProperty(name)) {
     proto = ObjectGetPrototypeOf(proto);
@@ -397,14 +397,16 @@ export function patchMethod(
 
   const delegateName = zoneSymbol(name);
   let delegate: Function|null = null;
-  if (proto && !(delegate = proto[delegateName])) {
+  if (proto && (!(delegate = proto[delegateName]) || !proto.hasOwnProperty(delegateName))) {
     delegate = proto[delegateName] = proto[name];
     // check whether proto[name] is writable
     // some property is readonly in safari, such as HtmlCanvasElement.prototype.toBlob
     const desc = proto && ObjectGetOwnPropertyDescriptor(proto, name);
     if (isPropertyWritable(desc)) {
-      const patchDelegate = patchFn(delegate !, delegateName, name);
-      proto[name] = function() { return patchDelegate(this, arguments as any); };
+      const patchDelegate = patchFn(delegate!, delegateName, name);
+      proto[name] = function() {
+        return patchDelegate(this, arguments as any);
+      };
       attachOriginToPatched(proto[name], delegate);
       if (shouldCopySymbolProperties) {
         copySymbolProperties(delegate, proto[name]);
@@ -428,8 +430,10 @@ export function patchMacroTask(
 
   function scheduleTask(task: Task) {
     const data = <MacroTaskMeta>task.data;
-    data.args[data.cbIdx] = function() { task.invoke.apply(this, arguments); };
-    setNative !.apply(data.target, data.args);
+    data.args[data.cbIdx] = function() {
+      task.invoke.apply(this, arguments);
+    };
+    setNative!.apply(data.target, data.args);
     return task;
   }
 
@@ -457,8 +461,10 @@ export function patchMicroTask(
 
   function scheduleTask(task: Task) {
     const data = <MacroTaskMeta>task.data;
-    data.args[data.cbIdx] = function() { task.invoke.apply(this, arguments); };
-    setNative !.apply(data.target, data.args);
+    data.args[data.cbIdx] = function() {
+      task.invoke.apply(this, arguments);
+    };
+    setNative!.apply(data.target, data.args);
     return task;
   }
 

@@ -1,28 +1,31 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import {LifecycleHooksFeature, renderComponent, whenRendered} from './component';
-import {ɵɵdefineBase, ɵɵdefineComponent, ɵɵdefineDirective, ɵɵdefineNgModule, ɵɵdefinePipe, ɵɵsetComponentScope, ɵɵsetNgModuleScope} from './definition';
+import {LifecycleHooksFeature} from './component_ref';
+import {ɵɵdefineComponent, ɵɵdefineDirective, ɵɵdefineNgModule, ɵɵdefinePipe, ɵɵsetComponentScope, ɵɵsetNgModuleScope} from './definition';
+import {ɵɵCopyDefinitionFeature} from './features/copy_definition_feature';
+import {ɵɵHostDirectivesFeature} from './features/host_directives_feature';
 import {ɵɵInheritDefinitionFeature} from './features/inherit_definition_feature';
 import {ɵɵNgOnChangesFeature} from './features/ng_onchanges_feature';
 import {ɵɵProvidersFeature} from './features/providers_feature';
-import {ComponentDef, ComponentTemplate, ComponentType, DirectiveDef, DirectiveDefFlags, DirectiveType, PipeDef, ɵɵBaseDef, ɵɵComponentDefWithMeta, ɵɵDirectiveDefWithMeta, ɵɵPipeDefWithMeta} from './interfaces/definition';
-import {getComponent, getDirectives, getHostElement, getRenderedText} from './util/discovery_utils';
+import {ɵɵStandaloneFeature} from './features/standalone_feature';
+import {ComponentDef, ComponentTemplate, ComponentType, DirectiveDef, DirectiveType, PipeDef} from './interfaces/definition';
+import {ɵɵComponentDeclaration, ɵɵDirectiveDeclaration, ɵɵFactoryDeclaration, ɵɵInjectorDeclaration, ɵɵNgModuleDeclaration, ɵɵPipeDeclaration} from './interfaces/public_definitions';
+import {ComponentDebugMetadata, DirectiveDebugMetadata, getComponent, getDirectiveMetadata, getDirectives, getHostElement, getRenderedText} from './util/discovery_utils';
 
+export {NgModuleType} from '../metadata/ng_module_def';
 export {ComponentFactory, ComponentFactoryResolver, ComponentRef, injectComponentFactoryResolver} from './component_ref';
-export {ɵɵgetFactoryOf, ɵɵgetInheritedFactory} from './di';
+export {ɵɵgetInheritedFactory} from './di';
+export {getLocaleId, setLocaleId} from './i18n/i18n_locale_id';
 // clang-format off
 export {
   detectChanges,
-  markDirty,
   store,
-  tick,
-
-  ɵɵallocHostVars,
+  ɵɵadvance,
 
   ɵɵattribute,
   ɵɵattributeInterpolate1,
@@ -47,32 +50,23 @@ export {
   ɵɵclassMapInterpolateV,
 
   ɵɵclassProp,
-  ɵɵcomponentHostSyntheticListener,
-
-  ɵɵcontainer,
-  ɵɵcontainerRefreshEnd,
-  ɵɵcontainerRefreshStart,
 
   ɵɵdirectiveInject,
 
   ɵɵelement,
+
   ɵɵelementContainer,
   ɵɵelementContainerEnd,
-
   ɵɵelementContainerStart,
   ɵɵelementEnd,
-
-  ɵɵelementHostAttrs,
   ɵɵelementStart,
-  ɵɵembeddedViewEnd,
-
-  ɵɵembeddedViewStart,
 
   ɵɵgetCurrentView,
+  ɵɵhostProperty,
   ɵɵinjectAttribute,
+  ɵɵinvalidFactory,
 
   ɵɵlistener,
-  ɵɵload,
 
   ɵɵnamespaceHTML,
   ɵɵnamespaceMathML,
@@ -82,7 +76,6 @@ export {
 
   ɵɵprojection,
   ɵɵprojectionDef,
-  ɵɵhostProperty,
   ɵɵproperty,
   ɵɵpropertyInterpolate,
   ɵɵpropertyInterpolate1,
@@ -97,8 +90,16 @@ export {
 
   ɵɵreference,
 
-  ɵɵselect,
   ɵɵstyleMap,
+  ɵɵstyleMapInterpolate1,
+  ɵɵstyleMapInterpolate2,
+  ɵɵstyleMapInterpolate3,
+  ɵɵstyleMapInterpolate4,
+  ɵɵstyleMapInterpolate5,
+  ɵɵstyleMapInterpolate6,
+  ɵɵstyleMapInterpolate7,
+  ɵɵstyleMapInterpolate8,
+  ɵɵstyleMapInterpolateV,
 
   ɵɵstyleProp,
   ɵɵstylePropInterpolate1,
@@ -111,13 +112,12 @@ export {
   ɵɵstylePropInterpolate8,
   ɵɵstylePropInterpolateV,
 
-  ɵɵstyleSanitizer,
-  ɵɵstyling,
-  ɵɵstylingApply,
+  ɵɵsyntheticHostListener,
+  ɵɵsyntheticHostProperty,
+
   ɵɵtemplate,
 
   ɵɵtext,
-  ɵɵtextBinding,
   ɵɵtextInterpolate,
   ɵɵtextInterpolate1,
   ɵɵtextInterpolate2,
@@ -128,43 +128,21 @@ export {
   ɵɵtextInterpolate7,
   ɵɵtextInterpolate8,
   ɵɵtextInterpolateV,
-
-  ɵɵupdateSyntheticHostBinding,
+  ɵgetUnknownElementStrictMode,
+  ɵsetUnknownElementStrictMode,
+  ɵgetUnknownPropertyStrictMode,
+  ɵsetUnknownPropertyStrictMode
 } from './instructions/all';
+export {ɵɵi18n, ɵɵi18nApply, ɵɵi18nAttributes, ɵɵi18nEnd, ɵɵi18nExp,ɵɵi18nPostprocess, ɵɵi18nStart} from './instructions/i18n';
 export {RenderFlags} from './interfaces/definition';
-export {CssSelectorList, ProjectionSlots} from './interfaces/projection';
-
-export {
-  ɵɵrestoreView,
-
-  ɵɵenableBindings,
-  ɵɵdisableBindings,
-} from './state';
-
-export {
-  ɵɵi18n,
-  ɵɵi18nAttributes,
-  ɵɵi18nExp,
-  ɵɵi18nStart,
-  ɵɵi18nEnd,
-  ɵɵi18nApply,
-  ɵɵi18nPostprocess,
-  i18nConfigureLocalize,
-  ɵɵi18nLocalize,
-  getLocaleId,
-  setLocaleId,
-} from './i18n';
-
-export {NgModuleFactory, NgModuleRef, NgModuleType} from './ng_module_ref';
-
 export {
   AttributeMarker
 } from './interfaces/node';
-
+export {CssSelectorList, ProjectionSlots} from './interfaces/projection';
 export {
   setClassMetadata,
 } from './metadata';
-
+export {NgModuleFactory, NgModuleRef, createEnvironmentInjector} from './ng_module_ref';
 export {
   ɵɵpipe,
   ɵɵpipeBind1,
@@ -173,17 +151,6 @@ export {
   ɵɵpipeBind4,
   ɵɵpipeBindV,
 } from './pipe';
-
-export {
-  ɵɵqueryRefresh,
-  ɵɵviewQuery,
-  ɵɵstaticViewQuery,
-  ɵɵloadViewQuery,
-  ɵɵcontentQuery,
-  ɵɵloadContentQuery,
-  ɵɵstaticContentQuery
-} from './query';
-
 export {
   ɵɵpureFunction0,
   ɵɵpureFunction1,
@@ -196,42 +163,54 @@ export {
   ɵɵpureFunction8,
   ɵɵpureFunctionV,
 } from './pure_function';
+export {
+  ɵɵcontentQuery,
+  ɵɵloadQuery,
+  ɵɵqueryRefresh,
+  ɵɵviewQuery} from './query';
+export {
+  ɵɵdisableBindings,
 
-export {ɵɵtemplateRefExtractor, ɵɵinjectPipeChangeDetectorRef} from './view_engine_compatibility_prebound';
-
-export {ɵɵresolveWindow, ɵɵresolveDocument, ɵɵresolveBody} from './util/misc_utils';
-
+  ɵɵenableBindings,
+  ɵɵresetView,
+  ɵɵrestoreView,
+} from './state';
+export {NO_CHANGE} from './tokens';
+export { ɵɵresolveBody, ɵɵresolveDocument,ɵɵresolveWindow} from './util/misc_utils';
+export { ɵɵtemplateRefExtractor} from './view_engine_compatibility_prebound';
 // clang-format on
 
 export {
-  ɵɵBaseDef,
+  ComponentDebugMetadata,
   ComponentDef,
-  ɵɵComponentDefWithMeta,
   ComponentTemplate,
   ComponentType,
+  DirectiveDebugMetadata,
   DirectiveDef,
-  DirectiveDefFlags,
-  ɵɵDirectiveDefWithMeta,
   DirectiveType,
-  ɵɵNgOnChangesFeature,
-  ɵɵInheritDefinitionFeature,
-  ɵɵProvidersFeature,
-  PipeDef,
-  ɵɵPipeDefWithMeta,
+  getComponent,
+  getDirectiveMetadata,
+  getDirectives,
+  getHostElement,
+  getRenderedText,
   LifecycleHooksFeature,
+  PipeDef,
+  ɵɵComponentDeclaration,
+  ɵɵCopyDefinitionFeature,
   ɵɵdefineComponent,
   ɵɵdefineDirective,
   ɵɵdefineNgModule,
-  ɵɵdefineBase,
   ɵɵdefinePipe,
-  getHostElement,
-  getComponent,
-  getDirectives,
-  getRenderedText,
-  renderComponent,
+  ɵɵDirectiveDeclaration,
+  ɵɵFactoryDeclaration,
+  ɵɵHostDirectivesFeature,
+  ɵɵInheritDefinitionFeature,
+  ɵɵInjectorDeclaration,
+  ɵɵNgModuleDeclaration,
+  ɵɵNgOnChangesFeature,
+  ɵɵPipeDeclaration,
+  ɵɵProvidersFeature,
   ɵɵsetComponentScope,
   ɵɵsetNgModuleScope,
-  whenRendered,
+  ɵɵStandaloneFeature,
 };
-
-export {NO_CHANGE} from './tokens';

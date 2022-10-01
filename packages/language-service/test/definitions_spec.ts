@@ -1,167 +1,311 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import * as ts from 'typescript';
+import {initMockFileSystem} from '@angular/compiler-cli/src/ngtsc/file_system/testing';
 
-import {createLanguageService} from '../src/language_service';
-import {Span} from '../src/types';
-import {TypeScriptServiceHost} from '../src/typescript_host';
-
-import {toh} from './test_data';
-
-import {MockTypescriptHost,} from './test_utils';
+import {assertFileNames, assertTextSpans, createModuleAndProjectWithDeclarations, humanizeDocumentSpanLike, LanguageServiceTestEnv, OpenBuffer, Project} from '../testing';
 
 describe('definitions', () => {
-  let documentRegistry = ts.createDocumentRegistry();
-  let mockHost = new MockTypescriptHost(['/app/main.ts', '/app/parsing-cases.ts'], toh);
-  let service = ts.createLanguageService(mockHost, documentRegistry);
-  let ngHost = new TypeScriptServiceHost(mockHost, service);
-  let ngService = createLanguageService(ngHost);
+  it('gets definition for template reference in overridden template', () => {
+    initMockFileSystem('Native');
+    const files = {
+      'app.html': '',
+      'app.ts': `
+         import {Component} from '@angular/core';
+ 
+         @Component({templateUrl: '/app.html'})
+         export class AppCmp {}
+       `,
+    };
+    const env = LanguageServiceTestEnv.setup();
 
-  it('should be able to find field in an interpolation', () => {
-    localReference(
-        ` @Component({template: '{{«name»}}'}) export class MyComponent { «ᐱnameᐱ: string;» }`);
+    const project = createModuleAndProjectWithDeclarations(env, 'test', files);
+    const template = project.openFile('app.html');
+    template.contents = '<input #myInput /> {{myInput.value}}';
+    project.expectNoSourceDiagnostics();
+
+    template.moveCursorToText('{{myIn¦put.value}}');
+    const {definitions} = getDefinitionsAndAssertBoundSpan(env, template);
+    expect(definitions![0].name).toEqual('myInput');
+    assertFileNames(Array.from(definitions!), ['app.html']);
   });
 
-  it('should be able to find a field in a attribute reference', () => {
-    localReference(
-        ` @Component({template: '<input [(ngModel)]="«name»">'}) export class MyComponent { «ᐱnameᐱ: string;» }`);
+  it('returns the pipe definitions when checkTypeOfPipes is false', () => {
+    initMockFileSystem('Native');
+    const files = {
+      'app.ts': `
+         import {Component, NgModule} from '@angular/core';
+         import {CommonModule} from '@angular/common';
+ 
+         @Component({templateUrl: 'app.html'})
+         export class AppCmp {}
+       `,
+      'app.html': '{{"1/1/2020" | date}}'
+    };
+    // checkTypeOfPipes is set to false when strict templates is false
+    const env = LanguageServiceTestEnv.setup();
+    const project =
+        createModuleAndProjectWithDeclarations(env, 'test', files, {strictTemplates: false});
+    const template = project.openFile('app.html');
+    project.expectNoSourceDiagnostics();
+    template.moveCursorToText('da¦te');
+
+    const {textSpan, definitions} = getDefinitionsAndAssertBoundSpan(env, template);
+    expect(template.contents.slice(textSpan.start, textSpan.start + textSpan.length))
+        .toEqual('date');
+    expect(definitions.length).toEqual(3);
+    assertTextSpans(definitions, ['transform']);
+    assertFileNames(definitions, ['index.d.ts']);
   });
 
-  it('should be able to find a method from a call', () => {
-    localReference(
-        ` @Component({template: '<div (click)="«myClick»();"></div>'}) export class MyComponent { «ᐱmyClickᐱ() { }»}`);
+  it('gets definitions for all inputs when attribute matches more than one', () => {
+    initMockFileSystem('Native');
+    const files = {
+      'app.ts': `
+         import {Component, NgModule} from '@angular/core';
+         import {CommonModule} from '@angular/common';
+ 
+         @Component({templateUrl: 'app.html'})
+         export class AppCmp {}
+       `,
+      'app.html': '<div dir inputA="abc"></div>',
+      'dir.ts': `
+       import {Directive, Input} from '@angular/core';
+ 
+       @Directive({selector: '[dir]'})
+       export class MyDir {
+         @Input() inputA!: any;
+       }`,
+      'dir2.ts': `
+       import {Directive, Input} from '@angular/core';
+ 
+       @Directive({selector: '[dir]'})
+       export class MyDir2 {
+         @Input() inputA!: any;
+       }`
+
+    };
+    const env = LanguageServiceTestEnv.setup();
+    const project = createModuleAndProjectWithDeclarations(env, 'test', files);
+    const template = project.openFile('app.html');
+    template.moveCursorToText('inpu¦tA="abc"');
+
+    const {textSpan, definitions} = getDefinitionsAndAssertBoundSpan(env, template);
+    expect(template.contents.slice(textSpan.start, textSpan.start + textSpan.length))
+        .toEqual('inputA');
+
+    expect(definitions!.length).toEqual(2);
+    const [def, def2] = definitions!;
+    expect(def.textSpan).toContain('inputA');
+    expect(def2.textSpan).toContain('inputA');
+    // TODO(atscott): investigate why the text span includes more than just 'inputA'
+    // assertTextSpans([def, def2], ['inputA']);
+    assertFileNames([def, def2], ['dir2.ts', 'dir.ts']);
   });
 
-  it('should be able to find a field reference in an *ngIf', () => {
-    localReference(
-        ` @Component({template: '<div *ngIf="«include»"></div>'}) export class MyComponent { «ᐱincludeᐱ = true;»}`);
+  it('gets definitions for all outputs when attribute matches more than one', () => {
+    initMockFileSystem('Native');
+    const files = {
+      'app.html': '<div dir (someEvent)="doSomething()"></div>',
+      'dir.ts': `
+       import {Directive, Output, EventEmitter} from '@angular/core';
+ 
+       @Directive({selector: '[dir]'})
+       export class MyDir {
+         @Output() someEvent = new EventEmitter<void>();
+       }`,
+      'dir2.ts': `
+       import {Directive, Output, EventEmitter} from '@angular/core';
+ 
+       @Directive({selector: '[dir]'})
+       export class MyDir2 {
+         @Output() someEvent = new EventEmitter<void>();
+       }`,
+      'app.ts': `
+         import {Component, NgModule} from '@angular/core';
+         import {CommonModule} from '@angular/common';
+ 
+         @Component({templateUrl: 'app.html'})
+         export class AppCmp {
+           doSomething() {}
+         }
+       `
+    };
+    const env = LanguageServiceTestEnv.setup();
+    const project = createModuleAndProjectWithDeclarations(env, 'test', files);
+    const template = project.openFile('app.html');
+    template.moveCursorToText('(someEv¦ent)');
+
+    const {textSpan, definitions} = getDefinitionsAndAssertBoundSpan(env, template);
+    expect(template.contents.slice(textSpan.start, textSpan.start + textSpan.length))
+        .toEqual('someEvent');
+
+    expect(definitions.length).toEqual(2);
+    const [def, def2] = definitions;
+    expect(def.textSpan).toContain('someEvent');
+    expect(def2.textSpan).toContain('someEvent');
+    // TODO(atscott): investigate why the text span includes more than just 'someEvent'
+    // assertTextSpans([def, def2], ['someEvent']);
+    assertFileNames([def, def2], ['dir2.ts', 'dir.ts']);
   });
 
-  it('should be able to find a reference to a component', () => {
-    reference(
-        'parsing-cases.ts',
-        ` @Component({template: '<«test-comp»></test-comp>'}) export class MyComponent { }`);
+  it('should go to the pre-compiled style sheet', () => {
+    initMockFileSystem('Native');
+    const files = {
+      'app.ts': `
+       import {Component} from '@angular/core';
+ 
+       @Component({
+         template: '',
+         styleUrls: ['./style.css'],
+       })
+       export class AppCmp {}
+       `,
+      'style.scss': '',
+    };
+    const env = LanguageServiceTestEnv.setup();
+    const project = createModuleAndProjectWithDeclarations(env, 'test', files);
+    const appFile = project.openFile('app.ts');
+    appFile.moveCursorToText(`['./styl¦e.css']`);
+    const {textSpan, definitions} = getDefinitionsAndAssertBoundSpan(env, appFile);
+    expect(appFile.contents.slice(textSpan.start, textSpan.start + textSpan.length))
+        .toEqual('./style.css');
+
+    expect(definitions.length).toEqual(1);
+    assertFileNames(definitions, ['style.scss']);
   });
 
-  it('should be able to find an event provider', () => {
-    reference(
-        '/app/parsing-cases.ts', 'test',
-        ` @Component({template: '<test-comp («test»)="myHandler()"></div>'}) export class MyComponent { myHandler() {} }`);
+  it('gets definition for property of variable declared in template', () => {
+    initMockFileSystem('Native');
+    const files = {
+      'app.html': `
+         <ng-container *ngIf="{prop: myVal} as myVar">
+           {{myVar.prop.name}}
+         </ng-container>
+       `,
+      'app.ts': `
+         import {Component} from '@angular/core';
+ 
+         @Component({templateUrl: '/app.html'})
+         export class AppCmp {
+           myVal = {name: 'Andrew'};
+         }
+       `,
+    };
+    const env = LanguageServiceTestEnv.setup();
+
+    const project = createModuleAndProjectWithDeclarations(env, 'test', files);
+    const template = project.openFile('app.html');
+    project.expectNoSourceDiagnostics();
+
+    template.moveCursorToText('{{myVar.pro¦p.name}}');
+    const {definitions} = getDefinitionsAndAssertBoundSpan(env, template);
+    expect(definitions![0].name).toEqual('"prop"');
+    assertFileNames(Array.from(definitions!), ['app.html']);
   });
 
-  it('should be able to find an input provider', () => {
-    reference(
-        '/app/parsing-cases.ts', 'tcName',
-        ` @Component({template: '<test-comp [«tcName»]="name"></div>'}) export class MyComponent { name = 'my name'; }`);
-  });
-
-  it('should be able to find a pipe', () => {
-    reference(
-        'common.d.ts',
-        ` @Component({template: '<div *ngIf="input | «async»"></div>'}) export class MyComponent { input: EventEmitter; }`);
-  });
-
-  function localReference(code: string) {
-    addCode(code, fileName => {
-      const refResult = mockHost.getReferenceMarkers(fileName) !;
-      for (const name in refResult.references) {
-        const references = refResult.references[name];
-        const definitions = refResult.definitions[name];
-        expect(definitions).toBeDefined();  // If this fails the test data is wrong.
-        for (const reference of references) {
-          const definition = ngService.getDefinitionAt(fileName, reference.start);
-          if (definition) {
-            definition.forEach(d => expect(d.fileName).toEqual(fileName));
-            const match = matchingSpan(definition.map(d => d.span), definitions);
-            if (!match) {
-              throw new Error(
-                  `Expected one of ${stringifySpans(definition.map(d => d.span))} to match one of ${stringifySpans(definitions)}`);
-            }
-          } else {
-            throw new Error('Expected a definition');
-          }
-        }
-      }
-    });
-  }
-
-  function reference(referencedFile: string, code: string): void;
-  function reference(referencedFile: string, span: Span, code: string): void;
-  function reference(referencedFile: string, definition: string, code: string): void;
-  function reference(referencedFile: string, p1?: any, p2?: any): void {
-    const code: string = p2 ? p2 : p1;
-    const definition: string = p2 ? p1 : undefined;
-    let span: Span = p2 && p1.start != null ? p1 : undefined;
-    if (definition && !span) {
-      const referencedFileMarkers = mockHost.getReferenceMarkers(referencedFile) !;
-      expect(referencedFileMarkers).toBeDefined();  // If this fails the test data is wrong.
-      const spans = referencedFileMarkers.definitions[definition];
-      expect(spans).toBeDefined();  // If this fails the test data is wrong.
-      span = spans[0];
-    }
-    addCode(code, fileName => {
-      const refResult = mockHost.getReferenceMarkers(fileName) !;
-      let tests = 0;
-      for (const name in refResult.references) {
-        const references = refResult.references[name];
-        expect(reference).toBeDefined();  // If this fails the test data is wrong.
-        for (const reference of references) {
-          tests++;
-          const definition = ngService.getDefinitionAt(fileName, reference.start);
-          if (definition) {
-            definition.forEach(d => {
-              if (d.fileName.indexOf(referencedFile) < 0) {
-                throw new Error(
-                    `Expected reference to file ${referencedFile}, received ${d.fileName}`);
-              }
-              if (span) {
-                expect(d.span).toEqual(span);
-              }
-            });
-          } else {
-            throw new Error('Expected a definition');
-          }
-        }
-      }
-      if (!tests) {
-        throw new Error('Expected at least one reference (test data error)');
-      }
-    });
-  }
-
-  function addCode(code: string, cb: (fileName: string, content?: string) => void) {
-    const fileName = '/app/app.component.ts';
-    const originalContent = mockHost.getFileContent(fileName);
-    const newContent = originalContent + code;
-    mockHost.override(fileName, originalContent + code);
-    try {
-      cb(fileName, newContent);
-    } finally {
-      mockHost.override(fileName, undefined !);
-    }
+  function getDefinitionsAndAssertBoundSpan(env: LanguageServiceTestEnv, file: OpenBuffer) {
+    env.expectNoSourceDiagnostics();
+    const definitionAndBoundSpan = file.getDefinitionAndBoundSpan();
+    const {textSpan, definitions} = definitionAndBoundSpan!;
+    expect(definitions).toBeTruthy();
+    return {textSpan, definitions: definitions!.map(d => humanizeDocumentSpanLike(d, env))};
   }
 });
 
-function matchingSpan(aSpans: Span[], bSpans: Span[]): Span|undefined {
-  for (const a of aSpans) {
-    for (const b of bSpans) {
-      if (a.start == b.start && a.end == b.end) {
-        return a;
-      }
-    }
+describe('definitions', () => {
+  let env: LanguageServiceTestEnv;
+
+  describe('when an input has a dollar sign', () => {
+    const files = {
+      'app.ts': `
+	 import {Component, NgModule, Input} from '@angular/core';
+
+	 @Component({selector: 'dollar-cmp', template: ''})
+	 export class DollarCmp {
+	   @Input() obs$!: string;
+	 }
+ 
+	 @Component({template: '<dollar-cmp [obs$]="greeting"></dollar-cmp>'})
+	 export class AppCmp {
+	   greeting = 'hello';
+	 }
+ 
+	 @NgModule({declarations: [AppCmp, DollarCmp]})
+	 export class AppModule {}
+       `,
+    };
+
+    beforeEach(() => {
+      initMockFileSystem('Native');
+      env = LanguageServiceTestEnv.setup();
+    });
+
+    it('can get definitions for input', () => {
+      const project = env.addProject('test', files, {strictTemplates: false});
+      const definitions = getDefinitionsAndAssertBoundSpan(project, 'app.ts', '[o¦bs$]="greeting"');
+      expect(definitions!.length).toEqual(1);
+
+      assertTextSpans(definitions, ['obs$']);
+      assertFileNames(definitions, ['app.ts']);
+    });
+
+    it('can get definitions for component', () => {
+      const project = env.addProject('test', files, {strictTemplates: false});
+      const definitions = getDefinitionsAndAssertBoundSpan(project, 'app.ts', '<dollar-cm¦p');
+      expect(definitions!.length).toEqual(1);
+
+      assertTextSpans(definitions, ['DollarCmp']);
+      assertFileNames(definitions, ['app.ts']);
+    });
+  });
+
+  describe('when a selector and input of a directive have a dollar sign', () => {
+    it('can get definitions', () => {
+      initMockFileSystem('Native');
+      env = LanguageServiceTestEnv.setup();
+      const files = {
+        'app.ts': `
+	 import {Component, Directive, NgModule, Input} from '@angular/core';
+
+	 @Directive({selector: '[dollar\\\\$]', template: ''})
+	 export class DollarDir {
+	   @Input() dollar$!: string;
+	 }
+ 
+	 @Component({template: '<div [dollar$]="greeting"></div>'})
+	 export class AppCmp {
+	   greeting = 'hello';
+	 }
+ 
+	 @NgModule({declarations: [AppCmp, DollarDir]})
+	 export class AppModule {}
+       `,
+      };
+      const project = env.addProject('test', files, {strictTemplates: false});
+      const definitions =
+          getDefinitionsAndAssertBoundSpan(project, 'app.ts', '[dollar¦$]="greeting"');
+      expect(definitions!.length).toEqual(2);
+
+      assertTextSpans(definitions, ['dollar$', 'DollarDir']);
+      assertFileNames(definitions, ['app.ts']);
+    });
+  });
+
+  function getDefinitionsAndAssertBoundSpan(project: Project, file: string, targetText: string) {
+    const template = project.openFile(file);
+    env.expectNoSourceDiagnostics();
+    project.expectNoTemplateDiagnostics('app.ts', 'AppCmp');
+
+    template.moveCursorToText(targetText);
+    const defAndBoundSpan = template.getDefinitionAndBoundSpan();
+    expect(defAndBoundSpan).toBeTruthy();
+    expect(defAndBoundSpan!.definitions).toBeTruthy();
+    return defAndBoundSpan!.definitions!.map(d => humanizeDocumentSpanLike(d, env));
   }
-}
-
-function stringifySpan(span: Span) {
-  return span ? `(${span.start}-${span.end})` : '<undefined>';
-}
-
-function stringifySpans(spans: Span[]) {
-  return spans ? `[${spans.map(stringifySpan).join(', ')}]` : '<empty>';
-}
+});

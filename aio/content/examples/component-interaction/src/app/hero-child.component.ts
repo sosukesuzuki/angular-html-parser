@@ -11,7 +11,7 @@ import { Hero } from './hero';
   `
 })
 export class HeroChildComponent {
-  @Input() hero: Hero;
-  @Input('master') masterName: string;
+  @Input() hero!: Hero;
+  @Input('master') masterName = ''; // eslint-disable-line @angular-eslint/no-input-rename
 }
 // #enddocregion

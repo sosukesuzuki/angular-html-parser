@@ -4,53 +4,51 @@
   "description": "Angular - bazel build rules",
   "author": "angular",
   "license": "MIT",
+  "engines": {
+    "node": "^14.15.0 || >=16.10.0"
+  },
   "bin": {
-    "api-extractor": "./src/api-extractor/index.js",
     "ngc-wrapped": "./src/ngc-wrapped/index.js",
     "packager": "./src/ng_package/packager.js",
-    "xi18n": "./src/ngc-wrapped/extract_i18n.js",
-    "modify_tsconfig": "./src/modify_tsconfig.js"
+    "types_bundler": "./src/types_bundle/index.js",
+    "xi18n": "./src/ngc-wrapped/extract_i18n.js"
   },
   "typings": "./src/ngc-wrapped/index.d.ts",
   "bazelBin": {
     "ngc-wrapped": {
       "additionalAttributes": {
-        "configuration_env_vars": "[\"compile\"]"
+        "templated_args": "[\"--nobazel_run_linker\"]"
       }
     }
   },
-  "bazelWorkspaces": {
-    "npm_angular_bazel": {
-      "version": "0.0.0-PLACEHOLDER",
-      "rootPath": "."
-    }
-  },
   "dependencies": {
-    "@angular-devkit/architect": "^0.800.0-beta.15",
-    "@angular-devkit/core": "^8.0.0-beta.15",
-    "@angular-devkit/schematics": "^8.0.0-beta.15",
-    "@microsoft/api-extractor": "7.0.21",
-    "@schematics/angular": "^8.0.0-beta.15",
-    "@types/node": "6.0.84",
-    "semver": "^5.6.0",
-    "shelljs": "0.8.2",
-    "tsickle": "^0.35.0"
+    "@microsoft/api-extractor": "^7.24.2",
+    "shelljs": "^0.8.5",
+    "tsickle": "^0.46.3",
+    "tslib": "^2.3.0"
   },
   "peerDependencies": {
     "@angular/compiler-cli": "0.0.0-PLACEHOLDER",
-    "@bazel/typescript": "0.*",
-    "typescript": ">=3.4 <3.6"
+    "@bazel/concatjs": "^5.3.0",
+    "@bazel/worker": "^5.3.0",
+    "@rollup/plugin-commonjs": "^22.0.0",
+    "@rollup/plugin-node-resolve": "^13.0.4",
+    "rollup": "^2.56.3",
+    "rollup-plugin-sourcemaps": "^0.6.3",
+    "terser": "^5.9.0",
+    "typescript": ">=4.6.2 <4.9"
+  },
+  "peerDependenciesMeta": {
+    "terser": {
+      "optional": true
+    }
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/angular/angular.git"
+    "url": "https://github.com/angular/angular.git",
+    "directory": "packages/bazel"
   },
-  "builders": "./src/builders/builders.json",
-  "schematics": "./src/schematics/collection.json",
   "ng-update": {
     "packageGroup": "NG_UPDATE_PACKAGE_GROUP"
-  },
-  "publishConfig":{
-    "registry":"https://wombat-dressing-room.appspot.com"
   }
 }

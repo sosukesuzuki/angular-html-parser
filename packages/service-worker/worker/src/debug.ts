@@ -1,14 +1,15 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
 import {Adapter} from './adapter';
-import {DebugLogger, Debuggable} from './api';
+import {Debuggable, DebugLogger} from './api';
 
+const SW_VERSION = '0.0.0-PLACEHOLDER';
 const DEBUG_LOG_BUFFER_SIZE = 100;
 
 interface DebugMessage {
@@ -37,6 +38,7 @@ export class DebugHandler implements DebugLogger {
 
     const msgState = `NGSW Debug Info:
 
+Driver version: ${SW_VERSION}
 Driver state: ${state.state} (${state.why})
 Latest manifest hash: ${state.latestHash || 'none'}
 Last update check: ${this.since(state.lastUpdateCheck)}`;
@@ -102,7 +104,9 @@ ${msgIdle}`,
     this.debugLogA.push({value, time: this.adapter.time, context});
   }
 
-  private errorToString(err: Error): string { return `${err.name}(${err.message}, ${err.stack})`; }
+  private errorToString(err: Error): string {
+    return `${err.name}(${err.message}, ${err.stack})`;
+  }
 
   private formatDebugLog(log: DebugMessage[]): string {
     return log.map(entry => `[${this.since(entry.time)}] ${entry.value} ${entry.context}`)

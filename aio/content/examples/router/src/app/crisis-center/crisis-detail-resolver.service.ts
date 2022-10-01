@@ -1,15 +1,14 @@
-
 // #docregion
-import { Injectable }             from '@angular/core';
+import { Injectable } from '@angular/core';
 import {
   Router, Resolve,
   RouterStateSnapshot,
   ActivatedRouteSnapshot
-}                                 from '@angular/router';
-import { Observable, of, EMPTY }  from 'rxjs';
-import { mergeMap, take }         from 'rxjs/operators';
+} from '@angular/router';
+import { Observable, of, EMPTY } from 'rxjs';
+import { mergeMap } from 'rxjs/operators';
 
-import { CrisisService }  from './crisis.service';
+import { CrisisService } from './crisis.service';
 import { Crisis } from './crisis';
 
 @Injectable({
@@ -19,10 +18,9 @@ export class CrisisDetailResolverService implements Resolve<Crisis> {
   constructor(private cs: CrisisService, private router: Router) {}
 
   resolve(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): Observable<Crisis> | Observable<never> {
-    let id = route.paramMap.get('id');
+    const id = route.paramMap.get('id')!;
 
     return this.cs.getCrisis(id).pipe(
-      take(1),
       mergeMap(crisis => {
         if (crisis) {
           return of(crisis);

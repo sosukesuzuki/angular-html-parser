@@ -18,7 +18,7 @@ ts_library(
         "//packages/compiler",
         "//packages/compiler-cli",
         "//packages/compiler-cli/src/ngtsc/file_system",
-        "//packages/compiler-cli/test/helpers",
+        "//packages/compiler-cli/src/ngtsc/testing",
         "@npm//typescript",
     ],
 )
@@ -40,91 +40,37 @@ ts_library(
 
 jasmine_node_test(
     name = "extract_i18n",
-    bootstrap = ["angular/tools/testing/init_node_spec.js"],
+    bootstrap = ["//tools/testing:node_es2015"],
     data = [
         "//packages/core:npm_package",
-    ],
-    tags = [
-        # Disabled as the tests pertain to the old extraction tool only, whereas the Ivy extraction
-        # tool will likely work differently.
-        "no-ivy-aot",
     ],
     deps = [
         ":extract_i18n_lib",
         "//packages/common:npm_package",
         "//packages/core",
-        "//tools/testing:node",
-        "@npm//minimist",
+        "@npm//yargs",
     ],
 )
 
-# ngc_spec
 ts_library(
-    name = "ngc_lib",
+    name = "downlevel_decorator_transform_lib",
     testonly = True,
     srcs = [
-        "ngc_spec.ts",
+        "downlevel_decorators_transform_spec.ts",
     ],
     deps = [
         ":test_utils",
-        "//packages/compiler",
-        "//packages/compiler-cli",
+        "//packages/compiler-cli/src/ngtsc/reflection",
+        "//packages/compiler-cli/src/transformers/downlevel_decorators_transform",
         "@npm//typescript",
     ],
 )
 
 jasmine_node_test(
-    name = "ngc",
-    timeout = "long",  # 900 seconds
-    bootstrap = ["angular/tools/testing/init_node_spec.js"],
-    data = [
-        "//packages/common:npm_package",
-        "//packages/core:npm_package",
-        "//packages/platform-browser:npm_package",
-        "//packages/router:npm_package",
-    ],
-    tags = [
-        # Disabled as these tests are specific to the old ngc compiler, and not ngtsc which has its
-        # own tests under //packages/compiler-cli/test/ngtsc.
-        "no-ivy-aot",
-    ],
+    name = "downlevel_decorator_transform",
+    bootstrap = ["//tools/testing:node_es2015"],
     deps = [
-        ":ngc_lib",
-        "//packages/core",
-        "//tools/testing:node",
-        "@npm//minimist",
-        "@npm//rxjs",
-        "@npm//tsickle",
-    ],
-)
-
-# ngctools_api_spec
-ts_library(
-    name = "ngtools_api_lib",
-    testonly = True,
-    srcs = [
-        "ngtools_api_spec.ts",
-    ],
-    deps = [
-        ":test_utils",
-        "//packages/compiler",
-        "//packages/compiler-cli",
-        "//packages/private/testing",
-        "@npm//typescript",
-    ],
-)
-
-jasmine_node_test(
-    name = "ngtools_api",
-    bootstrap = ["angular/tools/testing/init_node_spec.js"],
-    data = [
-        "//packages/core:npm_package",
-        "//packages/router:npm_package",
-    ],
-    deps = [
-        ":ngtools_api_lib",
-        "//packages/core",
-        "//tools/testing:node",
+        ":downlevel_decorator_transform_lib",
     ],
 )
 
@@ -139,20 +85,20 @@ ts_library(
         ":test_utils",
         "//packages/compiler",
         "//packages/compiler-cli",
+        "//packages/private/testing",
         "@npm//typescript",
     ],
 )
 
 jasmine_node_test(
     name = "perform_watch",
-    bootstrap = ["angular/tools/testing/init_node_spec.js"],
+    bootstrap = ["//tools/testing:node_es2015"],
     data = [
         "//packages/core:npm_package",
     ],
     deps = [
         ":perform_watch_lib",
         "//packages/core",
-        "//tools/testing:node",
     ],
 )
 
@@ -167,18 +113,55 @@ ts_library(
         ":test_utils",
         "//packages/compiler",
         "//packages/compiler-cli",
+        "@npm//typescript",
     ],
 )
 
 jasmine_node_test(
     name = "perform_compile",
-    bootstrap = ["angular/tools/testing/init_node_spec.js"],
+    bootstrap = ["//tools/testing:node_es2015"],
     data = [
         "//packages/core:npm_package",
     ],
     deps = [
         ":perform_compile_lib",
         "//packages/core",
-        "//tools/testing:node",
+    ],
+)
+
+ts_library(
+    name = "typescript_support_lib",
+    testonly = True,
+    srcs = [
+        "typescript_support_spec.ts",
+    ],
+    deps = [
+        "//packages/compiler-cli",
+    ],
+)
+
+jasmine_node_test(
+    name = "typescript_support",
+    bootstrap = ["//tools/testing:node_es2015"],
+    deps = [
+        ":typescript_support_lib",
+    ],
+)
+
+# version_helpers_spec
+ts_library(
+    name = "version_helpers_lib",
+    testonly = True,
+    srcs = ["version_helpers_spec.ts"],
+    deps = [
+        "//packages/compiler-cli",
+    ],
+)
+
+jasmine_node_test(
+    name = "version_helpers",
+    bootstrap = ["//tools/testing:node_es2015"],
+    deps = [
+        ":version_helpers_lib",
     ],
 )

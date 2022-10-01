@@ -1,66 +1,141 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {PRIMARY_OUTLET, ParamMap, Params, convertToParamMap} from './shared';
-import {forEach, shallowEqual} from './utils/collection';
+import {Injectable, ɵRuntimeError as RuntimeError} from '@angular/core';
 
-export function createEmptyUrlTree() {
-  return new UrlTree(new UrlSegmentGroup([], {}), {}, null);
+import {RuntimeErrorCode} from './errors';
+import {convertToParamMap, ParamMap, Params, PRIMARY_OUTLET} from './shared';
+import {equalArraysOrString, forEach, shallowEqual} from './utils/collection';
+
+const NG_DEV_MODE = typeof ngDevMode === 'undefined' || ngDevMode;
+
+/**
+ * A set of options which specify how to determine if a `UrlTree` is active, given the `UrlTree`
+ * for the current router state.
+ *
+ * @publicApi
+ * @see Router.isActive
+ */
+export interface IsActiveMatchOptions {
+  /**
+   * Defines the strategy for comparing the matrix parameters of two `UrlTree`s.
+   *
+   * The matrix parameter matching is dependent on the strategy for matching the
+   * segments. That is, if the `paths` option is set to `'subset'`, only
+   * the matrix parameters of the matching segments will be compared.
+   *
+   * - `'exact'`: Requires that matching segments also have exact matrix parameter
+   * matches.
+   * - `'subset'`: The matching segments in the router's active `UrlTree` may contain
+   * extra matrix parameters, but those that exist in the `UrlTree` in question must match.
+   * - `'ignored'`: When comparing `UrlTree`s, matrix params will be ignored.
+   */
+  matrixParams: 'exact'|'subset'|'ignored';
+  /**
+   * Defines the strategy for comparing the query parameters of two `UrlTree`s.
+   *
+   * - `'exact'`: the query parameters must match exactly.
+   * - `'subset'`: the active `UrlTree` may contain extra parameters,
+   * but must match the key and value of any that exist in the `UrlTree` in question.
+   * - `'ignored'`: When comparing `UrlTree`s, query params will be ignored.
+   */
+  queryParams: 'exact'|'subset'|'ignored';
+  /**
+   * Defines the strategy for comparing the `UrlSegment`s of the `UrlTree`s.
+   *
+   * - `'exact'`: all segments in each `UrlTree` must match.
+   * - `'subset'`: a `UrlTree` will be determined to be active if it
+   * is a subtree of the active route. That is, the active route may contain extra
+   * segments, but must at least have all the segments of the `UrlTree` in question.
+   */
+  paths: 'exact'|'subset';
+  /**
+   * - `'exact'`: indicates that the `UrlTree` fragments must be equal.
+   * - `'ignored'`: the fragments will not be compared when determining if a
+   * `UrlTree` is active.
+   */
+  fragment: 'exact'|'ignored';
 }
 
-export function containsTree(container: UrlTree, containee: UrlTree, exact: boolean): boolean {
-  if (exact) {
-    return equalQueryParams(container.queryParams, containee.queryParams) &&
-        equalSegmentGroups(container.root, containee.root);
-  }
+type ParamMatchOptions = 'exact'|'subset'|'ignored';
 
-  return containsQueryParams(container.queryParams, containee.queryParams) &&
-      containsSegmentGroup(container.root, containee.root);
+type PathCompareFn =
+    (container: UrlSegmentGroup, containee: UrlSegmentGroup, matrixParams: ParamMatchOptions) =>
+        boolean;
+type ParamCompareFn = (container: Params, containee: Params) => boolean;
+
+const pathCompareMap: Record<IsActiveMatchOptions['paths'], PathCompareFn> = {
+  'exact': equalSegmentGroups,
+  'subset': containsSegmentGroup,
+};
+const paramCompareMap: Record<ParamMatchOptions, ParamCompareFn> = {
+  'exact': equalParams,
+  'subset': containsParams,
+  'ignored': () => true,
+};
+
+export function containsTree(
+    container: UrlTree, containee: UrlTree, options: IsActiveMatchOptions): boolean {
+  return pathCompareMap[options.paths](container.root, containee.root, options.matrixParams) &&
+      paramCompareMap[options.queryParams](container.queryParams, containee.queryParams) &&
+      !(options.fragment === 'exact' && container.fragment !== containee.fragment);
 }
 
-function equalQueryParams(container: Params, containee: Params): boolean {
+function equalParams(container: Params, containee: Params): boolean {
   // TODO: This does not handle array params correctly.
   return shallowEqual(container, containee);
 }
 
-function equalSegmentGroups(container: UrlSegmentGroup, containee: UrlSegmentGroup): boolean {
+function equalSegmentGroups(
+    container: UrlSegmentGroup, containee: UrlSegmentGroup,
+    matrixParams: ParamMatchOptions): boolean {
   if (!equalPath(container.segments, containee.segments)) return false;
+  if (!matrixParamsMatch(container.segments, containee.segments, matrixParams)) {
+    return false;
+  }
   if (container.numberOfChildren !== containee.numberOfChildren) return false;
   for (const c in containee.children) {
     if (!container.children[c]) return false;
-    if (!equalSegmentGroups(container.children[c], containee.children[c])) return false;
+    if (!equalSegmentGroups(container.children[c], containee.children[c], matrixParams))
+      return false;
   }
   return true;
 }
 
-function containsQueryParams(container: Params, containee: Params): boolean {
-  // TODO: This does not handle array params correctly.
+function containsParams(container: Params, containee: Params): boolean {
   return Object.keys(containee).length <= Object.keys(container).length &&
-      Object.keys(containee).every(key => containee[key] === container[key]);
+      Object.keys(containee).every(key => equalArraysOrString(container[key], containee[key]));
 }
 
-function containsSegmentGroup(container: UrlSegmentGroup, containee: UrlSegmentGroup): boolean {
-  return containsSegmentGroupHelper(container, containee, containee.segments);
+function containsSegmentGroup(
+    container: UrlSegmentGroup, containee: UrlSegmentGroup,
+    matrixParams: ParamMatchOptions): boolean {
+  return containsSegmentGroupHelper(container, containee, containee.segments, matrixParams);
 }
 
 function containsSegmentGroupHelper(
-    container: UrlSegmentGroup, containee: UrlSegmentGroup, containeePaths: UrlSegment[]): boolean {
+    container: UrlSegmentGroup, containee: UrlSegmentGroup, containeePaths: UrlSegment[],
+    matrixParams: ParamMatchOptions): boolean {
   if (container.segments.length > containeePaths.length) {
     const current = container.segments.slice(0, containeePaths.length);
     if (!equalPath(current, containeePaths)) return false;
     if (containee.hasChildren()) return false;
+    if (!matrixParamsMatch(current, containeePaths, matrixParams)) return false;
     return true;
 
   } else if (container.segments.length === containeePaths.length) {
     if (!equalPath(container.segments, containeePaths)) return false;
+    if (!matrixParamsMatch(container.segments, containeePaths, matrixParams)) return false;
     for (const c in containee.children) {
       if (!container.children[c]) return false;
-      if (!containsSegmentGroup(container.children[c], containee.children[c])) return false;
+      if (!containsSegmentGroup(container.children[c], containee.children[c], matrixParams)) {
+        return false;
+      }
     }
     return true;
 
@@ -68,9 +143,18 @@ function containsSegmentGroupHelper(
     const current = containeePaths.slice(0, container.segments.length);
     const next = containeePaths.slice(container.segments.length);
     if (!equalPath(container.segments, current)) return false;
+    if (!matrixParamsMatch(container.segments, current, matrixParams)) return false;
     if (!container.children[PRIMARY_OUTLET]) return false;
-    return containsSegmentGroupHelper(container.children[PRIMARY_OUTLET], containee, next);
+    return containsSegmentGroupHelper(
+        container.children[PRIMARY_OUTLET], containee, next, matrixParams);
   }
+}
+
+function matrixParamsMatch(
+    containerPaths: UrlSegment[], containeePaths: UrlSegment[], options: ParamMatchOptions) {
+  return containeePaths.every((containeeSegment, i) => {
+    return paramCompareMap[options](containerPaths[i].parameters, containeeSegment.parameters);
+  });
 }
 
 /**
@@ -106,16 +190,24 @@ function containsSegmentGroupHelper(
 export class UrlTree {
   /** @internal */
   // TODO(issue/24571): remove '!'.
-  _queryParamMap !: ParamMap;
+  _queryParamMap!: ParamMap;
 
-  /** @internal */
   constructor(
       /** The root segment group of the URL tree */
-      public root: UrlSegmentGroup,
+      public root: UrlSegmentGroup = new UrlSegmentGroup([], {}),
       /** The query params of the URL */
-      public queryParams: Params,
+      public queryParams: Params = {},
       /** The fragment of the URL */
-      public fragment: string|null) {}
+      public fragment: string|null = null) {
+    if (NG_DEV_MODE) {
+      if (root.segments.length > 0) {
+        throw new RuntimeError(
+            RuntimeErrorCode.INVALID_ROOT_URL_SEGMENT,
+            'The root `UrlSegmentGroup` should not contain `segments`. ' +
+                'Instead, these segments belong in the `children` so they can be associated with a named outlet.');
+      }
+    }
+  }
 
   get queryParamMap(): ParamMap {
     if (!this._queryParamMap) {
@@ -125,7 +217,9 @@ export class UrlTree {
   }
 
   /** @docsNotRequired */
-  toString(): string { return DEFAULT_SERIALIZER.serialize(this); }
+  toString(): string {
+    return DEFAULT_SERIALIZER.serialize(this);
+  }
 }
 
 /**
@@ -139,11 +233,16 @@ export class UrlTree {
  */
 export class UrlSegmentGroup {
   /** @internal */
-  // TODO(issue/24571): remove '!'.
-  _sourceSegment !: UrlSegmentGroup;
+  _sourceSegment?: UrlSegmentGroup;
   /** @internal */
-  // TODO(issue/24571): remove '!'.
-  _segmentIndexShift !: number;
+  _segmentIndexShift?: number;
+  /**
+   * @internal
+   *
+   * Used only in dev mode to detect if application relies on `relativeLinkResolution: 'legacy'`
+   * Should be removed in when `relativeLinkResolution` is removed.
+   */
+  _segmentIndexShiftCorrected?: number;
   /** The parent node in the url tree */
   parent: UrlSegmentGroup|null = null;
 
@@ -156,13 +255,19 @@ export class UrlSegmentGroup {
   }
 
   /** Whether the segment has child segments */
-  hasChildren(): boolean { return this.numberOfChildren > 0; }
+  hasChildren(): boolean {
+    return this.numberOfChildren > 0;
+  }
 
   /** Number of child segments */
-  get numberOfChildren(): number { return Object.keys(this.children).length; }
+  get numberOfChildren(): number {
+    return Object.keys(this.children).length;
+  }
 
   /** @docsNotRequired */
-  toString(): string { return serializePaths(this); }
+  toString(): string {
+    return serializePaths(this);
+  }
 }
 
 
@@ -195,7 +300,7 @@ export class UrlSegmentGroup {
 export class UrlSegment {
   /** @internal */
   // TODO(issue/24571): remove '!'.
-  _parameterMap !: ParamMap;
+  _parameterMap!: ParamMap;
 
   constructor(
       /** The path part of a URL segment */
@@ -204,7 +309,7 @@ export class UrlSegment {
       /** The matrix parameters associated with a segment */
       public parameters: {[name: string]: string}) {}
 
-  get parameterMap() {
+  get parameterMap(): ParamMap {
     if (!this._parameterMap) {
       this._parameterMap = convertToParamMap(this.parameters);
     }
@@ -212,7 +317,9 @@ export class UrlSegment {
   }
 
   /** @docsNotRequired */
-  toString(): string { return serializePath(this); }
+  toString(): string {
+    return serializePath(this);
+  }
 }
 
 export function equalSegments(as: UrlSegment[], bs: UrlSegment[]): boolean {
@@ -253,6 +360,7 @@ export function mapChildrenIntoArray<T>(
  *
  * @publicApi
  */
+@Injectable({providedIn: 'root', useFactory: () => new DefaultUrlSerializer()})
 export abstract class UrlSerializer {
   /** Parse a url into a `UrlTree` */
   abstract parse(url: string): UrlTree;
@@ -291,7 +399,7 @@ export class DefaultUrlSerializer implements UrlSerializer {
     const segment = `/${serializeSegment(tree.root, true)}`;
     const query = serializeQueryParams(tree.queryParams);
     const fragment =
-        typeof tree.fragment === `string` ? `#${encodeUriFragment(tree.fragment !)}` : '';
+        typeof tree.fragment === `string` ? `#${encodeUriFragment(tree.fragment)}` : '';
 
     return `${segment}${query}${fragment}`;
   }
@@ -329,8 +437,12 @@ function serializeSegment(segment: UrlSegmentGroup, root: boolean): string {
       }
 
       return [`${k}:${serializeSegment(v, false)}`];
-
     });
+
+    // use no parenthesis if the only child is a primary outlet route
+    if (Object.keys(segment.children).length === 1 && segment.children[PRIMARY_OUTLET] != null) {
+      return `${serializePaths(segment)}/${children[0]}`;
+    }
 
     return `${serializePaths(segment)}/(${children.join('//')})`;
   }
@@ -402,14 +514,17 @@ function serializeMatrixParams(params: {[key: string]: string}): string {
 }
 
 function serializeQueryParams(params: {[key: string]: any}): string {
-  const strParams: string[] = Object.keys(params).map((name) => {
-    const value = params[name];
-    return Array.isArray(value) ?
-        value.map(v => `${encodeUriQuery(name)}=${encodeUriQuery(v)}`).join('&') :
-        `${encodeUriQuery(name)}=${encodeUriQuery(value)}`;
-  });
+  const strParams: string[] =
+      Object.keys(params)
+          .map((name) => {
+            const value = params[name];
+            return Array.isArray(value) ?
+                value.map(v => `${encodeUriQuery(name)}=${encodeUriQuery(v)}`).join('&') :
+                `${encodeUriQuery(name)}=${encodeUriQuery(value)}`;
+          })
+          .filter(s => !!s);
 
-  return strParams.length ? `?${strParams.join("&")}` : '';
+  return strParams.length ? `?${strParams.join('&')}` : '';
 }
 
 const SEGMENT_RE = /^[^\/()?;=#]+/;
@@ -425,7 +540,7 @@ function matchQueryParams(str: string): string {
   return match ? match[0] : '';
 }
 
-const QUERY_PARAM_VALUE_RE = /^[^?&#]+/;
+const QUERY_PARAM_VALUE_RE = /^[^&#]+/;
 // Return the value of the query param at the start of the string or an empty string
 function matchUrlQueryParamValue(str: string): string {
   const match = str.match(QUERY_PARAM_VALUE_RE);
@@ -435,7 +550,9 @@ function matchUrlQueryParamValue(str: string): string {
 class UrlParser {
   private remaining: string;
 
-  constructor(private url: string) { this.remaining = url; }
+  constructor(private url: string) {
+    this.remaining = url;
+  }
 
   parseRootSegment(): UrlSegmentGroup {
     this.consumeOptional('/');
@@ -502,22 +619,24 @@ class UrlParser {
   private parseSegment(): UrlSegment {
     const path = matchSegments(this.remaining);
     if (path === '' && this.peekStartsWith(';')) {
-      throw new Error(`Empty path url segment cannot have parameters: '${this.remaining}'.`);
+      throw new RuntimeError(
+          RuntimeErrorCode.EMPTY_PATH_WITH_PARAMS,
+          NG_DEV_MODE && `Empty path url segment cannot have parameters: '${this.remaining}'.`);
     }
 
     this.capture(path);
     return new UrlSegment(decode(path), this.parseMatrixParams());
   }
 
-  private parseMatrixParams(): {[key: string]: any} {
-    const params: {[key: string]: any} = {};
+  private parseMatrixParams(): {[key: string]: string} {
+    const params: {[key: string]: string} = {};
     while (this.consumeOptional(';')) {
       this.parseParam(params);
     }
     return params;
   }
 
-  private parseParam(params: {[key: string]: any}): void {
+  private parseParam(params: {[key: string]: string}): void {
     const key = matchSegments(this.remaining);
     if (!key) {
       return;
@@ -581,12 +700,13 @@ class UrlParser {
       // if is is not one of these characters, then the segment was unescaped
       // or the group was not closed
       if (next !== '/' && next !== ')' && next !== ';') {
-        throw new Error(`Cannot parse url '${this.url}'`);
+        throw new RuntimeError(
+            RuntimeErrorCode.UNPARSABLE_URL, NG_DEV_MODE && `Cannot parse url '${this.url}'`);
       }
 
-      let outletName: string = undefined !;
+      let outletName: string = undefined!;
       if (path.indexOf(':') > -1) {
-        outletName = path.substr(0, path.indexOf(':'));
+        outletName = path.slice(0, path.indexOf(':'));
         this.capture(outletName);
         this.capture(':');
       } else if (allowPrimary) {
@@ -602,7 +722,9 @@ class UrlParser {
     return segments;
   }
 
-  private peekStartsWith(str: string): boolean { return this.remaining.startsWith(str); }
+  private peekStartsWith(str: string): boolean {
+    return this.remaining.startsWith(str);
+  }
 
   // Consumes the prefix when it is present and returns whether it has been consumed
   private consumeOptional(str: string): boolean {
@@ -615,7 +737,54 @@ class UrlParser {
 
   private capture(str: string): void {
     if (!this.consumeOptional(str)) {
-      throw new Error(`Expected "${str}".`);
+      throw new RuntimeError(
+          RuntimeErrorCode.UNEXPECTED_VALUE_IN_URL, NG_DEV_MODE && `Expected "${str}".`);
     }
   }
+}
+
+export function createRoot(rootCandidate: UrlSegmentGroup) {
+  return rootCandidate.segments.length > 0 ?
+      new UrlSegmentGroup([], {[PRIMARY_OUTLET]: rootCandidate}) :
+      rootCandidate;
+}
+
+/**
+ * Recursively merges primary segment children into their parents and also drops empty children
+ * (those which have no segments and no children themselves). The latter prevents serializing a
+ * group into something like `/a(aux:)`, where `aux` is an empty child segment.
+ */
+export function squashSegmentGroup(segmentGroup: UrlSegmentGroup): UrlSegmentGroup {
+  const newChildren = {} as any;
+  for (const childOutlet of Object.keys(segmentGroup.children)) {
+    const child = segmentGroup.children[childOutlet];
+    const childCandidate = squashSegmentGroup(child);
+    // don't add empty children
+    if (childCandidate.segments.length > 0 || childCandidate.hasChildren()) {
+      newChildren[childOutlet] = childCandidate;
+    }
+  }
+  const s = new UrlSegmentGroup(segmentGroup.segments, newChildren);
+  return mergeTrivialChildren(s);
+}
+
+/**
+ * When possible, merges the primary outlet child into the parent `UrlSegmentGroup`.
+ *
+ * When a segment group has only one child which is a primary outlet, merges that child into the
+ * parent. That is, the child segment group's segments are merged into the `s` and the child's
+ * children become the children of `s`. Think of this like a 'squash', merging the child segment
+ * group into the parent.
+ */
+function mergeTrivialChildren(s: UrlSegmentGroup): UrlSegmentGroup {
+  if (s.numberOfChildren === 1 && s.children[PRIMARY_OUTLET]) {
+    const c = s.children[PRIMARY_OUTLET];
+    return new UrlSegmentGroup(s.segments.concat(c.segments), c.children);
+  }
+
+  return s;
+}
+
+export function isUrlTree(v: any): v is UrlTree {
+  return v instanceof UrlTree;
 }

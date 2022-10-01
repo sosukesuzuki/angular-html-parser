@@ -1,13 +1,12 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {modifiedInIvy} from '@angular/private/testing';
-import {$, ExpectedConditions, browser, by, element} from 'protractor';
+import {$, browser, by, element, ExpectedConditions} from 'protractor';
 
 import {verifyNoBrowserErrors} from '../../../../test-utils';
 
@@ -27,14 +26,5 @@ describe('ngComponentOutlet', () => {
       waitForElement('ng-component-outlet-simple-example');
       expect(element.all(by.css('hello-world')).getText()).toEqual(['Hello World!']);
     });
-
-    modifiedInIvy('Different behavior for projectableNodes in ViewContainerRef.createComponent')
-        .it('should render complete', () => {
-          browser.get(URL);
-          waitForElement('ng-component-outlet-complete-example');
-          expect(element.all(by.css('complete-component')).getText()).toEqual([
-            'Complete: AhojSvet!'
-          ]);
-        });
   });
 });

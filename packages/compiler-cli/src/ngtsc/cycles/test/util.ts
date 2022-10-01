@@ -1,12 +1,13 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import * as ts from 'typescript';
-import {FileSystem} from '../../file_system';
+import ts from 'typescript';
+
+import {getFileSystem, PathManipulation} from '../../file_system';
 import {TestFile} from '../../file_system/testing';
 import {makeProgram} from '../../testing';
 
@@ -30,8 +31,10 @@ import {makeProgram} from '../../testing';
  * "a:*b,c;b;c"
  *
  * represents a program where a.ts exports from b.ts and imports from c.ts.
+ *
+ * An import can be suffixed with ! to make it a type-only import.
  */
-export function makeProgramFromGraph(fs: FileSystem, graph: string): {
+export function makeProgramFromGraph(fs: PathManipulation, graph: string): {
   program: ts.Program,
   host: ts.CompilerHost,
   options: ts.CompilerOptions,
@@ -41,8 +44,11 @@ export function makeProgramFromGraph(fs: FileSystem, graph: string): {
     const contents = (importList ? importList.split(',') : [])
                          .map(i => {
                            if (i.startsWith('*')) {
-                             const sym = i.substr(1);
+                             const sym = i.slice(1);
                              return `export {${sym}} from './${sym}';`;
+                           } else if (i.endsWith('!')) {
+                             const sym = i.slice(0, -1);
+                             return `import type {${sym}} from './${sym}';`;
                            } else {
                              return `import {${i}} from './${i}';`;
                            }
@@ -55,4 +61,9 @@ export function makeProgramFromGraph(fs: FileSystem, graph: string): {
     };
   });
   return makeProgram(files);
+}
+
+export function importPath(files: ts.SourceFile[]): string {
+  const fs = getFileSystem();
+  return files.map(sf => fs.basename(sf.fileName).replace('.ts', '')).join(',');
 }

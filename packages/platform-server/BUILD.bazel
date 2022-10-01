@@ -1,4 +1,4 @@
-load("//tools:defaults.bzl", "ng_module", "ng_package")
+load("//tools:defaults.bzl", "api_golden_test_npm_package", "ng_module", "ng_package", "tsec_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -19,29 +19,50 @@ ng_module(
         "//packages/platform-browser",
         "//packages/platform-browser-dynamic",
         "//packages/platform-browser/animations",
+        "//packages/zone.js/lib:zone_d_ts",
         "@npm//@types/node",
+        "@npm//domino",
         "@npm//rxjs",
-        "@npm//zone.js",
     ],
+)
+
+tsec_test(
+    name = "tsec_test",
+    target = "platform-server",
+    tsconfig = "//packages:tsec_config",
 )
 
 ng_package(
     name = "npm_package",
     srcs = [
         "package.json",
-        "//packages/platform-server/testing:package.json",
     ],
-    entry_point = ":index.ts",
+    externals = [
+        "domino",
+        "xhr2",
+    ],
     tags = [
         "release-with-framework",
     ],
     # Do not add more to this list.
     # Dependencies on the full npm_package cause long re-builds.
     visibility = [
+        "//integration:__subpackages__",
         "//packages/compiler-cli/integrationtest:__pkg__",
     ],
     deps = [
         ":platform-server",
+        "//packages/platform-server/init",
         "//packages/platform-server/testing",
     ],
+)
+
+api_golden_test_npm_package(
+    name = "platform-server_api",
+    data = [
+        ":npm_package",
+        "//goldens:public-api",
+    ],
+    golden_dir = "angular/goldens/public-api/platform-server",
+    npm_package = "angular/packages/platform-server/npm_package",
 )

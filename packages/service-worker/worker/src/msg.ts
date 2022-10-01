@@ -1,16 +1,18 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-export interface MsgAny { action: string; }
+export interface MsgAny {
+  action: string;
+}
 
 export interface MsgCheckForUpdates {
   action: 'CHECK_FOR_UPDATES';
-  statusNonce: number;
+  nonce: number;
 }
 
 export function isMsgCheckForUpdates(msg: MsgAny): msg is MsgCheckForUpdates {
@@ -19,7 +21,7 @@ export function isMsgCheckForUpdates(msg: MsgAny): msg is MsgCheckForUpdates {
 
 export interface MsgActivateUpdate {
   action: 'ACTIVATE_UPDATE';
-  statusNonce: number;
+  nonce: number;
 }
 
 export function isMsgActivateUpdate(msg: MsgAny): msg is MsgActivateUpdate {

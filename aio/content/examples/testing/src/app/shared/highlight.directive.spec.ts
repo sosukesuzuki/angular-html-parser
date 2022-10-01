@@ -1,9 +1,8 @@
-import { Component, DebugElement }   from '@angular/core';
+import { Component, DebugElement } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
 import { HighlightDirective } from './highlight.directive';
-import { newEvent }           from '../../testing';
 
 // #docregion test-component
 @Component({
@@ -57,14 +56,19 @@ describe('HighlightDirective', () => {
   it('should bind <input> background to value color', () => {
     // easier to work with nativeElement
     const input = des[2].nativeElement as HTMLInputElement;
-    expect(input.style.backgroundColor).toBe('cyan', 'initial backgroundColor');
+    expect(input.style.backgroundColor)
+      .withContext('initial backgroundColor')
+      .toBe('cyan');
 
-    // dispatch a DOM event so that Angular responds to the input value change.
     input.value = 'green';
-    input.dispatchEvent(newEvent('input'));
+
+    // Dispatch a DOM event so that Angular responds to the input value change.
+    input.dispatchEvent(new Event('input'));
     fixture.detectChanges();
 
-    expect(input.style.backgroundColor).toBe('green', 'changed backgroundColor');
+    expect(input.style.backgroundColor)
+      .withContext('changed backgroundColor')
+      .toBe('green');
   });
 
 

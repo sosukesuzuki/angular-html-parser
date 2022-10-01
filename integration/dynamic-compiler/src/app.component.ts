@@ -1,7 +1,5 @@
 import {AfterViewInit, Compiler, Component, ViewChild, ViewContainerRef} from '@angular/core';
 
-declare var System: any;
-
 @Component({
   selector: 'app-root',
   template: `
@@ -10,12 +8,12 @@ declare var System: any;
   `,
 })
 export class AppComponent implements AfterViewInit {
-  @ViewChild('vc', {read: ViewContainerRef, static: false}) container: ViewContainerRef;
+  @ViewChild('vc', {read: ViewContainerRef}) container: ViewContainerRef;
 
   constructor(private compiler: Compiler) {}
 
   ngAfterViewInit() {
-    System.import('./dist/lazy.bundle.js').then((module: any) => {
+    import('./lazy.module').then(module => {
       this.compiler.compileModuleAndAllComponentsAsync(module.LazyModule).then((compiled) => {
         const factory = compiled.componentFactories[0];
         this.container.createComponent(factory);

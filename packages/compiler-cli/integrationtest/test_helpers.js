@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -28,7 +28,6 @@ const requiredNodeModules = {
   '@angular/compiler-cli': resolveNpmTreeArtifact('angular/packages/compiler-cli/npm_package'),
   '@angular/core': resolveNpmTreeArtifact('angular/packages/core/npm_package'),
   '@angular/forms': resolveNpmTreeArtifact('angular/packages/forms/npm_package'),
-  '@angular/http': resolveNpmTreeArtifact('angular/packages/http/npm_package'),
   '@angular/platform-browser':
       resolveNpmTreeArtifact('angular/packages/platform-browser/npm_package'),
   '@angular/platform-browser-dynamic':
@@ -36,7 +35,7 @@ const requiredNodeModules = {
   '@angular/platform-server':
       resolveNpmTreeArtifact('angular/packages/platform-server/npm_package'),
   '@angular/router': resolveNpmTreeArtifact('angular/packages/router/npm_package'),
-  // Note, @bazel/typescript does not appear here because it's not listed as a dependency of
+  // Note, @bazel/concatjs does not appear here because it's not listed as a dependency of
   // @angular/compiler-cli
   '@types/jasmine': resolveNpmTreeArtifact('npm/node_modules/@types/jasmine'),
   '@types/node': resolveNpmTreeArtifact('npm/node_modules/@types/node'),
@@ -53,10 +52,9 @@ const requiredNodeModules = {
   'buffer-from': resolveNpmTreeArtifact('npm/node_modules/buffer-from'),
   'reflect-metadata': resolveNpmTreeArtifact('npm/node_modules/reflect-metadata'),
   'rxjs': resolveNpmTreeArtifact('npm/node_modules/rxjs'),
-  'source-map': resolveNpmTreeArtifact('npm/node_modules/source-map'),
   'source-map-support': resolveNpmTreeArtifact('npm/node_modules/source-map-support'),
   'typescript': resolveNpmTreeArtifact('npm/node_modules/typescript'),
-  'zone.js': resolveNpmTreeArtifact('npm/node_modules/zone.js'),
+  'zone.js': resolveNpmTreeArtifact('angular/packages/zone.js/npm_package'),
 };
 
 /** Sets up the temporary test directory and returns the path to the directory. */

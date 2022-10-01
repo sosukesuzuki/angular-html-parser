@@ -1,16 +1,22 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {Component, Directive, InjectFlags, InjectionToken, NgModule, Pipe, PlatformRef, SchemaMetadata, Type} from '@angular/core';
+import {InjectionToken, SchemaMetadata} from '@angular/core';
 
-import {ComponentFixture} from './component_fixture';
-import {MetadataOverride} from './metadata_override';
-import {TestBed} from './test_bed';
+
+/** Whether test modules should be torn down by default. */
+export const TEARDOWN_TESTING_MODULE_ON_DESTROY_DEFAULT = true;
+
+/** Whether unknown elements in templates should throw by default. */
+export const THROW_ON_UNKNOWN_ELEMENTS_DEFAULT = false;
+
+/** Whether unknown properties in templates should throw by default. */
+export const THROW_ON_UNKNOWN_PROPERTIES_DEFAULT = false;
 
 /**
  * An abstract class for inserting the root test component element in a platform independent way.
@@ -19,6 +25,7 @@ import {TestBed} from './test_bed';
  */
 export class TestComponentRenderer {
   insertRootElement(rootElementId: string) {}
+  removeAllRootElements?() {}
 }
 
 /**
@@ -35,95 +42,60 @@ export const ComponentFixtureNoNgZone = new InjectionToken<boolean[]>('Component
 /**
  * @publicApi
  */
-export type TestModuleMetadata = {
-  providers?: any[],
-  declarations?: any[],
-  imports?: any[],
-  schemas?: Array<SchemaMetadata|any[]>,
-  aotSummaries?: () => any[],
-};
+export interface TestModuleMetadata {
+  providers?: any[];
+  declarations?: any[];
+  imports?: any[];
+  schemas?: Array<SchemaMetadata|any[]>;
+  teardown?: ModuleTeardownOptions;
+  /**
+   * Whether NG0304 runtime errors should be thrown when unknown elements are present in component's
+   * template. Defaults to `false`, where the error is simply logged. If set to `true`, the error is
+   * thrown.
+   * @see https://angular.io/errors/NG8001 for the description of the problem and how to fix it
+   */
+  errorOnUnknownElements?: boolean;
+  /**
+   * Whether errors should be thrown when unknown properties are present in component's template.
+   * Defaults to `false`, where the error is simply logged.
+   * If set to `true`, the error is thrown.
+   * @see https://angular.io/errors/NG8002 for the description of the error and how to fix it
+   */
+  errorOnUnknownProperties?: boolean;
+}
 
 /**
- * Static methods implemented by the `TestBedViewEngine` and `TestBedRender3`
- *
  * @publicApi
  */
-export interface TestBedStatic {
-  new (...args: any[]): TestBed;
-
-  initTestEnvironment(
-      ngModule: Type<any>|Type<any>[], platform: PlatformRef, aotSummaries?: () => any[]): TestBed;
-
+export interface TestEnvironmentOptions {
   /**
-   * Reset the providers for the test injector.
+   * Configures the test module teardown behavior in `TestBed`.
    */
-  resetTestEnvironment(): void;
-
-  resetTestingModule(): TestBedStatic;
-
+  teardown?: ModuleTeardownOptions;
   /**
-   * Allows overriding default compiler providers and settings
-   * which are defined in test_injector.js
+   * Whether errors should be thrown when unknown elements are present in component's template.
+   * Defaults to `false`, where the error is simply logged.
+   * If set to `true`, the error is thrown.
+   * @see https://angular.io/errors/NG8001 for the description of the error and how to fix it
    */
-  configureCompiler(config: {providers?: any[]; useJit?: boolean;}): TestBedStatic;
-
+  errorOnUnknownElements?: boolean;
   /**
-   * Allows overriding default providers, directives, pipes, modules of the test injector,
-   * which are defined in test_injector.js
+   * Whether errors should be thrown when unknown properties are present in component's template.
+   * Defaults to `false`, where the error is simply logged.
+   * If set to `true`, the error is thrown.
+   * @see https://angular.io/errors/NG8002 for the description of the error and how to fix it
    */
-  configureTestingModule(moduleDef: TestModuleMetadata): TestBedStatic;
+  errorOnUnknownProperties?: boolean;
+}
 
-  /**
-   * Compile components with a `templateUrl` for the test's NgModule.
-   * It is necessary to call this function
-   * as fetching urls is asynchronous.
-   */
-  compileComponents(): Promise<any>;
+/**
+ * Configures the test module teardown behavior in `TestBed`.
+ * @publicApi
+ */
+export interface ModuleTeardownOptions {
+  /** Whether the test module should be destroyed after every test. Defaults to `true`. */
+  destroyAfterEach: boolean;
 
-  overrideModule(ngModule: Type<any>, override: MetadataOverride<NgModule>): TestBedStatic;
-
-  overrideComponent(component: Type<any>, override: MetadataOverride<Component>): TestBedStatic;
-
-  overrideDirective(directive: Type<any>, override: MetadataOverride<Directive>): TestBedStatic;
-
-  overridePipe(pipe: Type<any>, override: MetadataOverride<Pipe>): TestBedStatic;
-
-  overrideTemplate(component: Type<any>, template: string): TestBedStatic;
-
-  /**
-   * Overrides the template of the given component, compiling the template
-   * in the context of the TestingModule.
-   *
-   * Note: This works for JIT and AOTed components as well.
-   */
-  overrideTemplateUsingTestingModule(component: Type<any>, template: string): TestBedStatic;
-
-  /**
-   * Overwrites all providers for the given token with the given provider definition.
-   *
-   * Note: This works for JIT and AOTed components as well.
-   */
-  overrideProvider(token: any, provider: {
-    useFactory: Function,
-    deps: any[],
-  }): TestBedStatic;
-  overrideProvider(token: any, provider: {useValue: any;}): TestBedStatic;
-  overrideProvider(token: any, provider: {
-    useFactory?: Function,
-    useValue?: any,
-    deps?: any[],
-  }): TestBedStatic;
-
-  get<T>(token: Type<T>|InjectionToken<T>, notFoundValue?: T, flags?: InjectFlags): any;
-  // TODO: switch back to official deprecation marker once TSLint issue is resolved
-  // https://github.com/palantir/tslint/issues/4522
-  /**
-   * deprecated from v8.0.0 use Type<T> or InjectionToken<T>
-   * This does not use the deprecated jsdoc tag on purpose
-   * because it renders all overloads as deprecated in TSLint
-   * due to https://github.com/palantir/tslint/issues/4522.
-   */
-  get(token: any, notFoundValue?: any): any;
-
-  createComponent<T>(component: Type<T>): ComponentFixture<T>;
+  /** Whether errors during test module destruction should be re-thrown. Defaults to `true`. */
+  rethrowErrors?: boolean;
 }

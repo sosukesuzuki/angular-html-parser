@@ -1,26 +1,32 @@
+/* To learn more about this file see: https://angular.io/config/tsconfig. */
 {
   "compileOnSave": false,
   "compilerOptions": {
     "baseUrl": "src",
     "outDir": "./out-tsc",
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    // NOTE: Intentionally deviate from default Angular CLI settings
+    //       (due to many violations and uglier syntax).
+    "noPropertyAccessFromIndexSignature": false,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "sourceMap": true,
     "declaration": false,
-    "module": "esnext",
-    "moduleResolution": "node",
-    "emitDecoratorMetadata": true,
+    "downlevelIteration": true,
     "experimentalDecorators": true,
+    "moduleResolution": "node",
     "importHelpers": true,
-    "target": "es2015",
-    "typeRoots": [
-      "node_modules/@types"
-    ],
+    "target": "es2020",
+    "module": "es2020",
     "lib": [
-      "es2018",
+      "es2020",
       "dom"
     ],
     "skipLibCheck": true,
-    "strict": true,
-    "noUnusedLocals": true,
     // disabled because this is on by default in tsc 2.7 breaking our codebase - we need to refactor
     "strictPropertyInitialization": false
   },
@@ -32,5 +38,12 @@
     "out-tsc",
     "scripts",
     "tools"
-  ]
+  ],
+  "angularCompilerOptions": {
+    "enableI18nLegacyMessageIdFormat": false,
+    "disableTypeScriptVersionCheck": true,
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "strictTemplates": true
+  }
 }

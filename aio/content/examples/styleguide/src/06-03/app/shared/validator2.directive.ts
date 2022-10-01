@@ -1,3 +1,4 @@
+/* eslint-disable @angular-eslint/no-host-metadata-property */
 // #docregion
 import { Directive } from '@angular/core';
 

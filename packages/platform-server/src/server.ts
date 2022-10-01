@@ -1,16 +1,16 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
 import {ɵAnimationEngine} from '@angular/animations/browser';
-import {DOCUMENT, PlatformLocation, ViewportScroller, ɵNullViewportScroller as NullViewportScroller, ɵPLATFORM_SERVER_ID as PLATFORM_SERVER_ID} from '@angular/common';
+import {DOCUMENT, PlatformLocation, ViewportScroller, ɵgetDOM as getDOM, ɵNullViewportScroller as NullViewportScroller, ɵPLATFORM_SERVER_ID as PLATFORM_SERVER_ID} from '@angular/common';
 import {HttpClientModule} from '@angular/common/http';
-import {Injectable, InjectionToken, Injector, NgModule, NgZone, Optional, PLATFORM_ID, PLATFORM_INITIALIZER, PlatformRef, Provider, RendererFactory2, RootRenderer, StaticProvider, Testability, createPlatformFactory, platformCore, ɵALLOW_MULTIPLE_PLATFORMS as ALLOW_MULTIPLE_PLATFORMS} from '@angular/core';
-import {BrowserModule, EVENT_MANAGER_PLUGINS, ɵSharedStylesHost as SharedStylesHost, ɵgetDOM as getDOM} from '@angular/platform-browser';
+import {createPlatformFactory, Injector, NgModule, NgZone, Optional, PLATFORM_ID, PLATFORM_INITIALIZER, platformCore, PlatformRef, Provider, RendererFactory2, StaticProvider, Testability, ɵALLOW_MULTIPLE_PLATFORMS as ALLOW_MULTIPLE_PLATFORMS, ɵsetDocument, ɵTESTABILITY as TESTABILITY} from '@angular/core';
+import {BrowserModule, EVENT_MANAGER_PLUGINS, ɵSharedStylesHost as SharedStylesHost} from '@angular/platform-browser';
 import {ɵplatformCoreDynamic as platformCoreDynamic} from '@angular/platform-browser-dynamic';
 import {NoopAnimationsModule, ɵAnimationRendererFactory} from '@angular/platform-browser/animations';
 
@@ -22,10 +22,7 @@ import {ServerEventManagerPlugin} from './server_events';
 import {ServerRendererFactory2} from './server_renderer';
 import {ServerStylesHost} from './styles_host';
 import {INITIAL_CONFIG, PlatformConfig} from './tokens';
-
-function notSupported(feature: string): Error {
-  throw new Error(`platform-server does not support '${feature}'.`);
-}
+import {TRANSFER_STATE_SERIALIZATION_PROVIDERS} from './transfer_state';
 
 export const INTERNAL_SERVER_PLATFORM_PROVIDERS: StaticProvider[] = [
   {provide: DOCUMENT, useFactory: _document, deps: [Injector]},
@@ -41,7 +38,9 @@ export const INTERNAL_SERVER_PLATFORM_PROVIDERS: StaticProvider[] = [
 ];
 
 function initDominoAdapter(injector: Injector) {
-  return () => { DominoAdapter.makeCurrent(); };
+  return () => {
+    DominoAdapter.makeCurrent();
+  };
 }
 
 export function instantiateServerRendererFactory(
@@ -70,9 +69,11 @@ export const SERVER_RENDER_PROVIDERS: Provider[] = [
   exports: [BrowserModule],
   imports: [HttpClientModule, NoopAnimationsModule],
   providers: [
+    TRANSFER_STATE_SERIALIZATION_PROVIDERS,
     SERVER_RENDER_PROVIDERS,
     SERVER_HTTP_PROVIDERS,
-    {provide: Testability, useValue: null},
+    {provide: Testability, useValue: null},  // Keep for backwards-compatibility.
+    {provide: TESTABILITY, useValue: null},
     {provide: ViewportScroller, useClass: NullViewportScroller},
   ],
 })
@@ -80,18 +81,23 @@ export class ServerModule {
 }
 
 function _document(injector: Injector) {
-  let config: PlatformConfig|null = injector.get(INITIAL_CONFIG, null);
+  const config: PlatformConfig|null = injector.get(INITIAL_CONFIG, null);
+  let document: Document;
   if (config && config.document) {
-    return parseDocument(config.document, config.url);
+    document = typeof config.document === 'string' ? parseDocument(config.document, config.url) :
+                                                     config.document;
   } else {
-    return getDOM().createHtmlDocument();
+    document = getDOM().createHtmlDocument();
   }
+  // Tell ivy about the global document
+  ɵsetDocument(document);
+  return document;
 }
 
 /**
  * @publicApi
  */
-export const platformServer =
+export const platformServer: (extraProviders?: StaticProvider[]|undefined) => PlatformRef =
     createPlatformFactory(platformCore, 'server', INTERNAL_SERVER_PLATFORM_PROVIDERS);
 
 /**

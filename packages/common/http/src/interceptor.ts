@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -36,10 +36,10 @@ import {HttpEvent} from './response';
  * @usageNotes
  *
  * To use the same instance of `HttpInterceptors` for the entire app, import the `HttpClientModule`
- * only in your `AppModule`, and add the interceptors to the root application injector .
+ * only in your `AppModule`, and add the interceptors to the root application injector.
  * If you import `HttpClientModule` multiple times across different modules (for example, in lazy
- * loading modules), each import creates a new copy of the `HttpClientModule`, which overwrites the interceptors
- * provided in the root module.
+ * loading modules), each import creates a new copy of the `HttpClientModule`, which overwrites the
+ * interceptors provided in the root module.
  *
  */
 export interface HttpInterceptor {

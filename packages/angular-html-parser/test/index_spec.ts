@@ -39,13 +39,13 @@ describe("options", () => {
         [html.Element, "MyComponent", 1],
         [html.Element, "template", 2],
         [html.Attribute, "#content", ""],
-        [html.Text, "text", 3],
+        [html.Text, "text", 3, ["text"]],
         [html.Element, "template", 0],
-        [html.Attribute, "lang", "something-else"],
-        [html.Text, "<div>", 1],
+        [html.Attribute, "lang", "something-else", ["something-else"]],
+        [html.Text, "<div>", 1, ["<div>"]],
         [html.Element, "custom", 0],
-        [html.Attribute, "lang", "babel"],
-        [html.Text, 'const foo = "</";', 1]
+        [html.Attribute, "lang", "babel", ["babel"]],
+        [html.Text, 'const foo = "</";', 1, ['const foo = "</";']]
       ]);
     });
   });

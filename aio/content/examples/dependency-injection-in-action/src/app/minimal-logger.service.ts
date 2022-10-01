@@ -2,8 +2,8 @@
 // Class used as a "narrowing" interface that exposes a minimal logger
 // Other members of the actual implementation are invisible
 export abstract class MinimalLogger {
-  logs: string[];
-  logInfo: (msg: string) => void;
+  abstract logs: string[];
+  abstract logInfo: (msg: string) => void;
 }
 // #enddocregion
 
@@ -18,5 +18,5 @@ export abstract class MinimalLogger {
 // #enddocregion minimal-logger-transpiled
 */
 
-// See http://stackoverflow.com/questions/43154832/unexpected-token-export-in-angular-app-with-systemjs-and-typescript/
+// See https://stackoverflow.com/questions/43154832/unexpected-token-export-in-angular-app-with-systemjs-and-typescript/
 export const _ = 0;

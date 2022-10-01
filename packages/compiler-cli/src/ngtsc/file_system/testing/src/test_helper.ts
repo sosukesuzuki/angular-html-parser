@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 /// <reference types="jasmine"/>
-import * as ts from 'typescript';
+import ts from 'typescript';
 
 import {absoluteFrom, setFileSystem} from '../../src/helpers';
 import {InvalidFileSystem} from '../../src/invalid_file_system';
@@ -47,7 +47,9 @@ function runInFileSystem(os: string, callback: (os: string) => void, error: bool
     afterEach(() => setFileSystem(new InvalidFileSystem()));
     callback(os);
     if (error) {
-      afterAll(() => { throw new Error(`runInFileSystem limited to ${os}, cannot pass`); });
+      afterAll(() => {
+        throw new Error(`runInFileSystem limited to ${os}, cannot pass`);
+      });
     }
   });
 }
@@ -64,10 +66,11 @@ runInEachFileSystem.unix = (callback: (os: string) => void) =>
 runInEachFileSystem.windows = (callback: (os: string) => void) =>
     runInFileSystem(FS_WINDOWS, callback, true);
 
-export function initMockFileSystem(os: string, cwd?: AbsoluteFsPath): void {
+export function initMockFileSystem(os: string, cwd?: AbsoluteFsPath): MockFileSystem {
   const fs = createMockFileSystem(os, cwd);
   setFileSystem(fs);
-  monkeyPatchTypeScript(os, fs);
+  monkeyPatchTypeScript(fs);
+  return fs;
 }
 
 function createMockFileSystem(os: string, cwd?: AbsoluteFsPath): MockFileSystem {
@@ -85,11 +88,7 @@ function createMockFileSystem(os: string, cwd?: AbsoluteFsPath): MockFileSystem 
   }
 }
 
-function monkeyPatchTypeScript(os: string, fs: MockFileSystem) {
-  ts.sys.directoryExists = path => {
-    const absPath = fs.resolve(path);
-    return fs.exists(absPath) && fs.stat(absPath).isDirectory();
-  };
+function monkeyPatchTypeScript(fs: MockFileSystem) {
   ts.sys.fileExists = path => {
     const absPath = fs.resolve(path);
     return fs.exists(absPath) && fs.stat(absPath).isFile();
@@ -99,6 +98,7 @@ function monkeyPatchTypeScript(os: string, fs: MockFileSystem) {
   ts.sys.readFile = fs.readFile.bind(fs);
   ts.sys.resolvePath = fs.resolve.bind(fs);
   ts.sys.writeFile = fs.writeFile.bind(fs);
+  ts.sys.directoryExists = directoryExists;
   ts.sys.readDirectory = readDirectory;
 
   function getDirectories(path: string): string[] {
@@ -125,23 +125,30 @@ function monkeyPatchTypeScript(os: string, fs: MockFileSystem) {
     return {files, directories};
   }
 
-  function realPath(path: string): string { return fs.realpath(fs.resolve(path)); }
+  function realPath(path: string): string {
+    return fs.realpath(fs.resolve(path));
+  }
+
+  function directoryExists(path: string) {
+    const absPath = fs.resolve(path);
+    return fs.exists(absPath) && fs.stat(absPath).isDirectory();
+  }
 
   // Rather than completely re-implementing we are using the `ts.matchFiles` function,
   // which is internal to the `ts` namespace.
   const tsMatchFiles: (
-      path: string, extensions: ReadonlyArray<string>| undefined,
-      excludes: ReadonlyArray<string>| undefined, includes: ReadonlyArray<string>| undefined,
-      useCaseSensitiveFileNames: boolean, currentDirectory: string, depth: number | undefined,
-      getFileSystemEntries: (path: string) => FileSystemEntries,
-      realpath: (path: string) => string) => string[] = (ts as any).matchFiles;
+      path: string, extensions: ReadonlyArray<string>|undefined,
+      excludes: ReadonlyArray<string>|undefined, includes: ReadonlyArray<string>|undefined,
+      useCaseSensitiveFileNames: boolean, currentDirectory: string, depth: number|undefined,
+      getFileSystemEntries: (path: string) => FileSystemEntries, realpath: (path: string) => string,
+      directoryExists: (path: string) => boolean) => string[] = (ts as any).matchFiles;
 
   function readDirectory(
       path: string, extensions?: ReadonlyArray<string>, excludes?: ReadonlyArray<string>,
       includes?: ReadonlyArray<string>, depth?: number): string[] {
     return tsMatchFiles(
         path, extensions, excludes, includes, fs.isCaseSensitive(), fs.pwd(), depth,
-        getFileSystemEntries, realPath);
+        getFileSystemEntries, realPath, directoryExists);
   }
 }
 

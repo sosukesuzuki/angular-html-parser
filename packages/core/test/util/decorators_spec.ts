@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {reflector} from '../../src/reflection/reflection';
+import {getReflect} from '../../src/di/jit/util';
 import {ANNOTATIONS, makeDecorator, makePropDecorator} from '../../src/util/decorators';
 
 class DecoratedParent {}
@@ -24,11 +24,10 @@ class DecoratedChild extends DecoratedParent {}
       const Prop = makePropDecorator('Prop', (value: any) => ({value}));
 
       class TestClass {
-        @Prop('firefox!')
-        watch: any;
+        @Prop('firefox!') watch: any;
       }
 
-      const p = reflector.propMetadata(TestClass);
+      const p = getReflect().propMetadata(TestClass);
       expect(p['watch']).toEqual([new Prop('firefox!')]);
     });
 

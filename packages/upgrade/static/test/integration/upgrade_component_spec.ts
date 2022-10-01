@@ -1,32 +1,31 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {Component, Directive, ElementRef, EventEmitter, Inject, Injector, Input, NO_ERRORS_SCHEMA, NgModule, Output, SimpleChanges, destroyPlatform} from '@angular/core';
-import {async, fakeAsync, tick} from '@angular/core/testing';
+import {Component, destroyPlatform, Directive, ElementRef, EventEmitter, Inject, Injector, Input, NgModule, NO_ERRORS_SCHEMA, Output, SimpleChanges} from '@angular/core';
+import {fakeAsync, tick, waitForAsync} from '@angular/core/testing';
 import {BrowserModule} from '@angular/platform-browser';
 import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
 
 import * as angular from '../../../src/common/src/angular1';
 import {$EXCEPTION_HANDLER, $SCOPE} from '../../../src/common/src/constants';
 import {html, multiTrim, withEachNg1Version} from '../../../src/common/test/helpers/common_test_helpers';
-import {UpgradeComponent, UpgradeModule, downgradeComponent} from '../../index';
+import {downgradeComponent, UpgradeComponent, UpgradeModule} from '../../index';
 
 import {$digest, bootstrap} from './static_test_helpers';
 
 
 withEachNg1Version(() => {
   describe('upgrade ng1 component', () => {
-
     beforeEach(() => destroyPlatform());
     afterEach(() => destroyPlatform());
 
     describe('template/templateUrl', () => {
-      it('should support `template` (string)', async(() => {
+      it('should support `template` (string)', waitForAsync(() => {
            // Define `ng1Component`
            const ng1Component: angular.IComponent = {template: 'Hello, Angular!'};
 
@@ -51,7 +50,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -66,7 +64,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should support `template` (function)', async(() => {
+      it('should support `template` (function)', waitForAsync(() => {
            // Define `ng1Component`
            const ng1Component: angular.IComponent = {template: () => 'Hello, Angular!'};
 
@@ -91,7 +89,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -106,7 +103,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should pass $element to `template` function and not $attrs', async(() => {
+      it('should pass $element to `template` function and not $attrs', waitForAsync(() => {
            // Define `ng1Component`
            const ng1Component: angular.IComponent = {
              template: ($attrs: angular.IAttributes, $element: angular.IAugmentedJQuery) => {
@@ -138,7 +135,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -153,7 +149,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should support `templateUrl` (string) fetched from `$templateCache`', async(() => {
+      it('should support `templateUrl` (string) fetched from `$templateCache`', waitForAsync(() => {
            // Define `ng1Component`
            const ng1Component: angular.IComponent = {templateUrl: 'ng1.component.html'};
 
@@ -182,7 +178,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -197,7 +192,8 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should support `templateUrl` (function) fetched from `$templateCache`', async(() => {
+      it('should support `templateUrl` (function) fetched from `$templateCache`',
+         waitForAsync(() => {
            // Define `ng1Component`
            const ng1Component: angular.IComponent = {templateUrl: () => 'ng1.component.html'};
 
@@ -226,7 +222,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -241,7 +236,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should pass $element to `templateUrl` function and not $attrs', async(() => {
+      it('should pass $element to `templateUrl` function and not $attrs', waitForAsync(() => {
            // Define `ng1Component`
            const ng1Component: angular.IComponent = {
              templateUrl: ($attrs: angular.IAttributes, $element: angular.IAugmentedJQuery) => {
@@ -277,7 +272,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -319,12 +313,11 @@ withEachNg1Version(() => {
                         '$httpBackend',
                         (method: string, url: string, post?: any, callback?: Function) =>
                             setTimeout(
-                                () => callback !(200, `${method}:${url}`.toLowerCase()), 1000));
+                                () => callback!(200, `${method}:${url}`.toLowerCase()), 1000));
 
             // Define `Ng2Module`
             @NgModule({
               declarations: [Ng1ComponentFacade, Ng2Component],
-              entryComponents: [Ng2Component],
               imports: [BrowserModule, UpgradeModule]
             })
             class Ng2Module {
@@ -370,12 +363,11 @@ withEachNg1Version(() => {
                         '$httpBackend',
                         (method: string, url: string, post?: any, callback?: Function) =>
                             setTimeout(
-                                () => callback !(200, `${method}:${url}`.toLowerCase()), 1000));
+                                () => callback!(200, `${method}:${url}`.toLowerCase()), 1000));
 
             // Define `Ng2Module`
             @NgModule({
               declarations: [Ng1ComponentFacade, Ng2Component],
-              entryComponents: [Ng2Component],
               imports: [BrowserModule, UpgradeModule]
             })
             class Ng2Module {
@@ -394,7 +386,7 @@ withEachNg1Version(() => {
             });
           }));
 
-      it('should support empty templates', async(() => {
+      it('should support empty templates', waitForAsync(() => {
            // Define `ng1Component`s
            const ng1ComponentA: angular.IComponent = {template: ''};
            const ng1ComponentB: angular.IComponent = {template: () => ''};
@@ -404,19 +396,27 @@ withEachNg1Version(() => {
            // Define `Ng1ComponentFacade`s
            @Directive({selector: 'ng1A'})
            class Ng1ComponentAFacade extends UpgradeComponent {
-             constructor(e: ElementRef, i: Injector) { super('ng1A', e, i); }
+             constructor(e: ElementRef, i: Injector) {
+               super('ng1A', e, i);
+             }
            }
            @Directive({selector: 'ng1B'})
            class Ng1ComponentBFacade extends UpgradeComponent {
-             constructor(e: ElementRef, i: Injector) { super('ng1B', e, i); }
+             constructor(e: ElementRef, i: Injector) {
+               super('ng1B', e, i);
+             }
            }
            @Directive({selector: 'ng1C'})
            class Ng1ComponentCFacade extends UpgradeComponent {
-             constructor(e: ElementRef, i: Injector) { super('ng1C', e, i); }
+             constructor(e: ElementRef, i: Injector) {
+               super('ng1C', e, i);
+             }
            }
            @Directive({selector: 'ng1D'})
            class Ng1ComponentDFacade extends UpgradeComponent {
-             constructor(e: ElementRef, i: Injector) { super('ng1D', e, i); }
+             constructor(e: ElementRef, i: Injector) {
+               super('ng1D', e, i);
+             }
            }
 
            // Define `Ng2Component`
@@ -449,7 +449,6 @@ withEachNg1Version(() => {
                Ng1ComponentAFacade, Ng1ComponentBFacade, Ng1ComponentCFacade, Ng1ComponentDFacade,
                Ng2Component
              ],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule],
              schemas: [NO_ERRORS_SCHEMA]
            })
@@ -480,9 +479,9 @@ withEachNg1Version(() => {
            @Directive({selector: 'ng1'})
            class Ng1ComponentFacade extends UpgradeComponent {
              // TODO(issue/24571): remove '!'.
-             @Input('inputAttrA') inputA !: string;
+             @Input('inputAttrA') inputA!: string;
              // TODO(issue/24571): remove '!'.
-             @Input() inputB !: string;
+             @Input() inputB!: string;
 
              constructor(elementRef: ElementRef, injector: Injector) {
                super('ng1', elementRef, injector);
@@ -501,7 +500,9 @@ withEachNg1Version(() => {
              dataA = 'foo';
              dataB = 'bar';
 
-             constructor() { ng2ComponentInstance = this; }
+             constructor() {
+               ng2ComponentInstance = this;
+             }
            }
 
            // Define `ng1Module`
@@ -512,7 +513,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -523,8 +523,8 @@ withEachNg1Version(() => {
            const element = html(`<ng2></ng2>`);
 
            bootstrap(platformBrowserDynamic(), Ng2Module, element, ng1Module).then(adapter => {
-             const ng1 = element.querySelector('ng1') !;
-             const ng1Controller = angular.element(ng1).controller !('ng1');
+             const ng1 = element.querySelector('ng1')!;
+             const ng1Controller = angular.element(ng1).controller!('ng1');
 
              expect(multiTrim(element.textContent)).toBe('Inside: foo, bar | Outside: foo, bar');
 
@@ -557,9 +557,9 @@ withEachNg1Version(() => {
            @Directive({selector: 'ng1'})
            class Ng1ComponentFacade extends UpgradeComponent {
              // TODO(issue/24571): remove '!'.
-             @Input('inputAttrA') inputA !: string;
+             @Input('inputAttrA') inputA!: string;
              // TODO(issue/24571): remove '!'.
-             @Input() inputB !: string;
+             @Input() inputB!: string;
 
              constructor(elementRef: ElementRef, injector: Injector) {
                super('ng1', elementRef, injector);
@@ -578,7 +578,9 @@ withEachNg1Version(() => {
              dataA = {value: 'foo'};
              dataB = {value: 'bar'};
 
-             constructor() { ng2ComponentInstance = this; }
+             constructor() {
+               ng2ComponentInstance = this;
+             }
            }
 
            // Define `ng1Module`
@@ -589,7 +591,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -600,8 +601,8 @@ withEachNg1Version(() => {
            const element = html(`<ng2></ng2>`);
 
            bootstrap(platformBrowserDynamic(), Ng2Module, element, ng1Module).then(adapter => {
-             const ng1 = element.querySelector('ng1') !;
-             const ng1Controller = angular.element(ng1).controller !('ng1');
+             const ng1 = element.querySelector('ng1')!;
+             const ng1Controller = angular.element(ng1).controller!('ng1');
 
              expect(multiTrim(element.textContent)).toBe('Inside: foo, bar | Outside: foo, bar');
 
@@ -634,13 +635,13 @@ withEachNg1Version(() => {
            @Directive({selector: 'ng1'})
            class Ng1ComponentFacade extends UpgradeComponent {
              // TODO(issue/24571): remove '!'.
-             @Input('inputAttrA') inputA !: string;
+             @Input('inputAttrA') inputA!: string;
              // TODO(issue/24571): remove '!'.
-             @Output('inputAttrAChange') inputAChange !: EventEmitter<any>;
+             @Output('inputAttrAChange') inputAChange!: EventEmitter<any>;
              // TODO(issue/24571): remove '!'.
-             @Input() inputB !: string;
+             @Input() inputB!: string;
              // TODO(issue/24571): remove '!'.
-             @Output() inputBChange !: EventEmitter<any>;
+             @Output() inputBChange!: EventEmitter<any>;
 
              constructor(elementRef: ElementRef, injector: Injector) {
                super('ng1', elementRef, injector);
@@ -659,7 +660,9 @@ withEachNg1Version(() => {
              dataA = {value: 'foo'};
              dataB = {value: 'bar'};
 
-             constructor() { ng2ComponentInstance = this; }
+             constructor() {
+               ng2ComponentInstance = this;
+             }
            }
 
            // Define `ng1Module`
@@ -670,7 +673,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -681,8 +683,8 @@ withEachNg1Version(() => {
            const element = html(`<ng2></ng2>`);
 
            bootstrap(platformBrowserDynamic(), Ng2Module, element, ng1Module).then(adapter => {
-             const ng1 = element.querySelector('ng1') !;
-             const ng1Controller = angular.element(ng1).controller !('ng1');
+             const ng1 = element.querySelector('ng1')!;
+             const ng1Controller = angular.element(ng1).controller!('ng1');
 
              expect(multiTrim(element.textContent)).toBe('Inside: foo, bar | Outside: foo, bar');
 
@@ -713,9 +715,9 @@ withEachNg1Version(() => {
            @Directive({selector: 'ng1'})
            class Ng1ComponentFacade extends UpgradeComponent {
              // TODO(issue/24571): remove '!'.
-             @Output('outputAttrA') outputA !: EventEmitter<any>;
+             @Output('outputAttrA') outputA!: EventEmitter<any>;
              // TODO(issue/24571): remove '!'.
-             @Output() outputB !: EventEmitter<any>;
+             @Output() outputB!: EventEmitter<any>;
 
              constructor(elementRef: ElementRef, injector: Injector) {
                super('ng1', elementRef, injector);
@@ -743,7 +745,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -754,8 +755,8 @@ withEachNg1Version(() => {
            const element = html(`<ng2></ng2>`);
 
            bootstrap(platformBrowserDynamic(), Ng2Module, element, ng1Module).then(() => {
-             const ng1 = element.querySelector('ng1') !;
-             const ng1Controller = angular.element(ng1).controller !('ng1');
+             const ng1 = element.querySelector('ng1')!;
+             const ng1Controller = angular.element(ng1).controller!('ng1');
 
              expect(multiTrim(element.textContent)).toBe('Inside: - | Outside: foo, bar');
 
@@ -797,16 +798,16 @@ withEachNg1Version(() => {
            @Directive({selector: 'ng1'})
            class Ng1ComponentFacade extends UpgradeComponent {
              // TODO(issue/24571): remove '!'.
-             @Input() fullName !: string;
+             @Input() fullName!: string;
              @Input('dataA') modelA: any;
              @Input('dataB') modelB: any;
              // TODO(issue/24571): remove '!'.
-             @Output('dataBChange') modelBChange !: EventEmitter<any>;
+             @Output('dataBChange') modelBChange!: EventEmitter<any>;
              @Input() modelC: any;
              // TODO(issue/24571): remove '!'.
-             @Output() modelCChange !: EventEmitter<any>;
+             @Output() modelCChange!: EventEmitter<any>;
              // TODO(issue/24571): remove '!'.
-             @Output() event !: EventEmitter<any>;
+             @Output() event!: EventEmitter<any>;
 
              constructor(elementRef: ElementRef, injector: Injector) {
                super('ng1', elementRef, injector);
@@ -840,7 +841,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -880,17 +880,17 @@ withEachNg1Version(() => {
            @Directive({selector: 'ng1'})
            class Ng1ComponentFacade extends UpgradeComponent {
              // TODO(issue/24571): remove '!'.
-             @Input('inputAttrA') inputA !: string;
+             @Input('inputAttrA') inputA!: string;
              // TODO(issue/24571): remove '!'.
-             @Output('inputAttrAChange') inputAChange !: EventEmitter<any>;
+             @Output('inputAttrAChange') inputAChange!: EventEmitter<any>;
              // TODO(issue/24571): remove '!'.
-             @Input() inputB !: string;
+             @Input() inputB!: string;
              // TODO(issue/24571): remove '!'.
-             @Output() inputBChange !: EventEmitter<any>;
+             @Output() inputBChange!: EventEmitter<any>;
              // TODO(issue/24571): remove '!'.
-             @Output('outputAttrA') outputA !: EventEmitter<any>;
+             @Output('outputAttrA') outputA!: EventEmitter<any>;
              // TODO(issue/24571): remove '!'.
-             @Output() outputB !: EventEmitter<any>;
+             @Output() outputB!: EventEmitter<any>;
 
              constructor(elementRef: ElementRef, injector: Injector) {
                super('ng1', elementRef, injector);
@@ -912,7 +912,9 @@ withEachNg1Version(() => {
              dataA = {value: 'foo'};
              dataB = {value: 'bar'};
 
-             updateDataB(value: any) { this.dataB.value = value; }
+             updateDataB(value: any) {
+               this.dataB.value = value;
+             }
            }
 
            // Define `ng1Module`
@@ -923,7 +925,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -934,10 +935,10 @@ withEachNg1Version(() => {
            const element = html(`<ng2></ng2>`);
 
            bootstrap(platformBrowserDynamic(), Ng2Module, element, ng1Module).then(adapter => {
-             const ng1s = element.querySelectorAll('ng1') !;
-             const ng1Controller0 = angular.element(ng1s[0]).controller !('ng1');
-             const ng1Controller1 = angular.element(ng1s[1]).controller !('ng1');
-             const ng1Controller2 = angular.element(ng1s[2]).controller !('ng1');
+             const ng1s = element.querySelectorAll('ng1')!;
+             const ng1Controller0 = angular.element(ng1s[0]).controller!('ng1');
+             const ng1Controller1 = angular.element(ng1s[1]).controller!('ng1');
+             const ng1Controller2 = angular.element(ng1s[2]).controller!('ng1');
 
              expect(multiTrim(element.textContent))
                  .toBe(
@@ -981,11 +982,11 @@ withEachNg1Version(() => {
            @Directive({selector: '[ng1]'})
            class Ng1ComponentFacade extends UpgradeComponent {
              // TODO(issue/24571): remove '!'.
-             @Input() inputA !: string;
+             @Input() inputA!: string;
              // TODO(issue/24571): remove '!'.
-             @Output() inputAChange !: EventEmitter<any>;
+             @Output() inputAChange!: EventEmitter<any>;
              // TODO(issue/24571): remove '!'.
-             @Output() outputA !: EventEmitter<any>;
+             @Output() outputA!: EventEmitter<any>;
 
              constructor(elementRef: ElementRef, injector: Injector) {
                super('ng1', elementRef, injector);
@@ -1013,7 +1014,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -1024,8 +1024,8 @@ withEachNg1Version(() => {
            const element = html(`<ng2></ng2>`);
 
            bootstrap(platformBrowserDynamic(), Ng2Module, element, ng1Module).then(adapter => {
-             const ng1 = element.querySelector('[ng1]') !;
-             const ng1Controller = angular.element(ng1).controller !('ng1');
+             const ng1 = element.querySelector('[ng1]')!;
+             const ng1Controller = angular.element(ng1).controller!('ng1');
 
              expect(multiTrim(element.textContent))
                  .toBe('ng1 - Data: [1,2,3] - Length: 3 | ng2 - Data: 1,2,3 - Length: 3');
@@ -1048,14 +1048,14 @@ withEachNg1Version(() => {
     });
 
     describe('compiling', () => {
-      it('should compile the ng1 template in the correct DOM context', async(() => {
+      it('should compile the ng1 template in the correct DOM context', waitForAsync(() => {
            let grandParentNodeName: string;
 
            // Define `ng1Component`
            const ng1ComponentA: angular.IComponent = {template: 'ng1A(<ng1-b></ng1-b>)'};
            const ng1DirectiveB: angular.IDirective = {
              compile: tElem => {
-               grandParentNodeName = tElem.parent !().parent !()[0].nodeName;
+               grandParentNodeName = tElem.parent!().parent!()[0].nodeName;
                return {};
              }
            };
@@ -1083,7 +1083,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentAFacade, Ng2ComponentX],
-             entryComponents: [Ng2ComponentX],
            })
            class Ng2Module {
              ngDoBootstrap() {}
@@ -1099,14 +1098,18 @@ withEachNg1Version(() => {
     });
 
     describe('linking', () => {
-      it('should run the pre-linking after instantiating the controller', async(() => {
+      it('should run the pre-linking after instantiating the controller', waitForAsync(() => {
            const log: string[] = [];
 
            // Define `ng1Directive`
            const ng1Directive: angular.IDirective = {
              template: '',
              link: {pre: () => log.push('ng1-pre')},
-             controller: class {constructor() { log.push('ng1-ctrl'); }}
+             controller: class {
+               constructor() {
+                 log.push('ng1-ctrl');
+               }
+             }
            };
 
            // Define `Ng1ComponentFacade`
@@ -1131,7 +1134,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
            })
            class Ng2Module {
              ngDoBootstrap() {}
@@ -1145,7 +1147,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should run the pre-linking function before linking', async(() => {
+      it('should run the pre-linking function before linking', waitForAsync(() => {
            const log: string[] = [];
 
            // Define `ng1Directive`
@@ -1179,7 +1181,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentAFacade, Ng2Component],
-             entryComponents: [Ng2Component],
            })
            class Ng2Module {
              ngDoBootstrap() {}
@@ -1193,7 +1194,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should run the post-linking function after linking (link: object)', async(() => {
+      it('should run the post-linking function after linking (link: object)', waitForAsync(() => {
            const log: string[] = [];
 
            // Define `ng1Directive`
@@ -1227,7 +1228,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentAFacade, Ng2Component],
-             entryComponents: [Ng2Component],
            })
            class Ng2Module {
              ngDoBootstrap() {}
@@ -1241,7 +1241,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should run the post-linking function after linking (link: function)', async(() => {
+      it('should run the post-linking function after linking (link: function)', waitForAsync(() => {
            const log: string[] = [];
 
            // Define `ng1Directive`
@@ -1275,7 +1275,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentAFacade, Ng2Component],
-             entryComponents: [Ng2Component],
            })
            class Ng2Module {
              ngDoBootstrap() {}
@@ -1289,14 +1288,18 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should run the post-linking function before `$postLink`', async(() => {
+      it('should run the post-linking function before `$postLink`', waitForAsync(() => {
            const log: string[] = [];
 
            // Define `ng1Directive`
            const ng1Directive: angular.IDirective = {
              template: '',
              link: () => log.push('ng1-post'),
-             controller: class {$postLink() { log.push('ng1-$post'); }}
+             controller: class {
+               $postLink() {
+                 log.push('ng1-$post');
+               }
+             }
            };
 
            // Define `Ng1ComponentFacade`
@@ -1321,7 +1324,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
            })
            class Ng2Module {
              ngDoBootstrap() {}
@@ -1337,7 +1339,7 @@ withEachNg1Version(() => {
     });
 
     describe('controller', () => {
-      it('should support `controllerAs`', async(() => {
+      it('should support `controllerAs`', waitForAsync(() => {
            // Define `ng1Directive`
            const ng1Directive: angular.IDirective = {
              template:
@@ -1346,7 +1348,7 @@ withEachNg1Version(() => {
              controllerAs: 'vm',
              controller: class {
                hasElement: string;  // TODO(issue/24571): remove '!'.
-               isClass !: string;
+               isClass!: string;
                scope: string;
 
                constructor(public $element: angular.IAugmentedJQuery, $scope: angular.IScope) {
@@ -1357,10 +1359,12 @@ withEachNg1Version(() => {
                }
 
                isPublished() {
-                 return this.$element.controller !('ng1') === this ? 'published' : 'not-published';
+                 return this.$element.controller!('ng1') === this ? 'published' : 'not-published';
                }
 
-               verifyIAmAClass() { this.isClass = 'isClass'; }
+               verifyIAmAClass() {
+                 this.isClass = 'isClass';
+               }
              }
            };
 
@@ -1385,7 +1389,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -1400,7 +1403,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should support `bindToController` (boolean)', async(() => {
+      it('should support `bindToController` (boolean)', waitForAsync(() => {
            // Define `ng1Directive`
            const ng1DirectiveA: angular.IDirective = {
              template: 'Scope: {{ title }}; Controller: {{ $ctrl.title }}',
@@ -1422,7 +1425,7 @@ withEachNg1Version(() => {
            @Directive({selector: 'ng1A'})
            class Ng1ComponentAFacade extends UpgradeComponent {
              // TODO(issue/24571): remove '!'.
-             @Input() title !: string;
+             @Input() title!: string;
 
              constructor(elementRef: ElementRef, injector: Injector) {
                super('ng1A', elementRef, injector);
@@ -1432,7 +1435,7 @@ withEachNg1Version(() => {
            @Directive({selector: 'ng1B'})
            class Ng1ComponentBFacade extends UpgradeComponent {
              // TODO(issue/24571): remove '!'.
-             @Input() title !: string;
+             @Input() title!: string;
 
              constructor(elementRef: ElementRef, injector: Injector) {
                super('ng1B', elementRef, injector);
@@ -1459,7 +1462,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentAFacade, Ng1ComponentBFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule],
              schemas: [NO_ERRORS_SCHEMA]
            })
@@ -1476,7 +1478,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should support `bindToController` (object)', async(() => {
+      it('should support `bindToController` (object)', waitForAsync(() => {
            // Define `ng1Directive`
            const ng1Directive: angular.IDirective = {
              template: '{{ $ctrl.title }}',
@@ -1490,7 +1492,7 @@ withEachNg1Version(() => {
            @Directive({selector: 'ng1'})
            class Ng1ComponentFacade extends UpgradeComponent {
              // TODO(issue/24571): remove '!'.
-             @Input() title !: string;
+             @Input() title!: string;
 
              constructor(elementRef: ElementRef, injector: Injector) {
                super('ng1', elementRef, injector);
@@ -1512,7 +1514,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -1527,7 +1528,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should support `controller` as string', async(() => {
+      it('should support `controller` as string', waitForAsync(() => {
            // Define `ng1Directive`
            const ng1Directive: angular.IDirective = {
              template: '{{ $ctrl.title }} {{ $ctrl.text }}',
@@ -1540,7 +1541,7 @@ withEachNg1Version(() => {
            @Directive({selector: 'ng1'})
            class Ng1ComponentFacade extends UpgradeComponent {
              // TODO(issue/24571): remove '!'.
-             @Input() title !: string;
+             @Input() title!: string;
 
              constructor(elementRef: ElementRef, injector: Injector) {
                super('ng1', elementRef, injector);
@@ -1554,14 +1555,17 @@ withEachNg1Version(() => {
 
            // Define `ng1Module`
            const ng1Module = angular.module_('ng1Module', [])
-                                 .controller('Ng1Controller', class { text = 'GREAT'; })
+                                 .controller(
+                                     'Ng1Controller',
+                                     class {
+                                       text = 'GREAT';
+                                     })
                                  .directive('ng1', () => ng1Directive)
                                  .directive('ng2', downgradeComponent({component: Ng2Component}));
 
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -1576,7 +1580,8 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should insert the compiled content before instantiating the controller', async(() => {
+      it('should insert the compiled content before instantiating the controller',
+         waitForAsync(() => {
            let compiledContent: string;
            let getCurrentContent: () => string;
 
@@ -1587,7 +1592,7 @@ withEachNg1Version(() => {
                name = 'world';
 
                constructor($element: angular.IAugmentedJQuery) {
-                 getCurrentContent = () => $element.text !();
+                 getCurrentContent = () => $element.text!();
                  compiledContent = getCurrentContent();
                }
              }
@@ -1614,8 +1619,7 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
-             declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component]
+             declarations: [Ng1ComponentFacade, Ng2Component]
            })
            class Ng2Module {
              ngDoBootstrap() {}
@@ -1634,11 +1638,13 @@ withEachNg1Version(() => {
     describe('require', () => {
       // NOT YET SUPPORTED
       xdescribe('in pre-/post-link', () => {
-        it('should resolve to its own controller if falsy', async(() => {
+        it('should resolve to its own controller if falsy', waitForAsync(() => {
              // Define `ng1Directive`
              const ng1Directive: angular.IDirective = {
                template: 'Pre: {{ pre }} | Post: {{ post }}',
-               controller: class {value = 'foo';},
+               controller: class {
+                 value = 'foo';
+               },
                link: {
                  pre: function(scope: any, elem: any, attrs: any, ctrl: any) {
                    scope['pre'] = ctrl.value;
@@ -1670,7 +1676,6 @@ withEachNg1Version(() => {
              // Define `Ng2Module`
              @NgModule({
                declarations: [Ng1ComponentFacade, Ng2Component],
-               entryComponents: [Ng2Component],
                imports: [BrowserModule, UpgradeModule]
              })
              class Ng2Module {
@@ -1689,11 +1694,13 @@ withEachNg1Version(() => {
       });
 
       describe('in controller', () => {
-        it('should be available to children', async(() => {
+        it('should be available to children', waitForAsync(() => {
              // Define `ng1Component`
              const ng1ComponentA: angular.IComponent = {
                template: '<ng1-b></ng1-b>',
-               controller: class {value = 'ng1A';}
+               controller: class {
+                 value = 'ng1A';
+               }
              };
 
              const ng1ComponentB: angular.IComponent = {
@@ -1723,7 +1730,6 @@ withEachNg1Version(() => {
              // Define `Ng2Module`
              @NgModule({
                declarations: [Ng1ComponentAFacade, Ng2Component],
-               entryComponents: [Ng2Component],
                imports: [BrowserModule, UpgradeModule]
              })
              class Ng2Module {
@@ -1738,7 +1744,7 @@ withEachNg1Version(() => {
              });
            }));
 
-        it('should throw if required controller cannot be found', async(() => {
+        it('should throw if required controller cannot be found', waitForAsync(() => {
              // Define `ng1Component`
              const ng1ComponentA: angular.IComponent = {require: {foo: 'iDoNotExist'}};
              const ng1ComponentB: angular.IComponent = {require: {foo: '^iDoNotExist'}};
@@ -1797,7 +1803,6 @@ withEachNg1Version(() => {
                  Ng1ComponentAFacade, Ng1ComponentBFacade, Ng1ComponentCFacade, Ng2ComponentA,
                  Ng2ComponentB, Ng2ComponentC
                ],
-               entryComponents: [Ng2ComponentA, Ng2ComponentB, Ng2ComponentC],
                imports: [BrowserModule, UpgradeModule]
              })
              class Ng2Module {
@@ -1828,7 +1833,7 @@ withEachNg1Version(() => {
              });
            }));
 
-        it('should not throw if missing required controller is optional', async(() => {
+        it('should not throw if missing required controller is optional', waitForAsync(() => {
              // Define `ng1Component`
              const ng1Component: angular.IComponent = {
                require: {
@@ -1861,7 +1866,6 @@ withEachNg1Version(() => {
              // Define `Ng2Module`
              @NgModule({
                declarations: [Ng1ComponentFacade, Ng2Component],
-               entryComponents: [Ng2Component],
                imports: [BrowserModule, UpgradeModule]
              })
              class Ng2Module {
@@ -1877,11 +1881,13 @@ withEachNg1Version(() => {
            }));
 
         it('should assign resolved values to the controller instance (if `require` is not object)',
-           async(() => {
+           waitForAsync(() => {
              // Define `ng1Component`
              const ng1ComponentA: angular.IComponent = {
                template: 'ng1A(<div><ng2></ng2></div>)',
-               controller: class {value = 'A';}
+               controller: class {
+                 value = 'A';
+               }
              };
 
              const ng1ComponentB: angular.IComponent = {
@@ -1937,7 +1943,6 @@ withEachNg1Version(() => {
              // Define `Ng2Module`
              @NgModule({
                declarations: [Ng1ComponentBFacade, Ng1ComponentCFacade, Ng2Component],
-               entryComponents: [Ng2Component],
                imports: [BrowserModule, UpgradeModule]
              })
              class Ng2Module {
@@ -1953,11 +1958,13 @@ withEachNg1Version(() => {
            }));
 
         it('should assign resolved values to the controller instance (if `require` is object)',
-           async(() => {
+           waitForAsync(() => {
              // Define `ng1Component`
              const ng1ComponentA: angular.IComponent = {
                template: 'ng1A(<div><ng2></ng2></div>)',
-               controller: class {value = 'A';}
+               controller: class {
+                 value = 'A';
+               }
              };
 
              const ng1ComponentB: angular.IComponent = {
@@ -1977,7 +1984,9 @@ withEachNg1Version(() => {
                  ng1BSelfUp: '^ng1B',
                  ng1BParentUp: '?^^ng1B',
                },
-               controller: class {value = 'B';}
+               controller: class {
+                 value = 'B';
+               }
              };
 
              // Define `Ng1ComponentFacade`
@@ -2002,7 +2011,6 @@ withEachNg1Version(() => {
              // Define `Ng2Module`
              @NgModule({
                declarations: [Ng1ComponentBFacade, Ng2Component],
-               entryComponents: [Ng2Component],
                imports: [BrowserModule, UpgradeModule]
              })
              class Ng2Module {
@@ -2019,11 +2027,13 @@ withEachNg1Version(() => {
              });
            }));
 
-        it('should assign to controller before calling `$onInit()`', async(() => {
+        it('should assign to controller before calling `$onInit()`', waitForAsync(() => {
              // Define `ng1Component`
              const ng1ComponentA: angular.IComponent = {
                template: '<ng2></ng2>',
-               controller: class {value = 'ng1A';}
+               controller: class {
+                 value = 'ng1A';
+               }
              };
 
              const ng1ComponentB: angular.IComponent = {
@@ -2059,7 +2069,6 @@ withEachNg1Version(() => {
              // Define `Ng2Module`
              @NgModule({
                declarations: [Ng1ComponentBFacade, Ng2Component],
-               entryComponents: [Ng2Component],
                imports: [BrowserModule, UpgradeModule]
              })
              class Ng2Module {
@@ -2074,15 +2083,22 @@ withEachNg1Version(() => {
              });
            }));
 
-        it('should use the key as name if the required controller name is omitted', async(() => {
+        it('should use the key as name if the required controller name is omitted',
+           waitForAsync(() => {
              // Define `ng1Component`
              const ng1ComponentA: angular.IComponent = {
                template: '<ng1-b></ng1-b>',
-               controller: class {value = 'A';}
+               controller: class {
+                 value = 'A';
+               }
              };
 
-             const ng1ComponentB:
-                 angular.IComponent = {template: '<ng2></ng2>', controller: class {value = 'B';}};
+             const ng1ComponentB: angular.IComponent = {
+               template: '<ng2></ng2>',
+               controller: class {
+                 value = 'B';
+               }
+             };
 
              const ng1ComponentC: angular.IComponent = {
                template:
@@ -2092,7 +2108,9 @@ withEachNg1Version(() => {
                  ng1B: '?^',
                  ng1C: '',
                },
-               controller: class {value = 'C';}
+               controller: class {
+                 value = 'C';
+               }
              };
 
              // Define `Ng1ComponentFacade`
@@ -2118,7 +2136,6 @@ withEachNg1Version(() => {
              // Define `Ng2Module`
              @NgModule({
                declarations: [Ng1ComponentCFacade, Ng2Component],
-               entryComponents: [Ng2Component],
                imports: [BrowserModule, UpgradeModule]
              })
              class Ng2Module {
@@ -2136,7 +2153,7 @@ withEachNg1Version(() => {
     });
 
     describe('transclusion', () => {
-      it('should support single-slot transclusion', async(() => {
+      it('should support single-slot transclusion', waitForAsync(() => {
            let ng2ComponentAInstance: Ng2ComponentA;
            let ng2ComponentBInstance: Ng2ComponentB;
 
@@ -2160,13 +2177,17 @@ withEachNg1Version(() => {
            class Ng2ComponentA {
              value = 'foo';
              showB = false;
-             constructor() { ng2ComponentAInstance = this; }
+             constructor() {
+               ng2ComponentAInstance = this;
+             }
            }
 
            @Component({selector: 'ng2B', template: 'ng2B({{ value }})'})
            class Ng2ComponentB {
              value = 'bar';
-             constructor() { ng2ComponentBInstance = this; }
+             constructor() {
+               ng2ComponentBInstance = this;
+             }
            }
 
            // Define `ng1Module`
@@ -2178,7 +2199,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentFacade, Ng2ComponentA, Ng2ComponentB],
-             entryComponents: [Ng2ComponentA]
            })
            class Ng2Module {
              ngDoBootstrap() {}
@@ -2203,7 +2223,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should support single-slot transclusion with fallback content', async(() => {
+      it('should support single-slot transclusion with fallback content', waitForAsync(() => {
            let ng1ControllerInstances: any[] = [];
            let ng2ComponentInstance: Ng2Component;
 
@@ -2211,8 +2231,12 @@ withEachNg1Version(() => {
            const ng1Component: angular.IComponent = {
              template: 'ng1(<div ng-transclude>{{ $ctrl.value }}</div>)',
              transclude: true,
-             controller:
-                 class {value = 'from-ng1'; constructor() { ng1ControllerInstances.push(this); }}
+             controller: class {
+               value = 'from-ng1';
+               constructor() {
+                 ng1ControllerInstances.push(this);
+               }
+             }
            };
 
            // Define `Ng1ComponentFacade`
@@ -2227,7 +2251,9 @@ withEachNg1Version(() => {
            @Component({selector: 'ng2', template: 'ng2(<ng1>{{ value }}</ng1> | <ng1></ng1>)'})
            class Ng2Component {
              value = 'from-ng2';
-             constructor() { ng2ComponentInstance = this; }
+             constructor() {
+               ng2ComponentInstance = this;
+             }
            }
 
            // Define `ng1Module`
@@ -2239,7 +2265,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component]
            })
            class Ng2Module {
              ngDoBootstrap() {}
@@ -2259,7 +2284,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should support multi-slot transclusion', async(() => {
+      it('should support multi-slot transclusion', waitForAsync(() => {
            let ng2ComponentInstance: Ng2Component;
 
            // Define `ng1Component`
@@ -2293,7 +2318,9 @@ withEachNg1Version(() => {
            class Ng2Component {
              x = 'foo';
              y = 'bar';
-             constructor() { ng2ComponentInstance = this; }
+             constructor() {
+               ng2ComponentInstance = this;
+             }
            }
 
            // Define `ng1Module`
@@ -2305,7 +2332,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              schemas: [NO_ERRORS_SCHEMA]
            })
            class Ng2Module {
@@ -2326,7 +2352,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should support default slot (with fallback content)', async(() => {
+      it('should support default slot (with fallback content)', waitForAsync(() => {
            let ng1ControllerInstances: any[] = [];
            let ng2ComponentInstance: Ng2Component;
 
@@ -2334,8 +2360,12 @@ withEachNg1Version(() => {
            const ng1Component: angular.IComponent = {
              template: 'ng1(default(<div ng-transclude="">fallback-{{ $ctrl.value }}</div>))',
              transclude: {slotX: 'contentX', slotY: 'contentY'},
-             controller:
-                 class {value = 'ng1'; constructor() { ng1ControllerInstances.push(this); }}
+             controller: class {
+               value = 'ng1';
+               constructor() {
+                 ng1ControllerInstances.push(this);
+               }
+             }
            };
 
            // Define `Ng1ComponentFacade`
@@ -2368,7 +2398,9 @@ withEachNg1Version(() => {
            class Ng2Component {
              x = 'foo';
              y = 'bar';
-             constructor() { ng2ComponentInstance = this; }
+             constructor() {
+               ng2ComponentInstance = this;
+             }
            }
 
            // Define `ng1Module`
@@ -2380,7 +2412,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              schemas: [NO_ERRORS_SCHEMA]
            })
            class Ng2Module {
@@ -2404,7 +2435,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should support optional transclusion slots (with fallback content)', async(() => {
+      it('should support optional transclusion slots (with fallback content)', waitForAsync(() => {
            let ng1ControllerInstances: any[] = [];
            let ng2ComponentInstance: Ng2Component;
 
@@ -2417,7 +2448,11 @@ withEachNg1Version(() => {
                )`,
              transclude: {slotX: '?contentX', slotY: '?contentY'},
              controller: class {
-               x = 'ng1X'; y = 'ng1Y'; constructor() { ng1ControllerInstances.push(this); }
+               x = 'ng1X';
+               y = 'ng1Y';
+               constructor() {
+                 ng1ControllerInstances.push(this);
+               }
              }
            };
 
@@ -2441,7 +2476,9 @@ withEachNg1Version(() => {
            class Ng2Component {
              x = 'ng2X';
              y = 'ng2Y';
-             constructor() { ng2ComponentInstance = this; }
+             constructor() {
+               ng2ComponentInstance = this;
+             }
            }
 
            // Define `ng1Module`
@@ -2453,7 +2490,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              schemas: [NO_ERRORS_SCHEMA]
            })
            class Ng2Module {
@@ -2480,7 +2516,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should throw if a non-optional slot is not filled', async(() => {
+      it('should throw if a non-optional slot is not filled', waitForAsync(() => {
            let errorMessage: string;
 
            // Define `ng1Component`
@@ -2513,7 +2549,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component]
            })
            class Ng2Module {
              ngDoBootstrap() {}
@@ -2528,7 +2563,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should support structural directives in transcluded content', async(() => {
+      it('should support structural directives in transcluded content', waitForAsync(() => {
            let ng2ComponentInstance: Ng2Component;
 
            // Define `ng1Component`
@@ -2563,7 +2598,9 @@ withEachNg1Version(() => {
              x = 'foo';
              y = 'bar';
              show = true;
-             constructor() { ng2ComponentInstance = this; }
+             constructor() {
+               ng2ComponentInstance = this;
+             }
            }
 
            // Define `ng1Module`
@@ -2575,7 +2612,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              schemas: [NO_ERRORS_SCHEMA]
            })
            class Ng2Module {
@@ -2616,8 +2652,11 @@ withEachNg1Version(() => {
              scope: {inputA: '<'},
              bindToController: false,
              controllerAs: '$ctrl',
-             controller:
-                 class {$onChanges(changes: SimpleChanges) { controllerOnChangesA(changes); }}
+             controller: class {
+               $onChanges(changes: SimpleChanges) {
+                 controllerOnChangesA(changes);
+               }
+             }
            };
 
            const ng1DirectiveB: angular.IDirective = {
@@ -2625,8 +2664,11 @@ withEachNg1Version(() => {
              scope: {inputB: '<'},
              bindToController: true,
              controllerAs: '$ctrl',
-             controller:
-                 class {$onChanges(changes: SimpleChanges) { controllerOnChangesB(changes); }}
+             controller: class {
+               $onChanges(changes: SimpleChanges) {
+                 controllerOnChangesB(changes);
+               }
+             }
            };
 
            // Define `Ng1ComponentFacade`
@@ -2656,7 +2698,9 @@ withEachNg1Version(() => {
            class Ng2Component {
              data = {foo: 'bar'};
 
-             constructor() { ng2ComponentInstance = this; }
+             constructor() {
+               ng2ComponentInstance = this;
+             }
            }
 
            // Define `ng1Module`
@@ -2671,7 +2715,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentAFacade, Ng1ComponentBFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -2809,7 +2852,9 @@ withEachNg1Version(() => {
            class Ng2Component {
              data = {foo: 'bar'};
 
-             constructor() { ng2ComponentInstance = this; }
+             constructor() {
+               ng2ComponentInstance = this;
+             }
            }
 
            // Define `ng1Module`
@@ -2821,7 +2866,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentAFacade, Ng1ComponentBFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -2899,15 +2943,19 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should call `$onInit()` on controller', async(() => {
+      it('should call `$onInit()` on controller', waitForAsync(() => {
            // Define `ng1Directive`
            const ng1DirectiveA: angular.IDirective = {
              template: 'Called: {{ called }}',
              bindToController: false,
              controller: class {
-               constructor(private $scope: angular.IScope) { $scope['called'] = 'no'; }
+               constructor(private $scope: angular.IScope) {
+                 $scope['called'] = 'no';
+               }
 
-               $onInit() { this.$scope['called'] = 'yes'; }
+               $onInit() {
+                 this.$scope['called'] = 'yes';
+               }
              }
            };
 
@@ -2951,7 +2999,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentAFacade, Ng1ComponentBFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -2966,7 +3013,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should not call `$onInit()` on scope', async(() => {
+      it('should not call `$onInit()` on scope', waitForAsync(() => {
            // Define `ng1Directive`
            const ng1DirectiveA: angular.IDirective = {
              template: 'Called: {{ called }}',
@@ -3021,7 +3068,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentAFacade, Ng1ComponentBFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -3036,15 +3082,19 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should call `$postLink()` on controller', async(() => {
+      it('should call `$postLink()` on controller', waitForAsync(() => {
            // Define `ng1Directive`
            const ng1DirectiveA: angular.IDirective = {
              template: 'Called: {{ called }}',
              bindToController: false,
              controller: class {
-               constructor(private $scope: angular.IScope) { $scope['called'] = 'no'; }
+               constructor(private $scope: angular.IScope) {
+                 $scope['called'] = 'no';
+               }
 
-               $postLink() { this.$scope['called'] = 'yes'; }
+               $postLink() {
+                 this.$scope['called'] = 'yes';
+               }
              }
            };
 
@@ -3088,7 +3138,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentAFacade, Ng1ComponentBFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -3103,7 +3152,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should not call `$postLink()` on scope', async(() => {
+      it('should not call `$postLink()` on scope', waitForAsync(() => {
            // Define `ng1Directive`
            const ng1DirectiveA: angular.IDirective = {
              template: 'Called: {{ called }}',
@@ -3158,7 +3207,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentAFacade, Ng1ComponentBFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -3174,7 +3222,7 @@ withEachNg1Version(() => {
          }));
 
 
-      it('should call `$doCheck()` on controller', async(() => {
+      it('should call `$doCheck()` on controller', waitForAsync(() => {
            const controllerDoCheckA = jasmine.createSpy('controllerDoCheckA');
            const controllerDoCheckB = jasmine.createSpy('controllerDoCheckB');
 
@@ -3182,13 +3230,21 @@ withEachNg1Version(() => {
            const ng1DirectiveA: angular.IDirective = {
              template: 'ng1A',
              bindToController: false,
-             controller: class {$doCheck() { controllerDoCheckA(); }}
+             controller: class {
+               $doCheck() {
+                 controllerDoCheckA();
+               }
+             }
            };
 
            const ng1DirectiveB: angular.IDirective = {
              template: 'ng1B',
              bindToController: true,
-             controller: class {constructor() { (this as any)['$doCheck'] = controllerDoCheckB; }}
+             controller: class {
+               constructor() {
+                 (this as any)['$doCheck'] = controllerDoCheckB;
+               }
+             }
            };
 
            // Define `Ng1ComponentFacade`
@@ -3220,7 +3276,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentAFacade, Ng1ComponentBFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -3253,7 +3308,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should not call `$doCheck()` on scope', async(() => {
+      it('should not call `$doCheck()` on scope', waitForAsync(() => {
            const scopeDoCheck = jasmine.createSpy('scopeDoCheck');
 
            // Define `ng1Directive`
@@ -3261,7 +3316,9 @@ withEachNg1Version(() => {
              template: 'ng1A',
              bindToController: false,
              controller: class {
-               constructor(private $scope: angular.IScope) { $scope['$doCheck'] = scopeDoCheck; }
+               constructor(private $scope: angular.IScope) {
+                 $scope['$doCheck'] = scopeDoCheck;
+               }
              }
            };
 
@@ -3269,7 +3326,9 @@ withEachNg1Version(() => {
              template: 'ng1B',
              bindToController: true,
              controller: class {
-               constructor(private $scope: angular.IScope) { $scope['$doCheck'] = scopeDoCheck; }
+               constructor(private $scope: angular.IScope) {
+                 $scope['$doCheck'] = scopeDoCheck;
+               }
              }
            };
 
@@ -3302,7 +3361,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentAFacade, Ng1ComponentBFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -3327,7 +3385,7 @@ withEachNg1Version(() => {
          }));
 
 
-      it('should call `$onDestroy()` on controller', async(() => {
+      it('should call `$onDestroy()` on controller', waitForAsync(() => {
            const controllerOnDestroyA = jasmine.createSpy('controllerOnDestroyA');
            const controllerOnDestroyB = jasmine.createSpy('controllerOnDestroyB');
 
@@ -3337,7 +3395,11 @@ withEachNg1Version(() => {
              scope: {},
              bindToController: false,
              controllerAs: '$ctrl',
-             controller: class {$onDestroy() { controllerOnDestroyA(); }}
+             controller: class {
+               $onDestroy() {
+                 controllerOnDestroyA();
+               }
+             }
            };
 
            const ng1DirectiveB: angular.IDirective = {
@@ -3345,8 +3407,11 @@ withEachNg1Version(() => {
              scope: {},
              bindToController: true,
              controllerAs: '$ctrl',
-             controller:
-                 class {constructor() { (this as any)['$onDestroy'] = controllerOnDestroyB; }}
+             controller: class {
+               constructor() {
+                 (this as any)['$onDestroy'] = controllerOnDestroyB;
+               }
+             }
            };
 
            // Define `Ng1ComponentFacade`
@@ -3369,7 +3434,7 @@ withEachNg1Version(() => {
                {selector: 'ng2', template: '<div *ngIf="show"><ng1A></ng1A> | <ng1B></ng1B></div>'})
            class Ng2Component {
              // TODO(issue/24571): remove '!'.
-             @Input() show !: boolean;
+             @Input() show!: boolean;
            }
 
            // Define `ng1Module`
@@ -3381,7 +3446,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentAFacade, Ng1ComponentBFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -3420,7 +3484,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should not call `$onDestroy()` on scope', async(() => {
+      it('should not call `$onDestroy()` on scope', waitForAsync(() => {
            const scopeOnDestroy = jasmine.createSpy('scopeOnDestroy');
 
            // Define `ng1Directive`
@@ -3470,7 +3534,7 @@ withEachNg1Version(() => {
                {selector: 'ng2', template: '<div *ngIf="show"><ng1A></ng1A> | <ng1B></ng1B></div>'})
            class Ng2Component {
              // TODO(issue/24571): remove '!'.
-             @Input() show !: boolean;
+             @Input() show!: boolean;
            }
 
            // Define `ng1Module`
@@ -3482,7 +3546,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentAFacade, Ng1ComponentBFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -3516,7 +3579,7 @@ withEachNg1Version(() => {
          }));
 
       it('should be called in order `$onChanges()` > `$onInit()` > `$doCheck()` > `$postLink()`',
-         async(() => {
+         waitForAsync(() => {
            // Define `ng1Component`
            const ng1Component: angular.IComponent = {
              // `$doCheck()` will keep getting called as long as the interpolated value keeps
@@ -3526,13 +3589,21 @@ withEachNg1Version(() => {
              controller: class {
                calls: string[] = [];
 
-               $onChanges() { this.calls.push('$onChanges'); }
+               $onChanges() {
+                 this.calls.push('$onChanges');
+               }
 
-               $onInit() { this.calls.push('$onInit'); }
+               $onInit() {
+                 this.calls.push('$onInit');
+               }
 
-               $doCheck() { this.calls.push('$doCheck'); }
+               $doCheck() {
+                 this.calls.push('$doCheck');
+               }
 
-               $postLink() { this.calls.push('$postLink'); }
+               $postLink() {
+                 this.calls.push('$postLink');
+               }
              }
            };
 
@@ -3559,7 +3630,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -3577,14 +3647,16 @@ withEachNg1Version(() => {
     });
 
     describe('destroying the upgraded component', () => {
-      it('should destroy `$componentScope`', async(() => {
+      it('should destroy `$componentScope`', waitForAsync(() => {
            const scopeDestroyListener = jasmine.createSpy('scopeDestroyListener');
            let ng2ComponentAInstance: Ng2ComponentA;
 
            // Define `ng1Component`
            const ng1Component: angular.IComponent = {
              controller: class {
-               constructor($scope: angular.IScope) { $scope.$on('$destroy', scopeDestroyListener); }
+               constructor($scope: angular.IScope) {
+                 $scope.$on('$destroy', scopeDestroyListener);
+               }
              }
            };
 
@@ -3601,7 +3673,9 @@ withEachNg1Version(() => {
            class Ng2ComponentA {
              destroyIt = false;
 
-             constructor() { ng2ComponentAInstance = this; }
+             constructor() {
+               ng2ComponentAInstance = this;
+             }
            }
 
            @Component({selector: 'ng2B', template: '<ng1></ng1>'})
@@ -3616,7 +3690,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2ComponentA, Ng2ComponentB],
-             entryComponents: [Ng2ComponentA],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -3636,7 +3709,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should emit `$destroy` on `$element` and descendants', async(() => {
+      it('should emit `$destroy` on `$element` and descendants', waitForAsync(() => {
            const elementDestroyListener = jasmine.createSpy('elementDestroyListener');
            const descendantDestroyListener = jasmine.createSpy('descendantDestroyListener');
            let ng2ComponentAInstance: Ng2ComponentA;
@@ -3645,8 +3718,8 @@ withEachNg1Version(() => {
            const ng1Component: angular.IComponent = {
              controller: class {
                constructor($element: angular.IAugmentedJQuery) {
-                 $element.on !('$destroy', elementDestroyListener);
-                 $element.contents !().on !('$destroy', descendantDestroyListener);
+                 $element.on!('$destroy', elementDestroyListener);
+                 $element.contents!().on!('$destroy', descendantDestroyListener);
                }
              },
              template: '<div></div>'
@@ -3665,7 +3738,9 @@ withEachNg1Version(() => {
            class Ng2ComponentA {
              destroyIt = false;
 
-             constructor() { ng2ComponentAInstance = this; }
+             constructor() {
+               ng2ComponentAInstance = this;
+             }
            }
 
            @Component({selector: 'ng2B', template: '<ng1></ng1>'})
@@ -3680,7 +3755,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2ComponentA, Ng2ComponentB],
-             entryComponents: [Ng2ComponentA],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -3702,7 +3776,7 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should clear data on `$element` and descendants`', async(() => {
+      it('should clear data on `$element` and descendants`', waitForAsync(() => {
            let ng1ComponentElement: angular.IAugmentedJQuery;
            let ng2ComponentAInstance: Ng2ComponentA;
 
@@ -3710,8 +3784,8 @@ withEachNg1Version(() => {
            const ng1Component: angular.IComponent = {
              controller: class {
                constructor($element: angular.IAugmentedJQuery) {
-                 $element.data !('test', 1);
-                 $element.contents !().data !('test', 2);
+                 $element.data!('test', 1);
+                 $element.contents!().data!('test', 2);
 
                  ng1ComponentElement = $element;
                }
@@ -3732,7 +3806,9 @@ withEachNg1Version(() => {
            class Ng2ComponentA {
              destroyIt = false;
 
-             constructor() { ng2ComponentAInstance = this; }
+             constructor() {
+               ng2ComponentAInstance = this;
+             }
            }
 
            @Component({selector: 'ng2B', template: '<ng1></ng1>'})
@@ -3747,7 +3823,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2ComponentA, Ng2ComponentB],
-             entryComponents: [Ng2ComponentA],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -3758,18 +3833,18 @@ withEachNg1Version(() => {
            const element = html(`<ng2-a></ng2-a>`);
 
            bootstrap(platformBrowserDynamic(), Ng2Module, element, ng1Module).then(adapter => {
-             expect(ng1ComponentElement.data !('test')).toBe(1);
-             expect(ng1ComponentElement.contents !().data !('test')).toBe(2);
+             expect(ng1ComponentElement.data!('test')).toBe(1);
+             expect(ng1ComponentElement.contents!().data!('test')).toBe(2);
 
              ng2ComponentAInstance.destroyIt = true;
              $digest(adapter);
 
-             expect(ng1ComponentElement.data !('test')).toBeUndefined();
-             expect(ng1ComponentElement.contents !().data !('test')).toBeUndefined();
+             expect(ng1ComponentElement.data!('test')).toBeUndefined();
+             expect(ng1ComponentElement.contents!().data!('test')).toBeUndefined();
            });
          }));
 
-      it('should clear dom listeners on `$element` and descendants`', async(() => {
+      it('should clear dom listeners on `$element` and descendants`', waitForAsync(() => {
            const elementClickListener = jasmine.createSpy('elementClickListener');
            const descendantClickListener = jasmine.createSpy('descendantClickListener');
            let ng1DescendantElement: angular.IAugmentedJQuery;
@@ -3779,10 +3854,10 @@ withEachNg1Version(() => {
            const ng1Component: angular.IComponent = {
              controller: class {
                constructor($element: angular.IAugmentedJQuery) {
-                 ng1DescendantElement = $element.contents !();
+                 ng1DescendantElement = $element.contents!();
 
-                 $element.on !('click', elementClickListener);
-                 ng1DescendantElement.on !('click', descendantClickListener);
+                 $element.on!('click', elementClickListener);
+                 ng1DescendantElement.on!('click', descendantClickListener);
                }
              },
              template: '<div></div>'
@@ -3801,7 +3876,9 @@ withEachNg1Version(() => {
            class Ng2ComponentA {
              destroyIt = false;
 
-             constructor() { ng2ComponentAInstance = this; }
+             constructor() {
+               ng2ComponentAInstance = this;
+             }
            }
 
            @Component({selector: 'ng2B', template: '<ng1></ng1>'})
@@ -3816,7 +3893,6 @@ withEachNg1Version(() => {
            // Define `Ng2Module`
            @NgModule({
              declarations: [Ng1ComponentFacade, Ng2ComponentA, Ng2ComponentB],
-             entryComponents: [Ng2ComponentA],
              imports: [BrowserModule, UpgradeModule]
            })
            class Ng2Module {
@@ -3840,12 +3916,16 @@ withEachNg1Version(() => {
            });
          }));
 
-      it('should clean up `$doCheck()` watchers from the parent scope', async(() => {
+      it('should clean up `$doCheck()` watchers from the parent scope', waitForAsync(() => {
            let ng2Component: Ng2Component;
 
            // Define `ng1Component`
-           const ng1Component:
-               angular.IComponent = {template: 'ng1', controller: class {$doCheck() {}}};
+           const ng1Component: angular.IComponent = {
+             template: 'ng1',
+             controller: class {
+               $doCheck() {}
+             }
+           };
 
            // Define `Ng1ComponentFacade`
            @Directive({selector: 'ng1'})
@@ -3859,7 +3939,9 @@ withEachNg1Version(() => {
            @Component({selector: 'ng2', template: '<ng1 *ngIf="doShow"></ng1>'})
            class Ng2Component {
              doShow: boolean = false;
-             constructor(@Inject($SCOPE) public $scope: angular.IScope) { ng2Component = this; }
+             constructor(@Inject($SCOPE) public $scope: angular.IScope) {
+               ng2Component = this;
+             }
            }
 
            // Define `ng1Module`
@@ -3871,7 +3953,6 @@ withEachNg1Version(() => {
            @NgModule({
              imports: [BrowserModule, UpgradeModule],
              declarations: [Ng1ComponentFacade, Ng2Component],
-             entryComponents: [Ng2Component]
            })
            class Ng2Module {
              ngDoBootstrap() {}
@@ -3905,7 +3986,7 @@ withEachNg1Version(() => {
          }));
     });
 
-    it('should support ng2 > ng1 > ng2 (no inputs/outputs)', async(() => {
+    it('should support ng2 > ng1 > ng2 (no inputs/outputs)', waitForAsync(() => {
          // Define `ng1Component`
          const ng1Component: angular.IComponent = {template: 'ng1X(<ng2-b></ng2-b>)'};
 
@@ -3935,7 +4016,6 @@ withEachNg1Version(() => {
          // Define `Ng2Module`
          @NgModule({
            declarations: [Ng1ComponentFacade, Ng2ComponentA, Ng2ComponentB],
-           entryComponents: [Ng2ComponentA, Ng2ComponentB],
            imports: [BrowserModule, UpgradeModule],
            schemas: [NO_ERRORS_SCHEMA],
          })
@@ -3959,11 +4039,13 @@ withEachNg1Version(() => {
          // Define `ng1Component`
          class Ng1ControllerX {
            // TODO(issue/24571): remove '!'.
-           ng1XInputA !: string;
+           ng1XInputA!: string;
            ng1XInputB: any;
            ng1XInputC: any;
 
-           constructor() { ng1ControllerXInstance = this; }
+           constructor() {
+             ng1ControllerXInstance = this;
+           }
          }
          const ng1Component: angular.IComponent = {
            template: `
@@ -3988,15 +4070,15 @@ withEachNg1Version(() => {
          @Directive({selector: 'ng1X'})
          class Ng1ComponentXFacade extends UpgradeComponent {
            // TODO(issue/24571): remove '!'.
-           @Input() ng1XInputA !: string;
+           @Input() ng1XInputA!: string;
            @Input() ng1XInputB: any;
            @Input() ng1XInputC: any;
            // TODO(issue/24571): remove '!'.
-           @Output() ng1XInputCChange !: EventEmitter<any>;
+           @Output() ng1XInputCChange!: EventEmitter<any>;
            // TODO(issue/24571): remove '!'.
-           @Output() ng1XOutputA !: EventEmitter<any>;
+           @Output() ng1XOutputA!: EventEmitter<any>;
            // TODO(issue/24571): remove '!'.
-           @Output() ng1XOutputB !: EventEmitter<any>;
+           @Output() ng1XOutputB!: EventEmitter<any>;
 
            constructor(elementRef: ElementRef, injector: Injector) {
              super('ng1X', elementRef, injector);
@@ -4022,7 +4104,9 @@ withEachNg1Version(() => {
            ng2ADataB = {value: 'bar'};
            ng2ADataC = {value: 'baz'};
 
-           constructor() { ng2ComponentAInstance = this; }
+           constructor() {
+             ng2ComponentAInstance = this;
+           }
          }
 
          @Component({selector: 'ng2-b', template: 'ng2B({{ ng2BInputA }}, {{ ng2BInputC }})'})
@@ -4031,7 +4115,9 @@ withEachNg1Version(() => {
            @Input() ng2BInputC: any;
            @Output() ng2BOutputC = new EventEmitter();
 
-           constructor() { ng2ComponentBInstance = this; }
+           constructor() {
+             ng2ComponentBInstance = this;
+           }
          }
 
          // Define `ng1Module`
@@ -4043,7 +4129,6 @@ withEachNg1Version(() => {
          // Define `Ng2Module`
          @NgModule({
            declarations: [Ng1ComponentXFacade, Ng2ComponentA, Ng2ComponentB],
-           entryComponents: [Ng2ComponentA, Ng2ComponentB],
            imports: [BrowserModule, UpgradeModule],
            schemas: [NO_ERRORS_SCHEMA],
          })
@@ -4141,18 +4226,22 @@ withEachNg1Version(() => {
          });
        }));
 
-    it('should support ng2 > ng1 > ng2 > ng1 (with `require`)', async(() => {
+    it('should support ng2 > ng1 > ng2 > ng1 (with `require`)', waitForAsync(() => {
          // Define `ng1Component`
          const ng1ComponentA: angular.IComponent = {
            template: 'ng1A(<ng2-b></ng2-b>)',
-           controller: class {value = 'ng1A';}
+           controller: class {
+             value = 'ng1A';
+           }
          };
 
          const ng1ComponentB: angular.IComponent = {
            template:
                'ng1B(^^ng1A: {{ $ctrl.ng1A.value }} | ?^^ng1B: {{ $ctrl.ng1B.value }} | ^ng1B: {{ $ctrl.ng1BSelf.value }})',
            require: {ng1A: '^^', ng1B: '?^^', ng1BSelf: '^ng1B'},
-           controller: class {value = 'ng1B';}
+           controller: class {
+             value = 'ng1B';
+           }
          };
 
          // Define `Ng1ComponentFacade`
@@ -4189,7 +4278,6 @@ withEachNg1Version(() => {
          // Define `Ng2Module`
          @NgModule({
            declarations: [Ng1ComponentAFacade, Ng1ComponentBFacade, Ng2ComponentA, Ng2ComponentB],
-           entryComponents: [Ng2ComponentA, Ng2ComponentB],
            imports: [BrowserModule, UpgradeModule],
            schemas: [NO_ERRORS_SCHEMA],
          })

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -11,7 +11,7 @@ import {Injectable} from '@angular/core';
 
 @Injectable()
 export class ResourceLoaderImpl extends ResourceLoader {
-  get(url: string): Promise<string> {
+  override get(url: string): Promise<string> {
     let resolve: (result: any) => void;
     let reject: (error: any) => void;
     const promise = new Promise<string>((res, rej) => {
@@ -28,7 +28,7 @@ export class ResourceLoaderImpl extends ResourceLoader {
       // by IE10)
       const response = xhr.response || xhr.responseText;
 
-      // normalize IE9 bug (http://bugs.jquery.com/ticket/1450)
+      // normalize IE9 bug (https://bugs.jquery.com/ticket/1450)
       let status = xhr.status === 1223 ? 204 : xhr.status;
 
       // fix status code when it is 0 (0 status is undocumented).
@@ -45,7 +45,9 @@ export class ResourceLoaderImpl extends ResourceLoader {
       }
     };
 
-    xhr.onerror = function() { reject(`Failed to load ${url}`); };
+    xhr.onerror = function() {
+      reject(`Failed to load ${url}`);
+    };
 
     xhr.send();
     return promise;

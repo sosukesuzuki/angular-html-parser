@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -14,14 +14,19 @@ import {expect} from '@angular/platform-browser/testing/src/matchers';
 
 {
   describe('DefaultDomRendererV2', () => {
-    if (isNode) return;
+    if (isNode) {
+      // Jasmine will throw if there are no tests.
+      it('should pass', () => {});
+      return;
+    }
+
     let renderer: Renderer2;
 
     beforeEach(() => {
       TestBed.configureTestingModule({
         declarations: [
-          TestCmp, SomeApp, CmpEncapsulationEmulated, CmpEncapsulationNative, CmpEncapsulationNone,
-          CmpEncapsulationNative
+          TestCmp, SomeApp, CmpEncapsulationEmulated, CmpEncapsulationShadow, CmpEncapsulationNone,
+          CmpEncapsulationShadow
         ]
       });
       renderer = TestBed.createComponent(TestCmp).componentInstance.renderer;
@@ -98,16 +103,14 @@ import {expect} from '@angular/platform-browser/testing/src/matchers';
       });
     });
 
-    if (browserDetection.supportsDeprecatedShadowDomV0) {
+    if (browserDetection.supportsShadowDom) {
       it('should allow to style components with emulated encapsulation and no encapsulation inside of components with shadow DOM',
          () => {
            const fixture = TestBed.createComponent(SomeApp);
+           const cmp = fixture.debugElement.query(By.css('cmp-shadow')).nativeElement;
+           const shadow = cmp.shadowRoot.querySelector('.shadow');
 
-           const cmp = fixture.debugElement.query(By.css('cmp-native')).nativeElement;
-
-
-           const native = cmp.shadowRoot.querySelector('.native');
-           expect(window.getComputedStyle(native).color).toEqual('rgb(255, 0, 0)');
+           expect(window.getComputedStyle(shadow).color).toEqual('rgb(255, 0, 0)');
 
            const emulated = cmp.shadowRoot.querySelector('.emulated');
            expect(window.getComputedStyle(emulated).color).toEqual('rgb(0, 0, 255)');
@@ -116,16 +119,29 @@ import {expect} from '@angular/platform-browser/testing/src/matchers';
            expect(window.getComputedStyle(none).color).toEqual('rgb(0, 255, 0)');
          });
     }
-  });
-}
 
-@Component({
-  selector: 'cmp-native',
-  template: `<div class="native"></div><cmp-emulated></cmp-emulated><cmp-none></cmp-none>`,
-  styles: [`.native { color: red; }`],
-  encapsulation: ViewEncapsulation.Native
-})
-class CmpEncapsulationNative {
+    if (browserDetection.supportsTemplateElement) {
+      it('should be able to append children to a <template> element', () => {
+        const template = document.createElement('template');
+        const child = document.createElement('div');
+
+        renderer.appendChild(template, child);
+
+        expect(child.parentNode).toBe(template.content);
+      });
+
+      it('should be able to insert children before others in a <template> element', () => {
+        const template = document.createElement('template');
+        const child = document.createElement('div');
+        const otherChild = document.createElement('div');
+        template.content.appendChild(child);
+
+        renderer.insertBefore(template, otherChild, child);
+
+        expect(otherChild.parentNode).toBe(template.content);
+      });
+    }
+  });
 }
 
 @Component({
@@ -149,7 +165,7 @@ class CmpEncapsulationNone {
 @Component({
   selector: 'cmp-shadow',
   template: `<div class="shadow"></div><cmp-emulated></cmp-emulated><cmp-none></cmp-none>`,
-  styles: [`.native { color: red; }`],
+  styles: [`.shadow { color: red; }`],
   encapsulation: ViewEncapsulation.ShadowDom
 })
 class CmpEncapsulationShadow {
@@ -158,7 +174,7 @@ class CmpEncapsulationShadow {
 @Component({
   selector: 'some-app',
   template: `
-	  <cmp-native></cmp-native>
+	  <cmp-shadow></cmp-shadow>
 	  <cmp-emulated></cmp-emulated>
 	  <cmp-none></cmp-none>
   `,

@@ -1,6 +1,6 @@
 // #docregion
 import { Component, HostBinding } from '@angular/core';
-import { Router }                 from '@angular/router';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-compose-message',
@@ -8,8 +8,8 @@ import { Router }                 from '@angular/router';
   styleUrls: ['./compose-message.component.css']
 })
 export class ComposeMessageComponent {
-  details: string;
-  message: string;
+  details = '';
+  message = '';
   sending = false;
 
   constructor(private router: Router) {}

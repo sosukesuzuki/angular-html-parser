@@ -1,287 +1,189 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-// We are temporarily importing the existing viewEngine from core so we can be sure we are
-// correctly implementing its interfaces for backwards compatibility.
-import {Type} from '../core';
 import {Injector} from '../di/injector';
-import {Sanitizer} from '../sanitization/security';
-import {assertDataInRange} from '../util/assert';
+import {EnvironmentInjector, getNullInjector} from '../di/r3_injector';
+import {Type} from '../interface/type';
+import {ComponentRef} from '../linker/component_factory';
 
-import {assertComponentType} from './assert';
+import {ComponentFactory} from './component_ref';
 import {getComponentDef} from './definition';
-import {diPublicInInjector, getOrCreateNodeInjectorForNode} from './di';
-import {registerPostOrderHooks, registerPreOrderHooks} from './hooks';
-import {CLEAN_PROMISE, addToViewTree, createLView, createTView, getOrCreateTNode, getOrCreateTView, initNodeFlags, instantiateRootComponent, invokeHostBindingsInCreationMode, locateHostElement, queueComponentIndexForCheck, refreshDescendantViews} from './instructions/shared';
-import {ComponentDef, ComponentType, RenderFlags} from './interfaces/definition';
-import {TElementNode, TNode, TNodeFlags, TNodeType} from './interfaces/node';
-import {PlayerHandler} from './interfaces/player';
-import {RElement, Renderer3, RendererFactory3, domRendererFactory3} from './interfaces/renderer';
-import {CONTEXT, FLAGS, HEADER_OFFSET, LView, LViewFlags, RootContext, RootContextFlags, TVIEW} from './interfaces/view';
-import {enterView, getPreviousOrParentTNode, leaveView, resetComponentState, setActiveHostElement} from './state';
-import {publishDefaultGlobalUtils} from './util/global_utils';
-import {defaultScheduler, stringifyForError} from './util/misc_utils';
-import {getRootContext} from './util/view_traversal_utils';
-import {readPatchedLView, resetPreOrderHookFlags} from './util/view_utils';
-
-
-
-/** Options that control how the component should be bootstrapped. */
-export interface CreateComponentOptions {
-  /** Which renderer factory to use. */
-  rendererFactory?: RendererFactory3;
-
-  /** A custom sanitizer instance */
-  sanitizer?: Sanitizer;
-
-  /** A custom animation player handler */
-  playerHandler?: PlayerHandler;
-
-  /**
-   * Host element on which the component will be bootstrapped. If not specified,
-   * the component definition's `tag` is used to query the existing DOM for the
-   * element to bootstrap.
-   */
-  host?: RElement|string;
-
-  /** Module injector for the component. If unspecified, the injector will be NULL_INJECTOR. */
-  injector?: Injector;
-
-  /**
-   * List of features to be applied to the created component. Features are simply
-   * functions that decorate a component with a certain behavior.
-   *
-   * Typically, the features in this list are features that cannot be added to the
-   * other features list in the component definition because they rely on other factors.
-   *
-   * Example: `LifecycleHooksFeature` is a function that adds lifecycle hook capabilities
-   * to root components in a tree-shakable way. It cannot be added to the component
-   * features list because there's no way of knowing when the component will be used as
-   * a root component.
-   */
-  hostFeatures?: HostFeature[];
-
-  /**
-   * A function which is used to schedule change detection work in the future.
-   *
-   * When marking components as dirty, it is necessary to schedule the work of
-   * change detection in the future. This is done to coalesce multiple
-   * {@link markDirty} calls into a single changed detection processing.
-   *
-   * The default value of the scheduler is the `requestAnimationFrame` function.
-   *
-   * It is also useful to override this function for testing purposes.
-   */
-  scheduler?: (work: () => void) => void;
-}
-
-/** See CreateComponentOptions.hostFeatures */
-type HostFeature = (<T>(component: T, componentDef: ComponentDef<T>) => void);
-
-// TODO: A hack to not pull in the NullInjector from @angular/core.
-export const NULL_INJECTOR: Injector = {
-  get: (token: any, notFoundValue?: any) => {
-    throw new Error('NullInjector: Not found: ' + stringifyForError(token));
-  }
-};
+import {assertComponentDef} from './errors';
 
 /**
- * Bootstraps a Component into an existing host element and returns an instance
- * of the component.
+ * Creates a `ComponentRef` instance based on provided component type and a set of options.
  *
- * Use this function to bootstrap a component into the DOM tree. Each invocation
- * of this function will create a separate tree of components, injectors and
- * change detection cycles and lifetimes. To dynamically insert a new component
- * into an existing tree such that it shares the same injection, change detection
- * and object lifetime, use {@link ViewContainer#createComponent}.
+ * @usageNotes
  *
- * @param componentType Component to bootstrap
- * @param options Optional parameters which control bootstrapping
+ * The example below demonstrates how the `createComponent` function can be used
+ * to create an instance of a ComponentRef dynamically and attach it to an ApplicationRef,
+ * so that it gets included into change detection cycles.
+ *
+ * Note: the example uses standalone components, but the function can also be used for
+ * non-standalone components (declared in an NgModule) as well.
+ *
+ * ```typescript
+ * @Component({
+ *   standalone: true,
+ *   template: `Hello {{ name }}!`
+ * })
+ * class HelloComponent {
+ *   name = 'Angular';
+ * }
+ *
+ * @Component({
+ *   standalone: true,
+ *   template: `<div id="hello-component-host"></div>`
+ * })
+ * class RootComponent {}
+ *
+ * // Bootstrap an application.
+ * const applicationRef = await bootstrapApplication(RootComponent);
+ *
+ * // Locate a DOM node that would be used as a host.
+ * const host = document.getElementById('hello-component-host');
+ *
+ * // Get an `EnvironmentInjector` instance from the `ApplicationRef`.
+ * const environmentInjector = applicationRef.injector;
+ *
+ * // We can now create a `ComponentRef` instance.
+ * const componentRef = createComponent(HelloComponent, {host, environmentInjector});
+ *
+ * // Last step is to register the newly created ref using the `ApplicationRef` instance
+ * // to include the component view into change detection cycles.
+ * applicationRef.attachView(componentRef.hostView);
+ * ```
+ *
+ * @param component Component class reference.
+ * @param options Set of options to use:
+ *  * `environmentInjector`: An `EnvironmentInjector` instance to be used for the component, see
+ * additional info about it at https://angular.io/guide/standalone-components#environment-injectors.
+ *  * `hostElement` (optional): A DOM node that should act as a host node for the component. If not
+ * provided, Angular creates one based on the tag name used in the component selector (and falls
+ * back to using `div` if selector doesn't have tag name info).
+ *  * `elementInjector` (optional): An `ElementInjector` instance, see additional info about it at
+ * https://angular.io/guide/hierarchical-dependency-injection#elementinjector.
+ *  * `projectableNodes` (optional): A list of DOM nodes that should be projected through
+ *                      [`<ng-content>`](api/core/ng-content) of the new component instance.
+ * @returns ComponentRef instance that represents a given Component.
+ *
+ * @publicApi
  */
-export function renderComponent<T>(
-    componentType: ComponentType<T>|
-        Type<T>/* Type as workaround for: Microsoft/TypeScript/issues/4881 */
-    ,
-    opts: CreateComponentOptions = {}): T {
-  ngDevMode && publishDefaultGlobalUtils();
-  ngDevMode && assertComponentType(componentType);
-
-  // this is preemptively set to avoid having test and debug code accidentally
-  // read data from a previous application state...
-  setActiveHostElement(null);
-
-  const rendererFactory = opts.rendererFactory || domRendererFactory3;
-  const sanitizer = opts.sanitizer || null;
-  const componentDef = getComponentDef<T>(componentType) !;
-  if (componentDef.type != componentType) componentDef.type = componentType;
-
-  // The first index of the first selector is the tag name.
-  const componentTag = componentDef.selectors ![0] ![0] as string;
-  const hostRNode = locateHostElement(rendererFactory, opts.host || componentTag);
-  const rootFlags = componentDef.onPush ? LViewFlags.Dirty | LViewFlags.IsRoot :
-                                          LViewFlags.CheckAlways | LViewFlags.IsRoot;
-  const rootContext = createRootContext(opts.scheduler, opts.playerHandler);
-
-  const renderer = rendererFactory.createRenderer(hostRNode, componentDef);
-  const rootView: LView = createLView(
-      null, createTView(-1, null, 1, 0, null, null, null, null), rootContext, rootFlags, null, null,
-      rendererFactory, renderer, undefined, opts.injector || null);
-
-  const oldView = enterView(rootView, null);
-  let component: T;
-
-  // Will become true if the `try` block executes with no errors.
-  let safeToRunHooks = false;
-  try {
-    if (rendererFactory.begin) rendererFactory.begin();
-    const componentView = createRootComponentView(
-        hostRNode, componentDef, rootView, rendererFactory, renderer, sanitizer);
-    component = createRootComponent(
-        componentView, componentDef, rootView, rootContext, opts.hostFeatures || null);
-
-    addToViewTree(rootView, componentView);
-
-    refreshDescendantViews(rootView);  // creation mode pass
-    rootView[FLAGS] &= ~LViewFlags.CreationMode;
-    resetPreOrderHookFlags(rootView);
-    refreshDescendantViews(rootView);  // update mode pass
-    safeToRunHooks = true;
-  } finally {
-    leaveView(oldView, safeToRunHooks);
-    if (rendererFactory.end) rendererFactory.end();
-  }
-
-  return component;
+export function createComponent<C>(component: Type<C>, options: {
+  environmentInjector: EnvironmentInjector,
+  hostElement?: Element,
+  elementInjector?: Injector,
+  projectableNodes?: Node[][],
+}): ComponentRef<C> {
+  ngDevMode && assertComponentDef(component);
+  const componentDef = getComponentDef(component)!;
+  const elementInjector = options.elementInjector || getNullInjector();
+  const factory = new ComponentFactory<C>(componentDef);
+  return factory.create(
+      elementInjector, options.projectableNodes, options.hostElement, options.environmentInjector);
 }
 
 /**
- * Creates the root component view and the root component node.
+ * An interface that describes the subset of component metadata
+ * that can be retrieved using the `reflectComponentType` function.
  *
- * @param rNode Render host element.
- * @param def ComponentDef
- * @param rootView The parent view where the host node is stored
- * @param renderer The current renderer
- * @param sanitizer The sanitizer, if provided
- *
- * @returns Component view created
+ * @publicApi
  */
-export function createRootComponentView(
-    rNode: RElement | null, def: ComponentDef<any>, rootView: LView,
-    rendererFactory: RendererFactory3, renderer: Renderer3, sanitizer?: Sanitizer | null): LView {
-  resetComponentState();
-  const tView = rootView[TVIEW];
-  ngDevMode && assertDataInRange(rootView, 0 + HEADER_OFFSET);
-  rootView[0 + HEADER_OFFSET] = rNode;
-  const tNode: TElementNode = getOrCreateTNode(tView, null, 0, TNodeType.Element, null, null);
-  const componentView = createLView(
-      rootView, getOrCreateTView(def), null, def.onPush ? LViewFlags.Dirty : LViewFlags.CheckAlways,
-      rootView[HEADER_OFFSET], tNode, rendererFactory, renderer, sanitizer);
-
-  if (tView.firstTemplatePass) {
-    diPublicInInjector(getOrCreateNodeInjectorForNode(tNode, rootView), tView, def.type);
-    tNode.flags = TNodeFlags.isComponent;
-    initNodeFlags(tNode, rootView.length, 1);
-    queueComponentIndexForCheck(tNode);
-  }
-
-  // Store component view at node index, with node as the HOST
-  return rootView[HEADER_OFFSET] = componentView;
+export interface ComponentMirror<C> {
+  /**
+   * The component's HTML selector.
+   */
+  get selector(): string;
+  /**
+   * The type of component the factory will create.
+   */
+  get type(): Type<C>;
+  /**
+   * The inputs of the component.
+   */
+  get inputs(): ReadonlyArray<{readonly propName: string, readonly templateName: string}>;
+  /**
+   * The outputs of the component.
+   */
+  get outputs(): ReadonlyArray<{readonly propName: string, readonly templateName: string}>;
+  /**
+   * Selector for all <ng-content> elements in the component.
+   */
+  get ngContentSelectors(): ReadonlyArray<string>;
+  /**
+   * Whether this component is marked as standalone.
+   * Note: an extra flag, not present in `ComponentFactory`.
+   */
+  get isStandalone(): boolean;
 }
 
 /**
- * Creates a root component and sets it up with features and host bindings. Shared by
- * renderComponent() and ViewContainerRef.createComponent().
+ * Creates an object that allows to retrieve component metadata.
+ *
+ * @usageNotes
+ *
+ * The example below demonstrates how to use the function and how the fields
+ * of the returned object map to the component metadata.
+ *
+ * ```typescript
+ * @Component({
+ *   standalone: true,
+ *   selector: 'foo-component',
+ *   template: `
+ *     <ng-content></ng-content>
+ *     <ng-content select="content-selector-a"></ng-content>
+ *   `,
+ * })
+ * class FooComponent {
+ *   @Input('inputName') inputPropName: string;
+ *   @Output('outputName') outputPropName = new EventEmitter<void>();
+ * }
+ *
+ * const mirror = reflectComponentType(FooComponent);
+ * expect(mirror.type).toBe(FooComponent);
+ * expect(mirror.selector).toBe('foo-component');
+ * expect(mirror.isStandalone).toBe(true);
+ * expect(mirror.inputs).toEqual([{propName: 'inputName', templateName: 'inputPropName'}]);
+ * expect(mirror.outputs).toEqual([{propName: 'outputName', templateName: 'outputPropName'}]);
+ * expect(mirror.ngContentSelectors).toEqual([
+ *   '*',                 // first `<ng-content>` in a template, the selector defaults to `*`
+ *   'content-selector-a' // second `<ng-content>` in a template
+ * ]);
+ * ```
+ *
+ * @param component Component class reference.
+ * @returns An object that allows to retrieve component metadata.
+ *
+ * @publicApi
  */
-export function createRootComponent<T>(
-    componentView: LView, componentDef: ComponentDef<T>, rootView: LView, rootContext: RootContext,
-    hostFeatures: HostFeature[] | null): any {
-  const tView = rootView[TVIEW];
-  // Create directive instance with factory() and store at next index in viewData
-  const component = instantiateRootComponent(tView, rootView, componentDef);
+export function reflectComponentType<C>(component: Type<C>): ComponentMirror<C>|null {
+  const componentDef = getComponentDef(component);
+  if (!componentDef) return null;
 
-  rootContext.components.push(component);
-  componentView[CONTEXT] = component;
-
-  hostFeatures && hostFeatures.forEach((feature) => feature(component, componentDef));
-
-  // We want to generate an empty QueryList for root content queries for backwards
-  // compatibility with ViewEngine.
-  if (componentDef.contentQueries) {
-    componentDef.contentQueries(RenderFlags.Create, component, rootView.length - 1);
-  }
-
-  const rootTNode = getPreviousOrParentTNode();
-  if (tView.firstTemplatePass && componentDef.hostBindings) {
-    const elementIndex = rootTNode.index - HEADER_OFFSET;
-    setActiveHostElement(elementIndex);
-
-    const expando = tView.expandoInstructions !;
-    invokeHostBindingsInCreationMode(
-        componentDef, expando, component, rootTNode, tView.firstTemplatePass);
-
-    setActiveHostElement(null);
-  }
-
-  return component;
-}
-
-
-export function createRootContext(
-    scheduler?: (workFn: () => void) => void, playerHandler?: PlayerHandler|null): RootContext {
+  const factory = new ComponentFactory<C>(componentDef);
   return {
-    components: [],
-    scheduler: scheduler || defaultScheduler,
-    clean: CLEAN_PROMISE,
-    playerHandler: playerHandler || null,
-    flags: RootContextFlags.Empty
+    get selector(): string {
+      return factory.selector;
+    },
+    get type(): Type<C> {
+      return factory.componentType;
+    },
+    get inputs(): ReadonlyArray<{propName: string, templateName: string}> {
+      return factory.inputs;
+    },
+    get outputs(): ReadonlyArray<{propName: string, templateName: string}> {
+      return factory.outputs;
+    },
+    get ngContentSelectors(): ReadonlyArray<string> {
+      return factory.ngContentSelectors;
+    },
+    get isStandalone(): boolean {
+      return componentDef.standalone;
+    },
   };
-}
-
-/**
- * Used to enable lifecycle hooks on the root component.
- *
- * Include this feature when calling `renderComponent` if the root component
- * you are rendering has lifecycle hooks defined. Otherwise, the hooks won't
- * be called properly.
- *
- * Example:
- *
- * ```
- * renderComponent(AppComponent, {features: [RootLifecycleHooks]});
- * ```
- */
-export function LifecycleHooksFeature(component: any, def: ComponentDef<any>): void {
-  const rootTView = readPatchedLView(component) ![TVIEW];
-  const dirIndex = rootTView.data.length - 1;
-
-  registerPreOrderHooks(dirIndex, def, rootTView, -1, -1, -1);
-  // TODO(misko): replace `as TNode` with createTNode call. (needs refactoring to lose dep on
-  // LNode).
-  registerPostOrderHooks(
-      rootTView, { directiveStart: dirIndex, directiveEnd: dirIndex + 1 } as TNode);
-}
-
-/**
- * Wait on component until it is rendered.
- *
- * This function returns a `Promise` which is resolved when the component's
- * change detection is executed. This is determined by finding the scheduler
- * associated with the `component`'s render tree and waiting until the scheduler
- * flushes. If nothing is scheduled, the function returns a resolved promise.
- *
- * Example:
- * ```
- * await whenRendered(myComponent);
- * ```
- *
- * @param component Component to wait upon
- * @returns Promise which resolves when the component is rendered.
- */
-export function whenRendered(component: any): Promise<null> {
-  return getRootContext(component).clean;
 }

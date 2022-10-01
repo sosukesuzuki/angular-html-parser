@@ -1,11 +1,12 @@
 # Angular documentation project (https://angular.io)
 
-Everything in this folder is part of the documentation project. This includes
+Everything in this folder is part of the documentation project. This includes:
 
-* the web site for displaying the documentation
+* the web site for displaying the documentation.
 * the dgeni configuration for converting source files to rendered files that can be viewed in the web site.
 * the tooling for setting up examples for development; and generating live-example and zip files from the examples.
 
+<a name="developer-tasks"></a>
 ## Developer tasks
 
 We use [Yarn](https://yarnpkg.com) to manage the dependencies and to run build tasks.
@@ -18,9 +19,6 @@ Here are the most important tasks you might need to use:
 
 * `yarn build` - create a production build of the application (after installing dependencies, boilerplate, etc).
 * `yarn build-local` - same as `build`, but use `setup-local` instead of `setup`.
-* `yarn build-local-with-ivy` - same as `build-local`, but in addition also turns on `ivy` mode in aio.
-                          (Note: To turn on `ivy` mode in examples, see `yarn boilerplate:add` below.)
-
 * `yarn start` - run a development web server that watches the files; then builds the doc-viewer and reloads the page, as necessary.
 * `yarn serve-and-sync` - run both the `docs-watch` and `start` in the same console.
 * `yarn lint` - check that the doc-viewer code follows our style rules.
@@ -34,9 +32,9 @@ Here are the most important tasks you might need to use:
 * `yarn docs-test` - run the unit tests for the doc generation code.
 
 * `yarn boilerplate:add` - generate all the boilerplate code for the examples, so that they can be run locally.
-* `yarn boilerplate:add:ivy` - same as `boilerplate:add` but also turns on `ivy` mode.
-
 * `yarn boilerplate:remove` - remove all the boilerplate code that was added via `yarn boilerplate:add`.
+* `yarn create-example` - create a new example directory containing initial source files.
+
 * `yarn generate-stackblitz` - generate the stackblitz files that are used by the `live-example` tags in the docs.
 * `yarn generate-zips` - generate the zip files from the examples. Zip available via the `live-example` tags in the docs.
 
@@ -44,7 +42,6 @@ Here are the most important tasks you might need to use:
   - `--setup`: generate boilerplate, force webdriver update & other setup, then run tests.
   - `--local`: run e2e tests with the local version of Angular contained in the "dist" folder.
                _Requires `--setup` in order to take effect._
-  - `--ivy`: run e2e tests in `ivy` mode.
   - `--filter=foo`: limit e2e tests to those containing the word "foo".
 
 > **Note for Windows users**
@@ -68,7 +65,7 @@ serve the files in `dist/` with `yarn http-server dist -p 4200`.
 
 There are two types of content in the documentation:
 
-* **API docs**: descriptions of the modules, classes, interfaces, decorators, etc that make up the Angular platform.
+* **API docs**: descriptions of all that make up the Angular platform, such as the modules, classes, interfaces or decorators.
 API docs are generated directly from the source code.
 The source code is contained in TypeScript files, located in the `angular/packages` folder.
 Each API item may have a preceding comment, which contains JSDoc style tags and content.
@@ -104,7 +101,7 @@ You also want to see those changes displayed properly in the doc viewer
 with a quick, edit/view cycle time.
 
 For this purpose, use the `yarn docs-watch` task, which watches for changes to source files and only
-re-processes the the files necessary to generate the docs that are related to the file that has changed.
+re-processes the files necessary to generate the docs that are related to the file that has changed.
 Since this task takes shortcuts, it is much faster (often less than 1 second) but it won't produce full
 fidelity content. For example, links to other docs and code examples may not render correctly. This is
 most particularly noticed in links to other docs and in the embedded examples, which may not always render

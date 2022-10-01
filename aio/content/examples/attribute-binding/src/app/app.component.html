@@ -1,10 +1,11 @@
 
 <h1>Attribute, class, and style bindings</h1>
 <h2>Attribute binding</h2>
-<!-- #docregion attrib-binding-colspan -->
 <table border=1>
+  <!-- #docregion colspan -->
   <!--  expression calculates colspan=2 -->
   <tr><td [attr.colspan]="1 + 1">One-Two</td></tr>
+  <!-- #enddocregion colspan -->
 
   <!-- ERROR: There is no `colspan` property to set!
     <tr><td colspan="{{1 + 1}}">Three-Four</td></tr>
@@ -16,50 +17,56 @@
 
   <tr><td>Five</td><td>Six</td></tr>
 </table>
-<!-- #enddocregion attrib-binding-colspan -->
 
 <div>
   <!-- #docregion attrib-binding-aria -->
   <!-- create and set an aria attribute for assistive technology -->
-  <button [attr.aria-label]="actionName">{{actionName}} with Aria</button>
+  <button type="button" [attr.aria-label]="actionName">{{actionName}} with Aria</button>
   <!-- #enddocregion attrib-binding-aria -->
 </div>
 
 <hr />
 
-<h2>Class binding</h2>
+<h2>Styling precedence</h2>
 
-<!-- #docregion is-special -->
-<h3>toggle the "special" class on/off with a property:</h3>
-<div [class.special]="isSpecial">The class binding is special.</div>
+<!-- #docregion basic-specificity -->
+<h3>Basic specificity</h3>
 
-<h3>binding to class.special overrides the class attribute:</h3>
-<div class="special" [class.special]="!isSpecial">This one is not so special.</div>
+<!-- The `class.special` binding overrides any value for the `special` class in `classExpression`.  -->
+<div [class.special]="isSpecial" [class]="classExpression">Some text.</div>
 
-<h3>Using the bind- syntax:</h3>
-<div bind-class.special="isSpecial">This class binding is special too.</div>
-<!-- #enddocregion is-special -->
+<!-- The `style.border` binding overrides any value for the `border` property in `styleExpression`.  -->
+<div [style.border]="border" [style]="styleExpression">Some text.</div>
+<!-- #enddocregion basic-specificity -->
 
-<!-- #docregion add-class -->
-<h3>Add a class:</h3>
-<div class="item clearance special" [class.item-clearance]="itemClearance">Add another class</div>
-<!-- #enddocregion add-class -->
+<!-- #docregion source-specificity -->
+<h3>Source specificity</h3>
 
-<!-- #docregion class-override -->
-<h3>Overwrite all existing classes with a new class:</h3>
-<div class="item clearance special" [attr.class]="resetClasses">Reset all classes at once</div>
-<!-- #enddocregion class-override -->
+<!-- The `class.special` template binding overrides any host binding to the `special` class set by `dirWithClassBinding` or `comp-with-host-binding`.-->
 
-<hr />
+<comp-with-host-binding [class.special]="isSpecial" dirWithClassBinding></comp-with-host-binding>
 
-<h2>Style binding</h2>
 
-<!-- #docregion style-binding-->
-<button [style.color]="isSpecial ? 'red': 'green'">Red</button>
-<button [style.background-color]="canSave ? 'cyan': 'grey'" >Save</button>
-<!-- #enddocregion style-binding -->
+<!-- The `style.color` template binding overrides any host binding to the `color` property set by `dirWithStyleBinding` or `comp-with-host-binding`. -->
+<div>
+  <comp-with-host-binding [style.color]="color" dirWithStyleBinding></comp-with-host-binding>
+</div>
 
-<!-- #docregion style-binding-condition-->
-<button [style.font-size.em]="isSpecial ? 3 : 1" >Big</button>
-<button [style.font-size.%]="!isSpecial ? 150 : 50" >Small</button>
-<!-- #enddocregion style-binding-condition-->
+<!-- #docregion dynamic-priority -->
+<h3>Dynamic vs static</h3>
+
+<!-- If `classExpression` has a value for the `special` class, this value overrides the `class="special"` below -->
+<div class="special" [class]="classExpression">Some text.</div>
+
+<!-- If `styleExpression` has a value for the `border` property, this value overrides the `style="border: dotted darkblue 3px"` below -->
+<div style="border: dotted darkblue 3px" [style]="styleExpression">Some text.</div>
+
+<!-- #enddocregion dynamic-priority -->
+
+<div class="readability">
+  <!-- #docregion style-delegation -->
+  <comp-with-host-binding dirWithHostBinding></comp-with-host-binding>
+  <!-- #enddocregion style-delegation -->
+</div>
+
+<app-my-input-with-attribute-decorator type="number"></app-my-input-with-attribute-decorator>

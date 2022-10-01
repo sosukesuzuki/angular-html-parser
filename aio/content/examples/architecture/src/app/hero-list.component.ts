@@ -1,7 +1,7 @@
-import { Component, OnInit }   from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 
-import { Hero }                from './hero';
-import { HeroService }         from './hero.service';
+import { Hero } from './hero';
+import { HeroService } from './hero.service';
 
 // #docregion metadata, providers
 @Component({
@@ -13,8 +13,8 @@ import { HeroService }         from './hero.service';
 // #docregion class
 export class HeroListComponent implements OnInit {
   // #enddocregion metadata
-  heroes: Hero[];
-  selectedHero: Hero;
+  heroes: Hero[] = [];
+  selectedHero: Hero | undefined;
 
   // #docregion ctor
   constructor(private service: HeroService) { }

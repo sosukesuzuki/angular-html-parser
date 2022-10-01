@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {AnimationOptions, animate, state, style, transition} from '@angular/animations';
+import {animate, AnimationOptions, state, style, transition} from '@angular/animations';
 import {AnimationTransitionInstruction} from '@angular/animations/browser/src/dsl/animation_transition_instruction';
 import {AnimationTrigger} from '@angular/animations/browser/src/dsl/animation_trigger';
 
@@ -16,8 +16,12 @@ import {makeTrigger} from '../shared';
 
 {
   describe('AnimationTrigger', () => {
-    // these tests are only mean't to be run within the DOM (for now)
-    if (isNode) return;
+    // these tests are only meant to be run within the DOM (for now)
+    if (isNode) {
+      // Jasmine will throw if there are no tests.
+      it('should pass', () => {});
+      return;
+    }
 
     let element: any;
     beforeEach(() => {
@@ -25,27 +29,30 @@ import {makeTrigger} from '../shared';
       document.body.appendChild(element);
     });
 
-    afterEach(() => { document.body.removeChild(element); });
+    afterEach(() => {
+      document.body.removeChild(element);
+    });
 
     describe('trigger validation', () => {
       it('should group errors together for an animation trigger', () => {
         expect(() => {
           makeTrigger('myTrigger', [transition('12345', animate(3333))]);
-        }).toThrowError(/Animation parsing for the myTrigger trigger have failed/);
+        }).toThrowError(/NG03403: Animation parsing for the myTrigger trigger have failed/);
       });
 
       it('should throw an error when a transition within a trigger contains an invalid expression',
          () => {
-           expect(
-               () => { makeTrigger('name', [transition('somethingThatIsWrong', animate(3333))]); })
+           expect(() => {
+             makeTrigger('name', [transition('somethingThatIsWrong', animate(3333))]);
+           })
                .toThrowError(
-                   /- The provided transition expression "somethingThatIsWrong" is not supported/);
+                   /- NG03015: The provided transition expression "somethingThatIsWrong" is not supported/);
          });
 
       it('should throw an error if an animation alias is used that is not yet supported', () => {
         expect(() => {
           makeTrigger('name', [transition(':angular', animate(3333))]);
-        }).toThrowError(/- The transition alias value ":angular" is not supported/);
+        }).toThrowError(/- NG03016: The transition alias value ":angular" is not supported/);
       });
     });
 
@@ -58,8 +65,10 @@ import {makeTrigger} from '../shared';
           transition('off => on', animate(1000)),
         ]);
 
-        expect(result.states['on'].buildStyles({}, [])).toEqual({width: 0});
-        expect(result.states['off'].buildStyles({}, [])).toEqual({width: 100});
+        expect(result.states.get('on')!.buildStyles({}, []))
+            .toEqual(new Map<string, string|number>([['width', 0]]));
+        expect(result.states.get('off')!.buildStyles({}, []))
+            .toEqual(new Map<string, string|number>([['width', 100]]));
         expect(result.transitionFactories.length).toEqual(2);
       });
 
@@ -69,16 +78,17 @@ import {makeTrigger} from '../shared';
           transition('off => on', animate(1000))
         ]);
 
-
-        expect(result.states['on'].buildStyles({}, [])).toEqual({width: 50});
-        expect(result.states['off'].buildStyles({}, [])).toEqual({width: 50});
+        expect(result.states.get('on')!.buildStyles({}, []))
+            .toEqual(new Map<string, string|number>([['width', 50]]));
+        expect(result.states.get('off')!.buildStyles({}, []))
+            .toEqual(new Map<string, string|number>([['width', 50]]));
       });
 
       it('should find the first transition that matches', () => {
         const result = makeTrigger(
             'name', [transition('a => b', animate(1234)), transition('b => c', animate(5678))]);
 
-        const trans = buildTransition(result, element, 'b', 'c') !;
+        const trans = buildTransition(result, element, 'b', 'c')!;
         expect(trans.timelines.length).toEqual(1);
         const timeline = trans.timelines[0];
         expect(timeline.duration).toEqual(5678);
@@ -90,13 +100,13 @@ import {makeTrigger} from '../shared';
           transition('* => *', animate(9999))
         ]);
 
-        let trans = buildTransition(result, element, 'b', 'c') !;
+        let trans = buildTransition(result, element, 'b', 'c')!;
         expect(trans.timelines[0].duration).toEqual(5678);
 
-        trans = buildTransition(result, element, 'a', 'b') !;
+        trans = buildTransition(result, element, 'a', 'b')!;
         expect(trans.timelines[0].duration).toEqual(1234);
 
-        trans = buildTransition(result, element, 'c', 'c') !;
+        trans = buildTransition(result, element, 'c', 'c')!;
         expect(trans.timelines[0].duration).toEqual(9999);
       });
 
@@ -110,23 +120,23 @@ import {makeTrigger} from '../shared';
       it('should support bi-directional transition expressions', () => {
         const result = makeTrigger('name', [transition('a <=> b', animate(2222))]);
 
-        const t1 = buildTransition(result, element, 'a', 'b') !;
+        const t1 = buildTransition(result, element, 'a', 'b')!;
         expect(t1.timelines[0].duration).toEqual(2222);
 
-        const t2 = buildTransition(result, element, 'b', 'a') !;
+        const t2 = buildTransition(result, element, 'b', 'a')!;
         expect(t2.timelines[0].duration).toEqual(2222);
       });
 
       it('should support multiple transition statements in one string', () => {
         const result = makeTrigger('name', [transition('a => b, b => a, c => *', animate(1234))]);
 
-        const t1 = buildTransition(result, element, 'a', 'b') !;
+        const t1 = buildTransition(result, element, 'a', 'b')!;
         expect(t1.timelines[0].duration).toEqual(1234);
 
-        const t2 = buildTransition(result, element, 'b', 'a') !;
+        const t2 = buildTransition(result, element, 'b', 'a')!;
         expect(t2.timelines[0].duration).toEqual(1234);
 
-        const t3 = buildTransition(result, element, 'c', 'a') !;
+        const t3 = buildTransition(result, element, 'c', 'a')!;
         expect(t3.timelines[0].duration).toEqual(1234);
       });
 
@@ -138,9 +148,12 @@ import {makeTrigger} from '../shared';
                   'a => b', [style({height: '{{ a }}'}), animate(1000, style({height: '{{ b }}'}))],
                   buildParams({a: '100px', b: '200px'}))]);
 
-          const trans = buildTransition(result, element, 'a', 'b') !;
+          const trans = buildTransition(result, element, 'a', 'b')!;
           const keyframes = trans.timelines[0].keyframes;
-          expect(keyframes).toEqual([{height: '100px', offset: 0}, {height: '200px', offset: 1}]);
+          expect(keyframes).toEqual([
+            new Map<string, string|number>([['height', '100px'], ['offset', 0]]),
+            new Map<string, string|number>([['height', '200px'], ['offset', 1]])
+          ]);
         });
 
         it('should substitute variable params provided directly within the transition match',
@@ -153,11 +166,13 @@ import {makeTrigger} from '../shared';
                      buildParams({a: '100px', b: '200px'}))]);
 
              const trans =
-                 buildTransition(result, element, 'a', 'b', {}, buildParams({a: '300px'})) !;
+                 buildTransition(result, element, 'a', 'b', {}, buildParams({a: '300px'}))!;
 
              const keyframes = trans.timelines[0].keyframes;
-             expect(keyframes).toEqual(
-                 [{height: '300px', offset: 0}, {height: '200px', offset: 1}]);
+             expect(keyframes).toEqual([
+               new Map<string, string|number>([['height', '300px'], ['offset', 0]]),
+               new Map<string, string|number>([['height', '200px'], ['offset', 1]])
+             ]);
            });
       });
 
@@ -167,7 +182,7 @@ import {makeTrigger} from '../shared';
           transition('true <=> false', animate(1234))
         ]);
 
-        const trans = buildTransition(result, element, false, true) !;
+        const trans = buildTransition(result, element, false, true)!;
         expect(trans.timelines[0].duration).toEqual(1234);
       });
 
@@ -177,7 +192,7 @@ import {makeTrigger} from '../shared';
           transition('1 <=> 0', animate(4567))
         ]);
 
-        const trans = buildTransition(result, element, false, true) !;
+        const trans = buildTransition(result, element, false, true)!;
         expect(trans.timelines[0].duration).toEqual(4567);
       });
 
@@ -188,9 +203,10 @@ import {makeTrigger} from '../shared';
              transition('1 <=> 0', animate(4567))
            ]);
 
-           const trans = buildTransition(result, element, false, true) !;
+           const trans = buildTransition(result, element, false, true)!;
            expect(trans.timelines[0].keyframes).toEqual([
-             {offset: 0, color: 'red'}, {offset: 1, color: 'green'}
+             new Map<string, string|number>([['offset', 0], ['color', 'red']]),
+             new Map<string, string|number>([['offset', 1], ['color', 'green']])
            ]);
          });
 
@@ -201,9 +217,10 @@ import {makeTrigger} from '../shared';
              transition('true <=> false', animate(4567))
            ]);
 
-           const trans = buildTransition(result, element, false, true) !;
+           const trans = buildTransition(result, element, false, true)!;
            expect(trans.timelines[0].keyframes).toEqual([
-             {offset: 0, color: 'orange'}, {offset: 1, color: 'blue'}
+             new Map<string, string|number>([['offset', 0], ['color', 'orange']]),
+             new Map<string, string|number>([['offset', 1], ['color', 'blue']])
            ]);
          });
 
@@ -214,7 +231,7 @@ import {makeTrigger} from '../shared';
         ]);
 
         expect(() => {
-          const trans = buildTransition(result, element, false, true) !;
+          const trans = buildTransition(result, element, false, true)!;
         }).not.toThrow();
       });
 
@@ -222,14 +239,14 @@ import {makeTrigger} from '../shared';
         it('should alias the :enter transition as void => *', () => {
           const result = makeTrigger('name', [transition(':enter', animate(3333))]);
 
-          const trans = buildTransition(result, element, 'void', 'something') !;
+          const trans = buildTransition(result, element, 'void', 'something')!;
           expect(trans.timelines[0].duration).toEqual(3333);
         });
 
         it('should alias the :leave transition as * => void', () => {
           const result = makeTrigger('name', [transition(':leave', animate(3333))]);
 
-          const trans = buildTransition(result, element, 'something', 'void') !;
+          const trans = buildTransition(result, element, 'something', 'void')!;
           expect(trans.timelines[0].duration).toEqual(3333);
         });
       });
@@ -242,12 +259,12 @@ function buildTransition(
     fromOptions?: AnimationOptions, toOptions?: AnimationOptions): AnimationTransitionInstruction|
     null {
   const params = toOptions && toOptions.params || {};
-  const trans = trigger.matchTransition(fromState, toState, element, params) !;
+  const trans = trigger.matchTransition(fromState, toState, element, params)!;
   if (trans) {
     const driver = new MockAnimationDriver();
     return trans.build(
         driver, element, fromState, toState, ENTER_CLASSNAME, LEAVE_CLASSNAME, fromOptions,
-        toOptions) !;
+        toOptions)!;
   }
   return null;
 }

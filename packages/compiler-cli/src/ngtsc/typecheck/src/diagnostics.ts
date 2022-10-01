@@ -1,66 +1,24 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import {ParseSourceSpan, ParseSpan, Position} from '@angular/compiler';
-import * as ts from 'typescript';
+import {AbsoluteSourceSpan, ParseSourceSpan} from '@angular/compiler';
+import ts from 'typescript';
 
-import {ClassDeclaration} from '../../reflection';
-import {getSourceFile, getTokenAtPosition} from '../../util/src/typescript';
+import {TemplateDiagnostic, TemplateId} from '../api';
+import {makeTemplateDiagnostic} from '../diagnostics';
 
-/**
- * FIXME: Taken from packages/compiler-cli/src/transformers/api.ts to prevent circular dep,
- *  modified to account for new span notation.
- */
-export interface DiagnosticMessageChain {
-  messageText: string;
-  position?: Position;
-  next?: DiagnosticMessageChain;
-}
+import {getTemplateMapping, TemplateSourceResolver} from './tcb_util';
 
-export interface Diagnostic {
-  messageText: string;
-  span?: ParseSourceSpan;
-  position?: Position;
-  chain?: DiagnosticMessageChain;
-  category: ts.DiagnosticCategory;
-  code: number;
-  source: 'angular';
-}
-
-export interface SourceLocation {
-  sourceReference: string;
-  start: number;
-  end: number;
-}
-
-/**
- * An `AbsoluteSpan` is the result of translating the `ParseSpan` of `AST` template expression nodes
- * to their absolute positions, as the `ParseSpan` is always relative to the start of the
- * expression, not the full template.
- */
-export interface AbsoluteSpan {
-  __brand__: 'AbsoluteSpan';
-  start: number;
-  end: number;
-}
-
-/**
- * Translates a `ParseSpan` into an `AbsoluteSpan` by incorporating the location information that
- * the `ParseSourceSpan` represents.
- */
-export function toAbsoluteSpan(span: ParseSpan, sourceSpan: ParseSourceSpan): AbsoluteSpan {
-  const offset = sourceSpan.start.offset;
-  return <AbsoluteSpan>{start: span.start + offset, end: span.end + offset};
-}
 
 /**
  * Wraps the node in parenthesis such that inserted span comments become attached to the proper
- * node. This is an alias for `ts.createParen` with the benefit that it signifies that the
- * inserted parenthesis are for diagnostic purposes, not for correctness of the rendered TCB code.
+ * node. This is an alias for `ts.factory.createParenthesizedExpression` with the benefit that it
+ * signifies that the inserted parenthesis are for diagnostic purposes, not for correctness of the
+ * rendered TCB code.
  *
  * Note that it is important that nodes and its attached comment are not wrapped into parenthesis
  * by default, as it prevents correct translation of e.g. diagnostics produced for incorrect method
@@ -68,42 +26,40 @@ export function toAbsoluteSpan(span: ParseSpan, sourceSpan: ParseSourceSpan): Ab
  * positional comment would be located within that node, resulting in a mismatch.
  */
 export function wrapForDiagnostics(expr: ts.Expression): ts.Expression {
-  return ts.createParen(expr);
+  return ts.factory.createParenthesizedExpression(expr);
+}
+
+/**
+ * Wraps the node in parenthesis such that inserted span comments become attached to the proper
+ * node. This is an alias for `ts.factory.createParenthesizedExpression` with the benefit that it
+ * signifies that the inserted parenthesis are for use by the type checker, not for correctness of
+ * the rendered TCB code.
+ */
+export function wrapForTypeChecker(expr: ts.Expression): ts.Expression {
+  return ts.factory.createParenthesizedExpression(expr);
 }
 
 /**
  * Adds a synthetic comment to the expression that represents the parse span of the provided node.
  * This comment can later be retrieved as trivia of a node to recover original source locations.
  */
-export function addParseSpanInfo(node: ts.Node, span: AbsoluteSpan | ParseSourceSpan): void {
+export function addParseSpanInfo(node: ts.Node, span: AbsoluteSourceSpan|ParseSourceSpan): void {
   let commentText: string;
-  if (isAbsoluteSpan(span)) {
+  if (span instanceof AbsoluteSourceSpan) {
     commentText = `${span.start},${span.end}`;
   } else {
     commentText = `${span.start.offset},${span.end.offset}`;
   }
   ts.addSyntheticTrailingComment(
-      node, ts.SyntaxKind.MultiLineCommentTrivia, commentText,
-      /* hasTrailingNewLine */ false);
-}
-
-function isAbsoluteSpan(span: AbsoluteSpan | ParseSourceSpan): span is AbsoluteSpan {
-  return typeof span.start === 'number';
+      node, ts.SyntaxKind.MultiLineCommentTrivia, commentText, /* hasTrailingNewLine */ false);
 }
 
 /**
- * Adds a synthetic comment to the function declaration that contains the source location
+ * Adds a synthetic comment to the function declaration that contains the template id
  * of the class declaration.
  */
-export function addSourceReferenceName(
-    tcb: ts.FunctionDeclaration, source: ClassDeclaration): void {
-  const commentText = getSourceReferenceName(source);
-  ts.addSyntheticLeadingComment(tcb, ts.SyntaxKind.MultiLineCommentTrivia, commentText, true);
-}
-
-export function getSourceReferenceName(source: ClassDeclaration): string {
-  const fileName = getSourceFile(source).fileName;
-  return `${fileName}#${source.name.text}`;
+export function addTemplateId(tcb: ts.FunctionDeclaration, id: TemplateId): void {
+  ts.addSyntheticLeadingComment(tcb, ts.SyntaxKind.MultiLineCommentTrivia, id, true);
 }
 
 /**
@@ -119,6 +75,8 @@ export function shouldReportDiagnostic(diagnostic: ts.Diagnostic): boolean {
     return false;
   } else if (code === 2695 /* Left side of comma operator is unused and has no side effects. */) {
     return false;
+  } else if (code === 7006 /* Parameter '$event' implicitly has an 'any' type. */) {
+    return false;
   }
   return true;
 }
@@ -132,101 +90,18 @@ export function shouldReportDiagnostic(diagnostic: ts.Diagnostic): boolean {
  * file from being reported as type-check errors.
  */
 export function translateDiagnostic(
-    diagnostic: ts.Diagnostic, resolveParseSource: (sourceLocation: SourceLocation) =>
-                                   ParseSourceSpan | null): Diagnostic|null {
+    diagnostic: ts.Diagnostic, resolver: TemplateSourceResolver): TemplateDiagnostic|null {
   if (diagnostic.file === undefined || diagnostic.start === undefined) {
     return null;
   }
-
-  // Locate the node that the diagnostic is reported on and determine its location in the source.
-  const node = getTokenAtPosition(diagnostic.file, diagnostic.start);
-  const sourceLocation = findSourceLocation(node, diagnostic.file);
-  if (sourceLocation === null) {
+  const fullMapping = getTemplateMapping(
+      diagnostic.file, diagnostic.start, resolver, /*isDiagnosticsRequest*/ true);
+  if (fullMapping === null) {
     return null;
   }
 
-  // Now use the external resolver to obtain the full `ParseSourceFile` of the template.
-  const span = resolveParseSource(sourceLocation);
-  if (span === null) {
-    return null;
-  }
-
-  let messageText: string;
-  if (typeof diagnostic.messageText === 'string') {
-    messageText = diagnostic.messageText;
-  } else {
-    messageText = diagnostic.messageText.messageText;
-  }
-
-  return {
-    source: 'angular',
-    code: diagnostic.code,
-    category: diagnostic.category, messageText, span,
-  };
-}
-
-function findSourceLocation(node: ts.Node, sourceFile: ts.SourceFile): SourceLocation|null {
-  // Search for comments until the TCB's function declaration is encountered.
-  while (node !== undefined && !ts.isFunctionDeclaration(node)) {
-    const parseSpan =
-        ts.forEachTrailingCommentRange(sourceFile.text, node.getEnd(), (pos, end, kind) => {
-          if (kind !== ts.SyntaxKind.MultiLineCommentTrivia) {
-            return null;
-          }
-          const commentText = sourceFile.text.substring(pos, end);
-          return parseParseSpanComment(commentText);
-        }) || null;
-    if (parseSpan !== null) {
-      // Once the positional information has been extracted, search further up the TCB to extract
-      // the file information that is attached with the TCB's function declaration.
-      return toSourceLocation(parseSpan, node, sourceFile);
-    }
-
-    node = node.parent;
-  }
-
-  return null;
-}
-
-function toSourceLocation(
-    parseSpan: ParseSpan, node: ts.Node, sourceFile: ts.SourceFile): SourceLocation|null {
-  // Walk up to the function declaration of the TCB, the file information is attached there.
-  let tcb = node;
-  while (!ts.isFunctionDeclaration(tcb)) {
-    tcb = tcb.parent;
-
-    // Bail once we have reached the root.
-    if (tcb === undefined) {
-      return null;
-    }
-  }
-
-  const sourceReference =
-      ts.forEachLeadingCommentRange(sourceFile.text, tcb.getFullStart(), (pos, end, kind) => {
-        if (kind !== ts.SyntaxKind.MultiLineCommentTrivia) {
-          return null;
-        }
-        const commentText = sourceFile.text.substring(pos, end);
-        return commentText.substring(2, commentText.length - 2);
-      }) || null;
-  if (sourceReference === null) {
-    return null;
-  }
-
-  return {
-    sourceReference,
-    start: parseSpan.start,
-    end: parseSpan.end,
-  };
-}
-
-const parseSpanComment = /^\/\*(\d+),(\d+)\*\/$/;
-
-function parseParseSpanComment(commentText: string): ParseSpan|null {
-  const match = commentText.match(parseSpanComment);
-  if (match === null) {
-    return null;
-  }
-
-  return {start: +match[1], end: +match[2]};
+  const {sourceLocation, templateSourceMapping, span} = fullMapping;
+  return makeTemplateDiagnostic(
+      sourceLocation.id, templateSourceMapping, span, diagnostic.category, diagnostic.code,
+      diagnostic.messageText);
 }

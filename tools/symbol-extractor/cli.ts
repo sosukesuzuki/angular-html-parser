@@ -1,16 +1,18 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
+import {runfiles} from '@bazel/runfiles';
 import * as fs from 'fs';
+
 import {SymbolExtractor} from './symbol_extractor';
 
 if (require.main === module) {
-  const args = process.argv.slice(2) as[string, string];
+  const args = process.argv.slice(2) as [string, string];
   process.exitCode = main(args) ? 0 : 1;
 }
 
@@ -21,9 +23,9 @@ if (require.main === module) {
  *   cli javascriptFilePath.js goldenFilePath.json
  * ```
  */
-function main(argv: [string, string, string] | [string, string]): boolean {
-  const javascriptFilePath = require.resolve(argv[0]);
-  const goldenFilePath = require.resolve(argv[1]);
+function main(argv: [string, string, string]|[string, string]): boolean {
+  const javascriptFilePath = runfiles.resolveWorkspaceRelative(argv[0]);
+  const goldenFilePath = runfiles.resolveWorkspaceRelative(argv[1]);
   const doUpdate = argv[2] == '--accept';
 
   const javascriptContent = fs.readFileSync(javascriptFilePath).toString();
@@ -39,11 +41,9 @@ function main(argv: [string, string, string] | [string, string]): boolean {
   } else {
     passed = symbolExtractor.compareAndPrintError(goldenFilePath, goldenContent);
     if (!passed) {
-      const compile = process.env['compile'];
-      const defineFlag = (compile !== 'legacy') ? `--define=compile=${compile} ` : '';
       console.error(`TEST FAILED!`);
       console.error(`  To update the golden file run: `);
-      console.error(`    yarn bazel run ${defineFlag}${process.env['TEST_TARGET']}.accept`);
+      console.error(`    yarn bazel run ${process.env['TEST_TARGET']}.accept`);
     }
   }
   return passed;

@@ -43,8 +43,8 @@ describe('ResourceService', () => {
 
     it('categories observable should complete', () => {
       let completed = false;
-      resourceService.categories.subscribe(undefined, undefined, () => completed = true);
-      expect(completed).toBe(true, 'observable completed');
+      resourceService.categories.subscribe({complete: () => completed = true});
+      expect(completed).withContext('observable completed').toBe(true);
     });
 
     it('should reshape contributors.json to sorted category array', () => {
@@ -58,17 +58,17 @@ describe('ResourceService', () => {
       const sub = cat.subCategories[0];
       const res = sub.resources[0];
 
-      expect(cat.id).toBe('cat-3', 'category id');
-      expect(sub.id).toBe('cat3-subcat2', 'subcat id');
-      expect(res.id).toBe('cat3-subcat2-res1', 'resources id');
+      expect(cat.id).withContext('category id').toBe('cat-3');
+      expect(sub.id).withContext('subcat id').toBe('cat3-subcat2');
+      expect(res.id).withContext('resources id').toBe('cat3-subcat2-res1');
     });
 
     it('resource knows its category and sub-category titles', () => {
       const cat = categories[1];
       const sub = cat.subCategories[0];
       const res = sub.resources[0];
-      expect(res.category).toBe(cat.title, 'category title');
-      expect(res.subCategory).toBe(sub.title, 'subcategory title');
+      expect(res.category).withContext('category title').toBe(cat.title);
+      expect(res.subCategory).withContext('subcategory title').toBe(sub.title);
     });
 
     it('should have expected SubCategories of "Cat 3"', () => {
@@ -86,68 +86,61 @@ describe('ResourceService', () => {
 });
 
 function getTestResources() {
-  // tslint:disable:quotemark
   return {
-    "Cat 3": {
-      "order": 3,
-      "subCategories": {
-        "Cat3 SubCat1": {
-          "order": 2,
-          "resources": {
-            "Cat3 SubCat1 Res1": {
-              "desc": "Meetup in Barcelona, Spain. ",
-              "rev": true,
-              "title": "Angular Beers",
-              "url": "http://www.meetup.com/AngularJS-Beers/"
+    'Cat 3': {
+      order: 3,
+      subCategories: {
+        'Cat3 SubCat1': {
+          order: 2,
+          resources: {
+            'Cat3 SubCat1 Res1': {
+              desc: 'Meetup in Barcelona, Spain. ',
+              title: 'Angular Beers',
+              url: 'http://www.meetup.com/AngularJS-Beers/',
             },
-            "Cat3 SubCat1 Res2": {
-              "desc": "Angular Camps in Barcelona, Spain.",
-              "rev": true,
-              "title": "Angular Camp",
-              "url": "http://angularcamp.org/"
-            }
-          }
+            'Cat3 SubCat1 Res2': {
+              desc: 'Angular Camps in Barcelona, Spain.',
+              title: 'Angular Camp',
+              url: 'http://angularcamp.org/',
+            },
+          },
         },
-        "Cat3 SubCat2": {
-          "order": 1,
-          "resources": {
-            "Cat3 SubCat2 Res1": {
-              "desc": "A community index of components and libraries",
-              "rev": true,
-              "title": "Catalog of Angular Components & Libraries",
-              "url": "https://a/b/c"
-            }
-          }
-        },
-      }
-    },
-    "Cat 1": {
-      "order": 1,
-      "subCategories": {
-        "Cat1 SubCat1": {
-          "order": 1,
-          "resources": {
-            "S S S": {
-              "desc": "SSS",
-              "rev": true,
-              "title": "Sssss",
-              "url": "http://s/s/s"
+        'Cat3 SubCat2': {
+          order: 1,
+          resources: {
+            'Cat3 SubCat2 Res1': {
+              desc: 'A community index of components and libraries',
+              title: 'Catalog of Angular Components & Libraries',
+              url: 'https://a/b/c',
             },
-            "A A A": {
-             "desc": "AAA",
-              "rev": true,
-              "title": "Aaaa",
-              "url": "http://a/a/a"
-            },
-            "Z Z Z": {
-             "desc": "ZZZ",
-              "rev": true,
-              "title": "Zzzzz",
-              "url": "http://z/z/z"
-            }
-          }
+          },
         },
       },
-    }
+    },
+    'Cat 1': {
+      order: 1,
+      subCategories: {
+        'Cat1 SubCat1': {
+          order: 1,
+          resources: {
+            'S S S': {
+              desc: 'SSS',
+              title: 'Sssss',
+              url: 'http://s/s/s',
+            },
+            'A A A': {
+              desc: 'AAA',
+              title: 'Aaaa',
+              url: 'http://a/a/a',
+            },
+            'Z Z Z': {
+              desc: 'ZZZ',
+              title: 'Zzzzz',
+              url: 'http://z/z/z',
+            },
+          },
+        },
+      },
+    },
   };
 }

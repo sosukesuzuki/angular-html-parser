@@ -1,5 +1,11 @@
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output } from '@angular/core';
 import { SearchResult, SearchResults, SearchArea } from 'app/search/interfaces';
+
+enum SearchState {
+  InProgress = 'in-progress',
+  ResultsFound = 'results-found',
+  NoResultsFound = 'no-results-found'
+}
 
 /**
  * A component to display search results in groups
@@ -14,7 +20,7 @@ export class SearchResultsComponent implements OnChanges {
    * The results to display
    */
   @Input()
-  searchResults: SearchResults;
+  searchResults: SearchResults | null = null;
 
   /**
    * Emitted when the user selects a search result
@@ -22,12 +28,33 @@ export class SearchResultsComponent implements OnChanges {
   @Output()
   resultSelected = new EventEmitter<SearchResult>();
 
+  /**
+   * Emitted when the user clicks the close button
+   */
+  @Output()
+  closeButtonClick = new EventEmitter<void>();
+
+  searchState: SearchState = SearchState.InProgress;
   readonly defaultArea = 'other';
-  notFoundMessage = 'Searching ...';
-  readonly topLevelFolders = ['guide', 'tutorial'];
+  readonly folderToAreaMap: Record<string, string> = {
+      api: 'api',
+      cli: 'cli',
+      docs: 'guides',
+      errors: 'errors',
+      guide: 'guides',
+      start: 'tutorials',
+      tutorial: 'tutorials',
+  };
   searchAreas: SearchArea[] = [];
 
-  ngOnChanges(changes: SimpleChanges) {
+  ngOnChanges() {
+    if (this.searchResults === null) {
+      this.searchState = SearchState.InProgress;
+    } else if (this.searchResults.results.length) {
+      this.searchState = SearchState.ResultsFound;
+    } else {
+      this.searchState = SearchState.NoResultsFound;
+    }
     this.searchAreas = this.processSearchResults(this.searchResults);
   }
 
@@ -38,16 +65,19 @@ export class SearchResultsComponent implements OnChanges {
     }
   }
 
+  onCloseClicked() {
+    this.closeButtonClick.emit();
+  }
+
   // Map the search results into groups by area
-  private processSearchResults(search: SearchResults) {
+  private processSearchResults(search: SearchResults | null) {
     if (!search) {
       return [];
     }
-    this.notFoundMessage = 'No results found.';
     const searchAreaMap: { [key: string]: SearchResult[] } = {};
     search.results.forEach(result => {
       if (!result.title) { return; } // bad data; should fix
-      const areaName = this.computeAreaName(result) || this.defaultArea;
+      const areaName = this.computeAreaName(result);
       const area = searchAreaMap[areaName] = searchAreaMap[areaName] || [];
       area.push(result);
     });
@@ -63,12 +93,9 @@ export class SearchResultsComponent implements OnChanges {
   }
 
   // Split the search result path and use the top level folder, if there is one, as the area name.
-  private computeAreaName(result: SearchResult) {
-    if (this.topLevelFolders.indexOf(result.path) !== -1) {
-      return result.path;
-    }
-    const [areaName, rest] = result.path.split('/', 2);
-    return rest && areaName;
+  private computeAreaName(result: SearchResult): string {
+    const [folder] = result.path.split('/', 1);
+    return this.folderToAreaMap[folder] ?? this.defaultArea;
   }
 }
 
@@ -86,10 +113,10 @@ function splitPages(allPages: SearchResult[]) {
     }
   });
   while (priorityPages.length < 5 && pages.length) {
-    priorityPages.push(pages.shift()!);
+    priorityPages.push(pages.shift() as SearchResult);
   }
   while (priorityPages.length < 5 && deprecated.length) {
-    priorityPages.push(deprecated.shift()!);
+    priorityPages.push(deprecated.shift() as SearchResult);
   }
   pages.sort(compareResults);
 

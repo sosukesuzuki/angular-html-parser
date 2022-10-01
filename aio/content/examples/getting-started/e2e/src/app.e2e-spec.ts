@@ -1,6 +1,4 @@
-'use strict'; // necessary for es6 output in node
-
-import { browser, element, by, ExpectedConditions as EC, logging, ElementFinder, ElementArrayFinder } from 'protractor';
+import { browser, element, by, ExpectedConditions as EC, logging } from 'protractor';
 
 describe('Getting Started', () => {
   const pageElements = {
@@ -15,17 +13,17 @@ describe('Getting Started', () => {
   };
 
   describe('General', () => {
-    beforeAll(async() => {
+    beforeAll(async () => {
       await browser.get('/');
     });
 
-    it('should display "My Store"', async() => {
+    it('should display "My Store"', async () => {
       const title = await pageElements.topBarHeader.getText();
 
       expect(title).toEqual('My Store');
     });
 
-    it('should display "Products" on the homepage', async() => {
+    it('should display "Products" on the homepage', async () => {
       const title = await pageElements.productListHeader.getText();
 
       expect(title).toEqual('Products');
@@ -33,11 +31,11 @@ describe('Getting Started', () => {
   });
 
   describe('Product List', () => {
-    beforeAll(async() => {
+    beforeAll(async () => {
       await browser.get('/');
     });
 
-    it('should display 3 items', async() => {
+    it('should display 3 items', async () => {
       const products = await pageElements.productListItems;
 
       expect(products.length).toEqual(3);
@@ -45,11 +43,11 @@ describe('Getting Started', () => {
   });
 
   describe('Product Details', () => {
-    beforeEach(async() => {
+    beforeEach(async () => {
       await browser.get('/');
     });
 
-    it('should display information for a product', async() => {
+    it('should display information for a product', async () => {
       await pageElements.productListLinks.get(0).click();
 
       const product = pageElements.productDetailsPage;
@@ -63,11 +61,11 @@ describe('Getting Started', () => {
       expect(productDescription).toBe('A large phone with one of the best screens');
     });
 
-    it('should add the product to the cart', async() => {
+    it('should add the product to the cart', async () => {
       await pageElements.productListLinks.get(0).click();
 
       const product = pageElements.productDetailsPage;
-      const buyButton = await product.element(by.css('button'));
+      const buyButton = product.element(by.css('button'));
       const checkoutLink = pageElements.topBarCheckoutLink;
 
       await buyButton.click();
@@ -82,21 +80,21 @@ describe('Getting Started', () => {
 
   describe('Cart', () => {
 
-    beforeEach(async() => {
+    beforeEach(async () => {
       await browser.get('/');
     });
 
-    it('should go through the checkout process', async() => {
+    it('should go through the checkout process', async () => {
       await pageElements.productListLinks.get(0).click();
 
       const checkoutLink = pageElements.topBarCheckoutLink;
       const productDetailsPage = pageElements.productDetailsPage;
-      const buyButton = await productDetailsPage.element(by.css('button'));
+      const buyButton = productDetailsPage.element(by.css('button'));
 
       const cartPage = pageElements.cartPage;
       const inputFields = cartPage.all(by.css('form input'));
 
-      const purchaseButton = await cartPage.element(by.css('button'));
+      const purchaseButton = cartPage.element(by.css('button'));
       const nameField = inputFields.get(0);
       const addressField = inputFields.get(1);
 

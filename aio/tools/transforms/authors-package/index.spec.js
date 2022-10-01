@@ -1,5 +1,5 @@
 /* eslint jasmine/prefer-toHaveBeenCalledWith:0 */
-const fs = require('fs');
+const fs = require('fs/promises');
 const {resolve} = require('canonical-path');
 const {generateDocs} = require('./index.js');
 const { DOCS_OUTPUT_PATH } = require('../config');
@@ -17,10 +17,7 @@ describe('authors-package (integration tests)', () => {
 
   beforeEach(() => {
     files = [];
-    spyOn(fs, 'writeFile').and.callFake((file, content, callback) => {
-      files.push(file);
-      callback();
-    });
+    spyOn(fs, 'writeFile').and.callFake(async file => files.push(file));
   });
 
   it('should generate marketing docs if the "fileChanged" is a marketing doc', () => {
@@ -71,14 +68,14 @@ describe('authors-package (integration tests)', () => {
   it('should generate API doc if the "fileChanged" is an API doc', () => {
     return generateDocs('packages/forms/src/form_builder.ts', { silent: true }).then(() => {
       expect(fs.writeFile).toHaveBeenCalled();
-      expect(files).toContain(resolve(DOCS_OUTPUT_PATH, 'api/forms/FormBuilder.json'));
+      expect(files).toContain(resolve(DOCS_OUTPUT_PATH, 'api/forms/f_ormb_uilder.json'));
     });
   }, 16000);
 
   it('should generate API doc if the "fileChanged" is an API example', () => {
     return generateDocs('packages/examples/forms/ts/formBuilder/form_builder_example.ts', { silent: true }).then(() => {
       expect(fs.writeFile).toHaveBeenCalled();
-      expect(files).toContain(resolve(DOCS_OUTPUT_PATH, 'api/forms/FormBuilder.json'));
+      expect(files).toContain(resolve(DOCS_OUTPUT_PATH, 'api/forms/f_ormb_uilder.json'));
     });
   }, 16000);
 });

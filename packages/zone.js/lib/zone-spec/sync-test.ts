@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -9,7 +9,9 @@
 class SyncTestZoneSpec implements ZoneSpec {
   runZone = Zone.current;
 
-  constructor(namePrefix: string) { this.name = 'syncTestZone for ' + namePrefix; }
+  constructor(namePrefix: string) {
+    this.name = 'syncTestZone for ' + namePrefix;
+  }
 
   // ZoneSpec implementation below.
 
@@ -19,7 +21,7 @@ class SyncTestZoneSpec implements ZoneSpec {
     switch (task.type) {
       case 'microTask':
       case 'macroTask':
-        throw new Error(`Cannot call ${task.source} from within a sync test.`);
+        throw new Error(`Cannot call ${task.source} from within a sync test (${this.name}).`);
       case 'eventTask':
         task = delegate.scheduleTask(target, task);
         break;

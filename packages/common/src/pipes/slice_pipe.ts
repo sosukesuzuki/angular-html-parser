@@ -1,12 +1,13 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {Injectable, Pipe, PipeTransform} from '@angular/core';
+import {Pipe, PipeTransform} from '@angular/core';
+
 import {invalidPipeArgumentError} from './invalid_pipe_argument_error';
 
 /**
@@ -44,8 +45,11 @@ import {invalidPipeArgumentError} from './invalid_pipe_argument_error';
  *
  * @publicApi
  */
-@Injectable()
-@Pipe({name: 'slice', pure: false})
+@Pipe({
+  name: 'slice',
+  pure: false,
+  standalone: true,
+})
 export class SlicePipe implements PipeTransform {
   /**
    * @param value a list or a string to be sliced.
@@ -63,11 +67,13 @@ export class SlicePipe implements PipeTransform {
    *   - **if negative**: return all items before `end` index from the end of the list or string.
    */
   transform<T>(value: ReadonlyArray<T>, start: number, end?: number): Array<T>;
+  transform(value: null|undefined, start: number, end?: number): null;
+  transform<T>(value: ReadonlyArray<T>|null|undefined, start: number, end?: number): Array<T>|null;
   transform(value: string, start: number, end?: number): string;
-  transform(value: null, start: number, end?: number): null;
-  transform(value: undefined, start: number, end?: number): undefined;
-  transform(value: any, start: number, end?: number): any {
-    if (value == null) return value;
+  transform(value: string|null|undefined, start: number, end?: number): string|null;
+  transform<T>(value: ReadonlyArray<T>|string|null|undefined, start: number, end?: number):
+      Array<T>|string|null {
+    if (value == null) return null;
 
     if (!this.supports(value)) {
       throw invalidPipeArgumentError(SlicePipe, value);
@@ -76,5 +82,7 @@ export class SlicePipe implements PipeTransform {
     return value.slice(start, end);
   }
 
-  private supports(obj: any): boolean { return typeof obj === 'string' || Array.isArray(obj); }
+  private supports(obj: any): boolean {
+    return typeof obj === 'string' || Array.isArray(obj);
+  }
 }

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -8,8 +8,8 @@
 
 import '@angular/core/test/bundling/util/src/reflect_metadata';
 
-import {CommonModule} from '@angular/common';
-import {Component, Directive, ElementRef, HostBinding, HostListener, NgModule, ɵmarkDirty as markDirty, ɵrenderComponent as renderComponent} from '@angular/core';
+import {ApplicationRef, Component, Directive, ElementRef, HostBinding, HostListener, NgModule, ɵdetectChanges as detectChanges} from '@angular/core';
+import {BrowserModule, platformBrowser} from '@angular/platform-browser';
 
 @Directive({
   selector: '[make-color-grey]',
@@ -30,17 +30,20 @@ class MakeColorGreyDirective {
     this._textColor = null;
   }
 
-  toggle() { this._backgroundColor ? this.off() : this.on(); }
+  toggle() {
+    this._backgroundColor ? this.off() : this.on();
+  }
 }
 
 @Component({selector: 'box-with-overridden-styles', template: '...'})
 class BoxWithOverriddenStylesComponent {
   public active = false;
 
-  @HostBinding('style')
-  styles = {};
+  @HostBinding('style') styles = {};
 
-  constructor() { this.onInActive(); }
+  constructor() {
+    this.onInActive();
+  }
 
   @HostListener('click', ['$event'])
   toggle() {
@@ -49,7 +52,7 @@ class BoxWithOverriddenStylesComponent {
     } else {
       this.onActive();
     }
-    markDirty(this);
+    detectChanges(this);
   }
 
   onActive() {
@@ -102,22 +105,29 @@ class AnimationWorldComponent {
   private _hostElement: HTMLElement;
   public styles: {[key: string]: any}|null = null;
 
-  constructor(element: ElementRef) { this._hostElement = element.nativeElement; }
+  constructor(element: ElementRef) {
+    this._hostElement = element.nativeElement;
+  }
 
-  makeClass(item: any) { return `record-${item.value}`; }
+  makeClass(item: any) {
+    return `record-${item.value}`;
+  }
 
   toggleActive(item: any, makeColorGrey: MakeColorGreyDirective) {
     item.active = !item.active;
     makeColorGrey.toggle();
-    markDirty(this);
+    detectChanges(this);
   }
 }
 
 @NgModule({
   declarations: [AnimationWorldComponent, MakeColorGreyDirective, BoxWithOverriddenStylesComponent],
-  imports: [CommonModule]
+  imports: [BrowserModule],
 })
 class AnimationWorldModule {
+  ngDoBootstrap(app: ApplicationRef) {
+    app.bootstrap(AnimationWorldComponent);
+  }
 }
 
-renderComponent(AnimationWorldComponent);
+platformBrowser().bootstrapModule(AnimationWorldModule, {ngZone: 'noop'});

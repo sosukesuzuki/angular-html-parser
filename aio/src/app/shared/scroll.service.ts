@@ -1,7 +1,8 @@
-import { DOCUMENT, Location, PlatformLocation, PopStateEvent, ViewportScroller } from '@angular/common';
-import { Injectable, Inject, OnDestroy } from '@angular/core';
-import { fromEvent, Subject } from 'rxjs';
-import { debounceTime, takeUntil } from 'rxjs/operators';
+import {DOCUMENT, Location, PlatformLocation, PopStateEvent, ViewportScroller} from '@angular/common';
+import {Inject, Injectable, OnDestroy} from '@angular/core';
+import {fromEvent, Subject} from 'rxjs';
+import {debounceTime, takeUntil} from 'rxjs/operators';
+import {SessionStorage} from './storage.service';
 
 type ScrollPosition = [number, number];
 interface ScrollPositionPopStateEvent extends PopStateEvent {
@@ -15,17 +16,15 @@ export const topMargin = 16;
  */
 @Injectable()
 export class ScrollService implements OnDestroy {
-
-  private _topOffset: number | null;
-  private _topOfPageElement: Element;
+  private _topOffset: number|null;
+  private _topOfPageElement: HTMLElement;
   private onDestroy = new Subject<void>();
 
   // The scroll position which has to be restored, after a `popstate` event.
-  poppedStateScrollPosition: ScrollPosition | null = null;
+  poppedStateScrollPosition: ScrollPosition|null = null;
   // Whether the browser supports the necessary features for manual scroll restoration.
-  supportManualScrollRestoration: boolean =
-      !!window && ('scrollTo' in window) && ('scrollX' in window) && ('scrollY' in window) &&
-      !!history && ('scrollRestoration' in history);
+  supportManualScrollRestoration: boolean = !!window && ('scrollTo' in window) &&
+      ('pageXOffset' in window) && isScrollRestorationWritable();
 
   // Offset from the top of the document to bottom of any static elements
   // at the top (e.g. toolbar) + some margin
@@ -34,7 +33,7 @@ export class ScrollService implements OnDestroy {
       const toolbar = this.document.querySelector('.app-toolbar');
       this._topOffset = (toolbar && toolbar.clientHeight || 0) + topMargin;
     }
-    return this._topOffset!;
+    return this._topOffset as number;
   }
 
   get topOfPageElement() {
@@ -45,10 +44,9 @@ export class ScrollService implements OnDestroy {
   }
 
   constructor(
-      @Inject(DOCUMENT) private document: any,
-      private platformLocation: PlatformLocation,
-      private viewportScroller: ViewportScroller,
-      private location: Location) {
+      @Inject(DOCUMENT) private document: Document, private platformLocation: PlatformLocation,
+      private viewportScroller: ViewportScroller, private location: Location,
+      @Inject(SessionStorage) private storage: Storage) {
     // On resize, the toolbar might change height, so "invalidate" the top offset.
     fromEvent(window, 'resize')
         .pipe(takeUntil(this.onDestroy))
@@ -62,13 +60,14 @@ export class ScrollService implements OnDestroy {
         .pipe(takeUntil(this.onDestroy))
         .subscribe(() => this.updateScrollLocationHref());
 
-    // Change scroll restoration strategy to `manual` if it's supported
+    // Change scroll restoration strategy to `manual` if it's supported.
     if (this.supportManualScrollRestoration) {
       history.scrollRestoration = 'manual';
-      // we have to detect forward and back navigation thanks to popState event
-      this.location.subscribe((event: ScrollPositionPopStateEvent) => {
-        // the type is `hashchange` when the fragment identifier of the URL has changed. It allows us to go to position
-        // just before a click on an anchor
+
+      // We have to detect forward and back navigation thanks to popState event.
+      const locationSubscription = this.location.subscribe((event: ScrollPositionPopStateEvent) => {
+        // The type is `hashchange` when the fragment identifier of the URL has changed. It allows
+        // us to go to position just before a click on an anchor.
         if (event.type === 'hashchange') {
           this.scrollToPosition();
         } else {
@@ -80,6 +79,8 @@ export class ScrollService implements OnDestroy {
           this.poppedStateScrollPosition = event.state ? event.state.scrollPosition : null;
         }
       });
+
+      this.onDestroy.subscribe(() => locationSubscription.unsubscribe());
     }
 
     // If this was not a reload, discard the stored scroll info.
@@ -99,9 +100,7 @@ export class ScrollService implements OnDestroy {
    */
   scroll() {
     const hash = this.getCurrentHash();
-    const element: HTMLElement = hash
-        ? this.document.getElementById(hash)
-        : this.topOfPageElement;
+    const element = hash ? this.document.getElementById(hash) ?? null : this.topOfPageElement;
     this.scrollToElement(element);
   }
 
@@ -113,8 +112,9 @@ export class ScrollService implements OnDestroy {
   }
 
   /**
-   * When we load a document, we have to scroll to the correct position depending on whether this is a new location,
-   * a back/forward in the history, or a refresh
+   * When we load a document, we have to scroll to the correct position depending on whether this is
+   * a new location, a back/forward in the history, or a refresh.
+   *
    * @param delay before we scroll to the good position
    */
   scrollAfterRender(delay: number) {
@@ -147,9 +147,10 @@ export class ScrollService implements OnDestroy {
    * Scroll to the element.
    * Don't scroll if no element.
    */
-  scrollToElement(element: Element|null) {
+  scrollToElement(element: HTMLElement|null) {
     if (element) {
       element.scrollIntoView();
+      element.focus?.();
 
       if (window && window.scrollBy) {
         // Scroll as much as necessary to align the top of `element` at `topOffset`.
@@ -180,7 +181,7 @@ export class ScrollService implements OnDestroy {
   }
 
   updateScrollLocationHref(): void {
-    window.sessionStorage.setItem('scrollLocationHref', window.location.href);
+    this.storage.setItem('scrollLocationHref', window.location.href);
   }
 
   /**
@@ -189,27 +190,30 @@ export class ScrollService implements OnDestroy {
   updateScrollPositionInHistory() {
     if (this.supportManualScrollRestoration) {
       const currentScrollPosition = this.viewportScroller.getScrollPosition();
-      this.location.replaceState(this.location.path(true), undefined, {scrollPosition: currentScrollPosition});
-      window.sessionStorage.setItem('scrollPosition', currentScrollPosition.join(','));
+      this.location.replaceState(
+          this.location.path(true), undefined, {scrollPosition: currentScrollPosition});
+      this.storage.setItem('scrollPosition', currentScrollPosition.join(','));
     }
   }
 
-  getStoredScrollLocationHref(): string | null {
-    const href = window.sessionStorage.getItem('scrollLocationHref');
+  getStoredScrollLocationHref(): string|null {
+    const href = this.storage.getItem('scrollLocationHref');
     return href || null;
   }
 
-  getStoredScrollPosition(): ScrollPosition | null {
-    const position = window.sessionStorage.getItem('scrollPosition');
-    if (!position) { return null; }
+  getStoredScrollPosition(): ScrollPosition|null {
+    const position = this.storage.getItem('scrollPosition');
+    if (!position) {
+      return null;
+    }
 
     const [x, y] = position.split(',');
     return [+x, +y];
   }
 
   removeStoredScrollInfo() {
-    window.sessionStorage.removeItem('scrollLocationHref');
-    window.sessionStorage.removeItem('scrollPosition');
+    this.storage.removeItem('scrollLocationHref');
+    this.storage.removeItem('scrollPosition');
   }
 
   /**
@@ -225,4 +229,21 @@ export class ScrollService implements OnDestroy {
   private getCurrentHash() {
     return decodeURIComponent(this.platformLocation.hash.replace(/^#/, ''));
   }
+}
+
+/**
+ * We need to check whether we can write to `history.scrollRestoration`
+ *
+ * We do this by checking the property descriptor of the property, but
+ * it might actually be defined on the `history` prototype not the instance.
+ *
+ * In this context "writable" means either than the property is a `writable`
+ * data file or a property that has a setter.
+ */
+function isScrollRestorationWritable() {
+  const scrollRestorationDescriptor =
+      Object.getOwnPropertyDescriptor(history, 'scrollRestoration') ||
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(history), 'scrollRestoration');
+  return scrollRestorationDescriptor !== undefined &&
+      !!(scrollRestorationDescriptor.writable || scrollRestorationDescriptor.set);
 }

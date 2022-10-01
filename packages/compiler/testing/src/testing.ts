@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -21,8 +21,10 @@
  *   </p>
  * </div>
  */
-export * from './resource_loader_mock';
-export * from './schema_registry_mock';
-export * from './directive_resolver_mock';
-export * from './ng_module_resolver_mock';
-export * from './pipe_resolver_mock';
+
+// TODO(alxhub): @angular/compiler/testing is unused in Ivy. A placeholder
+// is left here because the components repo still depends on this package
+// directly. It will be cleaned up at a later date.
+//
+// This export ensures this package is not empty.
+export const unusedExport = true;

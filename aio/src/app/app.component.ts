@@ -1,28 +1,44 @@
-import { Component, ElementRef, HostBinding, HostListener, OnInit,
-         QueryList, ViewChild, ViewChildren } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  HostBinding,
+  HostListener,
+  OnInit,
+  QueryList,
+  ViewChild,
+  ViewChildren,
+} from '@angular/core';
 import { MatSidenav } from '@angular/material/sidenav';
-
-import { CurrentNodes, NavigationService, NavigationNode, VersionInfo } from 'app/navigation/navigation.service';
-import { DocumentService, DocumentContents } from 'app/documents/document.service';
+import { DocumentContents, DocumentService } from 'app/documents/document.service';
+import { NotificationComponent } from 'app/layout/notification/notification.component';
+import { CurrentNodes, NavigationNode, NavigationService, VersionInfo } from 'app/navigation/navigation.service';
+import { SearchResults } from 'app/search/interfaces';
+import { SearchBoxComponent } from 'app/search/search-box/search-box.component';
+import { SearchService } from 'app/search/search.service';
 import { Deployment } from 'app/shared/deployment.service';
 import { LocationService } from 'app/shared/location.service';
-import { NotificationComponent } from 'app/layout/notification/notification.component';
 import { ScrollService } from 'app/shared/scroll.service';
-import { SearchBoxComponent } from 'app/search/search-box/search-box.component';
-import { SearchResults } from 'app/search/interfaces';
-import { SearchService } from 'app/search/search.service';
 import { TocService } from 'app/shared/toc.service';
-
+import { SwUpdatesService } from 'app/sw-updates/sw-updates.service';
 import { BehaviorSubject, combineLatest, Observable } from 'rxjs';
 import { first, map } from 'rxjs/operators';
 
 const sideNavView = 'SideNav';
+export const showTopMenuWidth = 1150;
+export const dockSideNavWidth = 992;
+export const showFloatingTocWidth = 800;
 
 @Component({
   selector: 'aio-shell',
   templateUrl: './app.component.html',
 })
 export class AppComponent implements OnInit {
+
+  static reducedMotion = window.matchMedia('(prefers-reduced-motion)').matches;
+
+  // Disable all Angular animations if the user prefers reduced motion or for the initial render.
+  @HostBinding('@.disabled')
+  get disableAnimations(): boolean { return AppComponent.reducedMotion || this.isStarting; }
 
   currentDocument: DocumentContents;
   currentDocVersion: NavigationNode;
@@ -38,7 +54,7 @@ export class AppComponent implements OnInit {
    */
   pageId: string;
   /**
-   * An HTML friendly identifer for the "folder" of the currently displayed page.
+   * An HTML friendly identifier for the "folder" of the currently displayed page.
    * This is computed by taking everything up to the first `/` in the `currentDocument.id`
    */
   folderId: string;
@@ -50,35 +66,34 @@ export class AppComponent implements OnInit {
    *
    * * `page-...`: computed from the current document id (e.g. events, guide-security, tutorial-toh-pt2)
    * * `folder-...`: computed from the top level folder for an id (e.g. guide, tutorial, etc)
-   * * `view-...`: computef from the navigation view (e.g. SideNav, TopBar, etc)
+   * * `view-...`: computed from the navigation view (e.g. SideNav, TopBar, etc)
    */
   @HostBinding('class')
   hostClasses = '';
 
-  // Disable all Angular animations for the initial render.
-  @HostBinding('@.disabled')
-  isStarting = true;
+  private isStarting = true;
   isTransitioning = true;
   isFetching = false;
-  isSideBySide = false;
+  showTopMenu = false;
+  dockSideNav = false;
   private isFetchingTimeout: any;
   private isSideNavDoc = false;
 
-  private sideBySideWidth = 992;
   sideNavNodes: NavigationNode[];
   topMenuNodes: NavigationNode[];
   topMenuNarrowNodes: NavigationNode[];
 
   hasFloatingToc = false;
   private showFloatingToc = new BehaviorSubject(false);
-  private showFloatingTocWidth = 800;
   tocMaxHeight: string;
   private tocMaxHeightOffset = 0;
 
-  versionInfo: VersionInfo;
+  currentDocsVersionNode?: NavigationNode;
 
-  get isOpened() { return this.isSideBySide && this.isSideNavDoc; }
-  get mode() { return this.isSideBySide ? 'side' : 'over'; }
+  versionInfo: VersionInfo | undefined;
+
+  get isOpened() { return this.dockSideNav && this.isSideNavDoc; }
+  get mode() { return this.isOpened ? 'side' : 'over'; }
 
   // Search related properties
   showSearchResults = false;
@@ -87,6 +102,8 @@ export class AppComponent implements OnInit {
   searchElements: QueryList<ElementRef>;
   @ViewChild(SearchBoxComponent, { static: true })
   searchBox: SearchBoxComponent;
+  @ViewChild('searchResultsView', { read: ElementRef })
+  searchResultsView: ElementRef;
 
   @ViewChild(MatSidenav, { static: true })
   sidenav: MatSidenav;
@@ -94,6 +111,10 @@ export class AppComponent implements OnInit {
   @ViewChild(NotificationComponent, { static: true })
   notification: NotificationComponent;
   notificationAnimating = false;
+
+  @ViewChild('appToolbar', { read: ElementRef }) toolbar: ElementRef;
+
+  @ViewChildren('themeToggle, externalIcons', { read: ElementRef }) toolbarIcons: QueryList<ElementRef>;
 
   constructor(
     public deployment: Deployment,
@@ -103,6 +124,7 @@ export class AppComponent implements OnInit {
     private navigationService: NavigationService,
     private scrollService: ScrollService,
     private searchService: SearchService,
+    private swUpdatesService: SwUpdatesService,
     private tocService: TocService
   ) { }
 
@@ -144,38 +166,49 @@ export class AppComponent implements OnInit {
     });
 
     // Compute the version picker list from the current version and the versions in the navigation map
-    combineLatest(
+    combineLatest([
       this.navigationService.versionInfo,
-      this.navigationService.navigationViews.pipe(map(views => views['docVersions'])))
-      .subscribe(([versionInfo, versions]) => {
-        // TODO(pbd): consider whether we can lookup the stable and next versions from the internet
-        const computedVersions: NavigationNode[] = [
-          { title: 'next', url: 'https://next.angular.io' },
-          { title: 'stable', url: 'https://angular.io' },
-        ];
-        if (this.deployment.mode === 'archive') {
-          computedVersions.push({ title: `v${versionInfo.major}` });
+      this.navigationService.navigationViews.pipe(map(views => views.docVersions)),
+      this.locationService.currentUrl,
+    ]).subscribe(([versionInfo, versions, currentUrl]) => {
+      // TODO(pbd): consider whether we can lookup the stable and next versions from the internet
+      const computedVersions: NavigationNode[] = [
+        { title: 'next', url: 'https://next.angular.io/' },
+        { title: 'rc', url: 'https://rc.angular.io/' },
+        { title: 'stable', url: 'https://angular.io/' },
+      ];
+      if (this.deployment.mode === 'archive') {
+        computedVersions.push({ title: `v${versionInfo.major}` });
+      }
+      const allDocsVersionNodes = [...computedVersions, ...versions].map(version => ({
+        ...version,
+        // Update the urls so that they point to the same page the user is currently at
+        url: `${version.url}${(version.url?.endsWith('/') ? '' : '/' )}${currentUrl}`,
+      }));
+      // Find the current version - either title matches the current deployment mode
+      // or its title matches the major version of the current version info
+      this.currentDocsVersionNode = allDocsVersionNodes.find(
+        version => version.title === this.deployment.mode || version.title === `v${versionInfo.major}`
+      );
+      this.docVersions = [
+        {
+          title: 'Docs Versions',
+          children : allDocsVersionNodes
         }
-        this.docVersions = [...computedVersions, ...versions];
-
-        // Find the current version - eithers title matches the current deployment mode
-        // or its title matches the major version of the current version info
-        this.currentDocVersion = this.docVersions.find(version =>
-          version.title === this.deployment.mode || version.title === `v${versionInfo.major}`)!;
-        this.currentDocVersion.title += ` (v${versionInfo.raw})`;
-      });
+      ];
+    });
 
     this.navigationService.navigationViews.subscribe(views => {
-      this.footerNodes  = views['Footer']  || [];
-      this.sideNavNodes = views['SideNav'] || [];
-      this.topMenuNodes = views['TopBar']  || [];
-      this.topMenuNarrowNodes = views['TopBarNarrow'] || this.topMenuNodes;
+      this.footerNodes = views.Footer || [];
+      this.sideNavNodes = views.SideNav || [];
+      this.topMenuNodes = views.TopBar || [];
+      this.topMenuNarrowNodes = views.TopBarNarrow || this.topMenuNodes;
     });
 
     this.navigationService.versionInfo.subscribe(vi => this.versionInfo = vi);
 
     const hasNonEmptyToc = this.tocService.tocList.pipe(map(tocList => tocList.length > 0));
-    combineLatest(hasNonEmptyToc, this.showFloatingToc)
+    combineLatest([hasNonEmptyToc, this.showFloatingToc])
         .subscribe(([hasToc, showFloatingToc]) => this.hasFloatingToc = hasToc && showFloatingToc);
 
     // Generally, we want to delay updating the shell (e.g. host classes, sidenav state) for the new
@@ -183,11 +216,14 @@ export class AppComponent implements OnInit {
     // the new document applied prematurely).
     // For the first document, though, (when we know there is no previous document), we want to
     // ensure the styles are applied as soon as possible to avoid flicker.
-    combineLatest(
+    combineLatest([
       this.documentService.currentDocument,  // ...needed to determine host classes
-      this.navigationService.currentNodes)   // ...needed to determine `sidenav` state
-      .pipe(first())
+      this.navigationService.currentNodes,   // ...needed to determine `sidenav` state
+    ]).pipe(first())
       .subscribe(() => this.updateShell());
+
+    // Start listening for SW version update events.
+    this.swUpdatesService.enable();
   }
 
   onDocReady() {
@@ -228,31 +264,53 @@ export class AppComponent implements OnInit {
     this.isTransitioning = false;
   }
 
-  onDocVersionChange(versionIndex: number) {
-    const version = this.docVersions[versionIndex];
-    if (version.url) {
-      this.locationService.go(version.url);
+  @HostListener('window:resize', ['$event.target.innerWidth'])
+  onResize(width: number) {
+    this.showTopMenu = width >= showTopMenuWidth;
+    this.dockSideNav = width >= dockSideNavWidth;
+    this.showFloatingToc.next(width > showFloatingTocWidth);
+
+    if (this.showTopMenu && !this.isSideNavDoc) {
+      // If this is a non-sidenav doc and the screen is wide enough so that we can display menu
+      // items in the top-bar, ensure the sidenav is closed.
+      // (This condition can only be met when the resize event changes the value of `showTopMenu`
+      //  from `false` to `true` while on a non-sidenav doc.)
+      this.sidenav.toggle(false);
     }
   }
 
-  @HostListener('window:resize', ['$event.target.innerWidth'])
-  onResize(width: number) {
-    this.isSideBySide = width >= this.sideBySideWidth;
-    this.showFloatingToc.next(width > this.showFloatingTocWidth);
-
-    if (this.isSideBySide && !this.isSideNavDoc) {
-      // If this is a non-sidenav doc and the screen is wide enough so that we can display menu
-      // items in the top-bar, ensure the sidenav is closed.
-      // (This condition can only be met when the resize event changes the value of `isSideBySide`
-      //  from `false` to `true` while on a non-sidenav doc.)
-      this.sidenav.toggle(false);
+  @HostListener('focusin', ['$event.target'])
+  onFocus(eventTarget: HTMLElement) {
+    // Implement a focus trap starting at the input search and ending after the search results
+    if (this.showSearchResults) {
+      const insideFocusLoop = [
+        ...this.toolbarIcons,
+        ...this.searchElements
+      ].some(element => element.nativeElement.contains(eventTarget));
+      const insideToolbar = this.toolbar.nativeElement.contains(eventTarget);
+      if (!insideFocusLoop) {
+        if (!insideToolbar) {
+          // the user is focusing forward at the last search result element,
+          // loop it back to the search input
+          this.focusSearchBox();
+        } else {
+          // the user is focusing backward from the search input,
+          // loop it back to the results' close button
+          const closeBtn: HTMLButtonElement =
+            this.searchResultsView.nativeElement.querySelector('button.close-button');
+          closeBtn.focus();
+        }
+      }
     }
   }
 
   @HostListener('click', ['$event.target', '$event.button', '$event.ctrlKey', '$event.metaKey', '$event.altKey'])
   onClick(eventTarget: HTMLElement, button: number, ctrlKey: boolean, metaKey: boolean, altKey: boolean): boolean {
     // Hide the search results if we clicked outside both the "search box" and the "search results"
-    if (!this.searchElements.some(element => element.nativeElement.contains(eventTarget))) {
+    if (
+      this.showSearchResults &&
+      !this.searchElements.some(element => element.nativeElement.contains(eventTarget))
+    ) {
       this.hideSearchResults();
     }
 
@@ -263,7 +321,7 @@ export class AppComponent implements OnInit {
     }
 
     // Deal with anchor clicks; climb DOM tree until anchor found (or null)
-    let target: HTMLElement|null = eventTarget;
+    let target: HTMLElement | null = eventTarget;
     while (target && !(target instanceof HTMLAnchorElement)) {
       target = target.parentElement;
     }
@@ -336,7 +394,7 @@ export class AppComponent implements OnInit {
     }
 
     // May be open or closed when wide; always closed when narrow.
-    this.sidenav.toggle(this.isSideBySide && openSideNav);
+    this.sidenav.toggle(this.dockSideNav && openSideNav);
   }
 
   // Dynamically change height of table of contents container
@@ -395,7 +453,12 @@ export class AppComponent implements OnInit {
     }
   }
 
-  doSearch(query: string) {
+  doSearch(query: string, fromFocus = false) {
+    if (this.showSearchResults && fromFocus) {
+      // the results where already being displayed so there is no
+      // need to perform the search until the input actually changes
+      return;
+    }
     this.searchResults = this.searchService.search(query);
     this.showSearchResults = !!query;
   }
@@ -406,7 +469,7 @@ export class AppComponent implements OnInit {
     if (key === '/' || keyCode === 191) {
       this.focusSearchBox();
     }
-    if (key === 'Escape' || keyCode === 27 ) {
+    if (key === 'Escape' || keyCode === 27) {
       // escape key
       if (this.showSearchResults) {
         this.hideSearchResults();

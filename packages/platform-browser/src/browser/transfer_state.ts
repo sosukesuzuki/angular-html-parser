@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
 import {DOCUMENT} from '@angular/common';
-import {APP_ID, Injectable, NgModule} from '@angular/core';
+import {APP_ID, inject, Injectable, NgModule} from '@angular/core';
 
 export function escapeHtml(text: string): string {
   const escapedText: {[k: string]: string} = {
@@ -45,7 +45,10 @@ export function unescapeHtml(text: string): string {
  *
  * @publicApi
  */
-export type StateKey<T> = string & {__not_a_string: never};
+export type StateKey<T> = string&{
+  __not_a_string: never,
+  __value_type?: T,
+};
 
 /**
  * Create a `StateKey<T>` that can be used to store value of type T with `TransferState`.
@@ -69,26 +72,30 @@ export function makeStateKey<T = void>(key: string): StateKey<T> {
  * A key value store that is transferred from the application on the server side to the application
  * on the client side.
  *
- * `TransferState` will be available as an injectable token. To use it import
- * `ServerTransferStateModule` on the server and `BrowserTransferStateModule` on the client.
+ * The `TransferState` is available as an injectable token.
+ * On the client, just inject this token using DI and use it, it will be lazily initialized.
+ * On the server it's already included if `renderApplication` function is used. Otherwise, import
+ * the `ServerTransferStateModule` module to make the `TransferState` available.
  *
  * The values in the store are serialized/deserialized using JSON.stringify/JSON.parse. So only
- * boolean, number, string, null and non-class objects will be serialized and deserialzied in a
+ * boolean, number, string, null and non-class objects will be serialized and deserialized in a
  * non-lossy manner.
  *
  * @publicApi
  */
-@Injectable()
-export class TransferState {
-  private store: {[k: string]: {} | undefined} = {};
-  private onSerializeCallbacks: {[k: string]: () => {} | undefined} = {};
-
-  /** @internal */
-  static init(initState: {}) {
-    const transferState = new TransferState();
-    transferState.store = initState;
-    return transferState;
+@Injectable({
+  providedIn: 'root',
+  useFactory: () => {
+    const doc = inject(DOCUMENT);
+    const appId = inject(APP_ID);
+    const state = new TransferState();
+    state.store = retrieveTransferredState(doc, appId);
+    return state;
   }
+})
+export class TransferState {
+  private store: {[k: string]: unknown|undefined} = {};
+  private onSerializeCallbacks: {[k: string]: () => unknown | undefined} = {};
 
   /**
    * Get the value corresponding to a key. Return `defaultValue` if key is not found.
@@ -100,17 +107,30 @@ export class TransferState {
   /**
    * Set the value corresponding to a key.
    */
-  set<T>(key: StateKey<T>, value: T): void { this.store[key] = value; }
+  set<T>(key: StateKey<T>, value: T): void {
+    this.store[key] = value;
+  }
 
   /**
    * Remove a key from the store.
    */
-  remove<T>(key: StateKey<T>): void { delete this.store[key]; }
+  remove<T>(key: StateKey<T>): void {
+    delete this.store[key];
+  }
 
   /**
    * Test whether a key exists in the store.
    */
-  hasKey<T>(key: StateKey<T>) { return this.store.hasOwnProperty(key); }
+  hasKey<T>(key: StateKey<T>) {
+    return this.store.hasOwnProperty(key);
+  }
+
+  /**
+   * Indicates whether the state is empty.
+   */
+  get isEmpty(): boolean {
+    return Object.keys(this.store).length === 0;
+  }
 
   /**
    * Register a callback to provide the value for a key when `toJson` is called.
@@ -137,19 +157,20 @@ export class TransferState {
   }
 }
 
-export function initTransferState(doc: Document, appId: string) {
+export function retrieveTransferredState(doc: Document, appId: string) {
   // Locate the script tag with the JSON data transferred from the server.
   // The id of the script tag is set to the Angular appId + 'state'.
   const script = doc.getElementById(appId + '-state');
   let initialState = {};
   if (script && script.textContent) {
     try {
-      initialState = JSON.parse(unescapeHtml(script.textContent));
+      // Avoid using any here as it triggers lint errors in google3 (any is not allowed).
+      initialState = JSON.parse(unescapeHtml(script.textContent)) as {};
     } catch (e) {
       console.warn('Exception while restoring TransferState for app ' + appId, e);
     }
   }
-  return TransferState.init(initialState);
+  return initialState;
 }
 
 /**
@@ -157,9 +178,9 @@ export function initTransferState(doc: Document, appId: string) {
  * server to client.
  *
  * @publicApi
+ * @deprecated no longer needed, you can inject the `TransferState` in an app without providing
+ *     this module.
  */
-@NgModule({
-  providers: [{provide: TransferState, useFactory: initTransferState, deps: [DOCUMENT, APP_ID]}],
-})
+@NgModule({})
 export class BrowserTransferStateModule {
 }

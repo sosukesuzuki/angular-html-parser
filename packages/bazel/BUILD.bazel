@@ -1,39 +1,39 @@
-load("//tools:defaults.bzl", "npm_package")
+# BEGIN-DEV-ONLY
+load("//tools:defaults.bzl", "pkg_npm")
 
-npm_package(
+pkg_npm(
     name = "npm_package",
     srcs = glob(
         ["*"],
         exclude = ["yarn.lock"],
     ) + [
         "//packages/bazel/src:package_assets",
-        "//packages/bazel/src/api-extractor:package_assets",
-        "//packages/bazel/src/builders:package_assets",
+        "//packages/bazel/src/ng_module:package_assets",
+        "//packages/bazel/src/types_bundle:package_assets",
         "//packages/bazel/src/ng_package:package_assets",
         "//packages/bazel/src/ngc-wrapped:package_assets",
-        "//packages/bazel/src/protractor:package_assets",
-        "//packages/bazel/src/schematics:package_assets",
         "//packages/bazel/third_party/github.com/bazelbuild/bazel/src/main/protobuf:package_assets",
     ],
-    packages = [
-        "//packages/bazel/docs",
-    ],
-    replacements = {
-        "(#|\/\/)\\s+BEGIN-DEV-ONLY[\\w\W]+?(#|\/\/)\\s+END-DEV-ONLY": "",
-        "//packages/bazel/": "//",
-        "angular/packages/bazel/": "npm_angular_bazel/",
+    substitutions = {
+        "(#|//)\\s+BEGIN-DEV-ONLY[\\w\\W]+?(#|//)\\s+END-DEV-ONLY": "",
+        # The partial compilation transition is applied in the user workspace. We do not want to require
+        # users having to define the build setting, so we directly point the flag label to the place where
+        # we expect `@angular/bazel` being located. Note: This expects the `@npm//` workspace to be used.
+        "//packages/bazel/src:partial_compilation": "@npm//@angular/bazel/src:partial_compilation",
+        # Substitutions to account for label changes when `@angular/bazel` is consumed externally.
+        # NodeJS binaries are pre-built and should be consumed through the NPM bin scripts of the package.
+        "//packages/bazel/src/types_bundle:types_bundler": "@npm//@angular/bazel/bin:types_bundler",
+        "//packages/bazel/": "//@angular/bazel/",
+        "@npm//@bazel/concatjs/internal:": "//@bazel/concatjs/internal:",
     },
     tags = ["release-with-framework"],
     # Do not add more to this list.
     # Dependencies on the full npm_package cause long re-builds.
-    visibility = ["//visibility:private"],
+    visibility = ["//integration:__subpackages__"],
     deps = [
-        "//packages/bazel/src/api-extractor:lib",
-        "//packages/bazel/src/builders",
         "//packages/bazel/src/ng_package:lib",
         "//packages/bazel/src/ngc-wrapped:ngc_lib",
-        "//packages/bazel/src/protractor/utils",
-        "//packages/bazel/src/schematics/ng-add",
-        "//packages/bazel/src/schematics/ng-new",
+        "//packages/bazel/src/types_bundle:lib",
     ],
 )
+# END-DEV-ONLY

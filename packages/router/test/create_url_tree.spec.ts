@@ -1,17 +1,25 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
 
+import {Component, Injectable} from '@angular/core';
+import {ComponentFixture, fakeAsync, TestBed, tick} from '@angular/core/testing';
+import {By} from '@angular/platform-browser';
 import {BehaviorSubject} from 'rxjs';
 
-import {createUrlTree} from '../src/create_url_tree';
+import {createUrlTree, createUrlTreeFromSnapshot} from '../src/create_url_tree';
+import {RouterLink} from '../src/directives/router_link';
+import {Routes} from '../src/models';
+import {Router} from '../src/router';
+import {RouterModule, routerNgProbeToken} from '../src/router_module';
 import {ActivatedRoute, ActivatedRouteSnapshot, advanceActivatedRoute} from '../src/router_state';
-import {PRIMARY_OUTLET, Params} from '../src/shared';
-import {DefaultUrlSerializer, UrlSegmentGroup, UrlTree} from '../src/url_tree';
+import {Params, PRIMARY_OUTLET} from '../src/shared';
+import {DefaultUrlSerializer, UrlSegment, UrlSegmentGroup, UrlTree} from '../src/url_tree';
+import {RouterTestingModule} from '../testing';
 
 describe('createUrlTree', () => {
   const serializer = new DefaultUrlSerializer();
@@ -25,6 +33,16 @@ describe('createUrlTree', () => {
       const p2 = serializer.parse('/a/c');
       const t2 = create(p2.root.children[PRIMARY_OUTLET], 1, p2, ['c2'], {m: ['v1', 'v2']});
       expect(serializer.serialize(t2)).toEqual('/a/c/c2?m=v1&m=v2');
+    });
+
+    it('should support parameter with empty arrays as values', () => {
+      const p1 = serializer.parse('/a/c');
+      const t1 = create(p1.root.children[PRIMARY_OUTLET], 1, p1, ['c2'], {m: []});
+      expect(serializer.serialize(t1)).toEqual('/a/c/c2');
+
+      const p2 = serializer.parse('/a/c');
+      const t2 = create(p2.root.children[PRIMARY_OUTLET], 1, p2, ['c2'], {m: [], n: 1});
+      expect(serializer.serialize(t2)).toEqual('/a/c/c2?n=1');
     });
 
     it('should set query params', () => {
@@ -68,7 +86,21 @@ describe('createUrlTree', () => {
     expect(params[1].path).toEqual('11');
   });
 
-  it('should support first segments contaings slashes', () => {
+  it('should work if command = null', () => {
+    const p = serializer.parse('/a/b');
+    const t = createRoot(p, [null]);
+    const params = t.root.children[PRIMARY_OUTLET].segments;
+    expect(params[0].path).toEqual('null');
+  });
+
+  it('should work if command is undefined', () => {
+    const p = serializer.parse('/a/b');
+    const t = createRoot(p, [undefined]);
+    const params = t.root.children[PRIMARY_OUTLET].segments;
+    expect(params[0].path).toEqual('undefined');
+  });
+
+  it('should support first segments containing slashes', () => {
     const p = serializer.parse('/');
     const t = createRoot(p, [{segmentPath: '/one'}, 'two/three']);
     expect(serializer.serialize(t)).toEqual('/%2Fone/two%2Fthree');
@@ -98,10 +130,110 @@ describe('createUrlTree', () => {
     expect(serializer.serialize(t)).toEqual('/a/(b//right:d/11/e)');
   });
 
+  describe('', () => {
+    /**
+     * In this group of scenarios, imagine a config like:
+     * {
+     *   path: 'parent',
+     *   children: [
+     *     {
+     *       path: 'child',
+     *       component: AnyCmp
+     *     },
+     *     {
+     *       path: 'popup',
+     *       outlet: 'secondary',
+     *       component: AnyCmp
+     *     }
+     *   ]
+     * },
+     * {
+     *   path: 'other',
+     *   component: AnyCmp
+     * },
+     * {
+     *   path: 'rootPopup',
+     *   outlet: 'rootSecondary',
+     * }
+     */
+
+    it('should support removing secondary outlet with prefix', () => {
+      const p = serializer.parse('/parent/(child//secondary:popup)');
+      const t = createRoot(p, ['parent', {outlets: {secondary: null}}]);
+      // - Segment index 0:
+      //   * match and keep existing 'parent'
+      // - Segment index 1:
+      //   * 'secondary' outlet cleared with `null`
+      //   * 'primary' outlet not provided in the commands list, so the existing value is kept
+      expect(serializer.serialize(t)).toEqual('/parent/child');
+    });
+
+    it('should support updating secondary and primary outlets with prefix', () => {
+      const p = serializer.parse('/parent/child');
+      const t = createRoot(p, ['parent', {outlets: {primary: 'child', secondary: 'popup'}}]);
+      expect(serializer.serialize(t)).toEqual('/parent/(child//secondary:popup)');
+    });
+
+    it('should support updating two outlets at the same time relative to non-root segment', () => {
+      const p = serializer.parse('/parent/child');
+      const t = create(
+          p.root.children[PRIMARY_OUTLET], 0 /* relativeTo: 'parent' */, p,
+          [{outlets: {primary: 'child', secondary: 'popup'}}]);
+      expect(serializer.serialize(t)).toEqual('/parent/(child//secondary:popup)');
+    });
+
+    it('should support adding multiple outlets with prefix', () => {
+      const p = serializer.parse('');
+      const t = createRoot(p, ['parent', {outlets: {primary: 'child', secondary: 'popup'}}]);
+      expect(serializer.serialize(t)).toEqual('/parent/(child//secondary:popup)');
+    });
+
+    it('should support updating clearing primary and secondary with prefix', () => {
+      const p = serializer.parse('/parent/(child//secondary:popup)');
+      const t = createRoot(p, ['other']);
+      // Because we navigate away from the 'parent' route, the children of that route are cleared
+      // because they are note valid for the 'other' path.
+      expect(serializer.serialize(t)).toEqual('/other');
+    });
+
+    it('should not clear secondary outlet when at root and prefix is used', () => {
+      const p = serializer.parse('/other(rootSecondary:rootPopup)');
+      const t = createRoot(p, ['parent', {outlets: {primary: 'child', rootSecondary: null}}]);
+      // We prefixed the navigation with 'parent' so we cannot clear the "rootSecondary" outlet
+      // because once the outlets object is consumed, traversal is beyond the root segment.
+      expect(serializer.serialize(t)).toEqual('/parent/child(rootSecondary:rootPopup)');
+    });
+
+    it('should not clear non-root secondary outlet when command is targeting root', () => {
+      const p = serializer.parse('/parent/(child//secondary:popup)');
+      const t = createRoot(p, [{outlets: {secondary: null}}]);
+      // The start segment index for the command is at 0, but the outlet lives at index 1
+      // so we cannot clear the outlet from processing segment index 0.
+      expect(serializer.serialize(t)).toEqual('/parent/(child//secondary:popup)');
+    });
+
+    it('can clear an auxiliary outlet at the correct segment level', () => {
+      const p = serializer.parse('/parent/(child//secondary:popup)(rootSecondary:rootPopup)');
+      //                                       ^^^^^^^^^^^^^^^^^^^^^^
+      // The parens here show that 'child' and 'secondary:popup' appear at the same 'level' in the
+      // config, i.e. are part of the same children list. You can also imagine an implicit paren
+      // group around the whole URL to visualize how 'parent' and 'rootSecondary:rootPopup' are also
+      // defined at the same level.
+      const t = createRoot(p, ['parent', {outlets: {primary: 'child', secondary: null}}]);
+      expect(serializer.serialize(t)).toEqual('/parent/child(rootSecondary:rootPopup)');
+    });
+  });
+
+  it('can navigate to nested route where commands is string', () => {
+    const p = serializer.parse('/');
+    const t = createRoot(
+        p, ['/', {outlets: {primary: ['child', {outlets: {primary: 'nested-primary'}}]}}]);
+    expect(serializer.serialize(t)).toEqual('/child/nested-primary');
+  });
+
   it('should throw when outlets is not the last command', () => {
     const p = serializer.parse('/a');
-    expect(() => createRoot(p, ['a', {outlets: {right: ['c']}}, 'c']))
-        .toThrowError('{outlets:{}} has to be the last command');
+    expect(() => createRoot(p, ['a', {outlets: {right: ['c']}}, 'c'])).toThrowError();
   });
 
   it('should support updating using a string', () => {
@@ -128,6 +260,12 @@ describe('createUrlTree', () => {
     expect(serializer.serialize(t)).toEqual('/a');
   });
 
+  it('should support removing parenthesis for primary segment on second path element', () => {
+    const p = serializer.parse('/a/(b//right:c)');
+    const t = createRoot(p, ['a', {outlets: {right: null}}]);
+    expect(serializer.serialize(t)).toEqual('/a/b');
+  });
+
   it('should update matrix parameters', () => {
     const p = serializer.parse('/a;pp=11');
     const t = createRoot(p, ['/a', {pp: 22, dd: 33}]);
@@ -144,6 +282,18 @@ describe('createUrlTree', () => {
     const p = serializer.parse('/a');
     const t = createRoot(p, ['/a', 'b', {aa: 22, bb: 33}]);
     expect(serializer.serialize(t)).toEqual('/a/b;aa=22;bb=33');
+  });
+
+  it('should stringify matrix parameters', () => {
+    const pr = serializer.parse('/r');
+    const relative = create(pr.root.children[PRIMARY_OUTLET], 0, pr, [{pp: 22}]);
+    const segmentR = relative.root.children[PRIMARY_OUTLET].segments[0];
+    expect(segmentR.parameterMap.get('pp')).toEqual('22');
+
+    const pa = serializer.parse('/a');
+    const absolute = createRoot(pa, ['/b', {pp: 33}]);
+    const segmentA = absolute.root.children[PRIMARY_OUTLET].segments[0];
+    expect(segmentA.parameterMap.get('pp')).toEqual('33');
   });
 
   describe('relative navigation', () => {
@@ -224,8 +374,7 @@ describe('createUrlTree', () => {
 
     it('should throw when too many ..', () => {
       const p = serializer.parse('/a/(c//left:cp)(left:ap)');
-      expect(() => create(p.root.children[PRIMARY_OUTLET], 0, p, ['../../']))
-          .toThrowError('Invalid number of \'../\'');
+      expect(() => create(p.root.children[PRIMARY_OUTLET], 0, p, ['../../'])).toThrowError();
     });
 
     it('should support updating secondary segments', () => {
@@ -240,6 +389,29 @@ describe('createUrlTree', () => {
     const t = createRoot(p, [], {}, 'fragment');
     expect(t.fragment).toEqual('fragment');
   });
+
+  it('should support pathless route', () => {
+    const p = serializer.parse('/a');
+    const t = create(p.root.children[PRIMARY_OUTLET], -1, p, ['b']);
+    expect(serializer.serialize(t)).toEqual('/b');
+  });
+
+  it('should support pathless route with ../ at root', () => {
+    const p = serializer.parse('/a');
+    const t = create(p.root.children[PRIMARY_OUTLET], -1, p, ['../b']);
+    expect(serializer.serialize(t)).toEqual('/b');
+  });
+
+  it('should support pathless child of pathless root', () => {
+    // i.e. routes = {path: '', loadChildren: () => import('child')...}
+    // forChild: {path: '', component: Comp}
+    const p = serializer.parse('');
+    const empty = new UrlSegmentGroup([], {});
+    p.root.children[PRIMARY_OUTLET] = empty;
+    empty.parent = p.root;
+    const t = create(empty, -1, p, ['lazy']);
+    expect(serializer.serialize(t)).toEqual('/lazy');
+  });
 });
 
 function createRoot(tree: UrlTree, commands: any[], queryParams?: Params, fragment?: string) {
@@ -247,10 +419,10 @@ function createRoot(tree: UrlTree, commands: any[], queryParams?: Params, fragme
       [], <any>{}, <any>{}, '', <any>{}, PRIMARY_OUTLET, 'someComponent', null, tree.root, -1,
       <any>null);
   const a = new (ActivatedRoute as any)(
-      new BehaviorSubject(null !), new BehaviorSubject(null !), new BehaviorSubject(null !),
-      new BehaviorSubject(null !), new BehaviorSubject(null !), PRIMARY_OUTLET, 'someComponent', s);
+      new BehaviorSubject(null!), new BehaviorSubject(null!), new BehaviorSubject(null!),
+      new BehaviorSubject(null!), new BehaviorSubject(null!), PRIMARY_OUTLET, 'someComponent', s);
   advanceActivatedRoute(a);
-  return createUrlTree(a, tree, commands, queryParams !, fragment !);
+  return createUrlTree(a, tree, commands, queryParams ?? null, fragment ?? null);
 }
 
 function create(
@@ -260,11 +432,117 @@ function create(
     expect(segment).toBeDefined();
   }
   const s = new (ActivatedRouteSnapshot as any)(
-      [], <any>{}, <any>{}, '', <any>{}, PRIMARY_OUTLET, 'someComponent', null, <any>segment,
-      startIndex, <any>null);
+      segment.segments, <any>{}, <any>{}, '', <any>{}, PRIMARY_OUTLET, 'someComponent', null,
+      <any>segment, startIndex, <any>null);
   const a = new (ActivatedRoute as any)(
-      new BehaviorSubject(null !), new BehaviorSubject(null !), new BehaviorSubject(null !),
-      new BehaviorSubject(null !), new BehaviorSubject(null !), PRIMARY_OUTLET, 'someComponent', s);
+      new BehaviorSubject(null!), new BehaviorSubject(null!), new BehaviorSubject(null!),
+      new BehaviorSubject(null!), new BehaviorSubject(null!), PRIMARY_OUTLET, 'someComponent', s);
   advanceActivatedRoute(a);
-  return createUrlTree(a, tree, commands, queryParams !, fragment !);
+  return createUrlTree(a, tree, commands, queryParams ?? null, fragment ?? null);
+}
+
+describe('createUrlTreeFromSnapshot', () => {
+  it('can create a UrlTree relative to empty path named parent', fakeAsync(() => {
+       @Component({
+         template: `<router-outlet></router-outlet>`,
+         standalone: true,
+         imports: [RouterModule],
+       })
+       class MainPageComponent {
+         constructor(private route: ActivatedRoute, private router: Router) {}
+
+         navigate() {
+           this.router.navigateByUrl(
+               createUrlTreeFromSnapshot(this.route.snapshot, ['innerRoute'], null, null));
+         }
+       }
+
+       @Component({template: 'child works!'})
+       class ChildComponent {
+       }
+
+       @Component({
+         template: '<router-outlet name="main-page"></router-outlet>',
+         standalone: true,
+         imports: [RouterModule]
+       })
+       class RootCmp {
+       }
+
+       const routes: Routes = [{
+         path: '',
+         component: MainPageComponent,
+         outlet: 'main-page',
+         children: [{path: 'innerRoute', component: ChildComponent}]
+       }];
+
+       TestBed.configureTestingModule({imports: [RouterTestingModule.withRoutes(routes)]});
+       const router = TestBed.inject(Router);
+       const fixture = TestBed.createComponent(RootCmp);
+
+       router.initialNavigation();
+       advance(fixture);
+       fixture.debugElement.query(By.directive(MainPageComponent)).componentInstance.navigate();
+       advance(fixture);
+       expect(fixture.nativeElement.innerHTML).toContain('child works!');
+     }));
+
+  it('can navigate to relative to `ActivatedRouteSnapshot` in guard', fakeAsync(() => {
+       @Injectable({providedIn: 'root'})
+       class Guard {
+         constructor(private readonly router: Router) {}
+         canActivate(snapshot: ActivatedRouteSnapshot) {
+           this.router.navigateByUrl(
+               createUrlTreeFromSnapshot(snapshot, ['../sibling'], null, null));
+         }
+       }
+
+       @Component({
+         template: `main`,
+         standalone: true,
+         imports: [RouterModule],
+       })
+       class GuardedComponent {
+       }
+
+       @Component({template: 'sibling', standalone: true})
+       class SiblingComponent {
+       }
+
+       @Component(
+           {template: '<router-outlet></router-outlet>', standalone: true, imports: [RouterModule]})
+       class RootCmp {
+       }
+
+       const routes: Routes = [
+         {
+           path: 'parent',
+           component: RootCmp,
+           children: [
+             {
+               path: 'guarded',
+               component: GuardedComponent,
+               canActivate: [Guard],
+             },
+             {
+               path: 'sibling',
+               component: SiblingComponent,
+             }
+           ],
+         },
+       ];
+
+       TestBed.configureTestingModule({imports: [RouterTestingModule.withRoutes(routes)]});
+       const router = TestBed.inject(Router);
+       const fixture = TestBed.createComponent(RootCmp);
+
+       router.navigateByUrl('parent/guarded');
+       advance(fixture);
+       expect(router.url).toEqual('/parent/sibling');
+     }));
+});
+
+function advance(fixture: ComponentFixture<unknown>) {
+  tick();
+  fixture.detectChanges();
 }

@@ -4,8 +4,7 @@ import { Location, PlatformLocation } from '@angular/common';
 import { ReplaySubject } from 'rxjs';
 import { map, tap } from 'rxjs/operators';
 
-import { GaService } from 'app/shared/ga.service';
-import { SwUpdatesService } from 'app/sw-updates/sw-updates.service';
+import { AnalyticsService } from 'app/shared/analytics.service';
 import { ScrollService } from './scroll.service';
 
 @Injectable()
@@ -13,30 +12,34 @@ export class LocationService {
 
   private readonly urlParser = document.createElement('a');
   private urlSubject = new ReplaySubject<string>(1);
-  private swUpdateActivated = false;
+  private fullPageNavigation = false;
 
   currentUrl = this.urlSubject
     .pipe(map(url => this.stripSlashes(url)));
 
   currentPath = this.currentUrl.pipe(
     map(url => (url.match(/[^?#]*/) || [])[0]),  // strip query and hash
-    tap(path => this.gaService.locationChanged(path)),
+    tap(path => this.analyticsService.locationChanged(path)),
   );
 
   constructor(
-    private gaService: GaService,
+    private analyticsService: AnalyticsService,
     private location: Location,
     private scrollService: ScrollService,
-    private platformLocation: PlatformLocation,
-    swUpdates: SwUpdatesService) {
+    private platformLocation: PlatformLocation) {
 
     this.urlSubject.next(location.path(true));
 
-    this.location.subscribe(state => {
-      return this.urlSubject.next(state.url || '');
-    });
+    this.location.subscribe(state => this.urlSubject.next(state.url || ''));
+  }
 
-    swUpdates.updateActivated.subscribe(() => this.swUpdateActivated = true);
+  /**
+   * Signify that a full page navigation is needed (instead of a regular in-app navigation).
+   *
+   * This will happen on the next user-initiated navigation.
+   */
+  fullPageNavigationNeeded(): void {
+    this.fullPageNavigation = true;
   }
 
   // TODO: ignore if url-without-hash-or-search matches current location?
@@ -46,9 +49,9 @@ export class LocationService {
     if (/^http/.test(url)) {
       // Has http protocol so leave the site
       this.goExternal(url);
-    } else if (this.swUpdateActivated) {
-      // (Do a "full page navigation" if a ServiceWorker update has been activated)
-      // We need to remove stored Position in order to be sure to scroll to the Top position
+    } else if (this.fullPageNavigation) {
+      // Do a "full page navigation".
+      // We need to remove the stored scroll position to ensure we scroll to the top.
       this.scrollService.removeStoredScrollInfo();
       this.goExternal(url);
     } else {
@@ -65,17 +68,21 @@ export class LocationService {
     window.location.replace(url);
   }
 
+  reloadPage(): void {
+    window.location.reload();
+  }
+
   private stripSlashes(url: string) {
     return url.replace(/^\/+/, '').replace(/\/+(\?|#|$)/, '$1');
   }
 
   search() {
-    const search: { [index: string]: string|undefined; } = {};
+    const search: { [index: string]: string|undefined } = {};
     const path = this.location.path();
     const q = path.indexOf('?');
     if (q > -1) {
       try {
-          const params = path.substr(q + 1).split('&');
+          const params = path.slice(q + 1).split('&');
           params.forEach(p => {
             const pair = p.split('=');
             if (pair[0]) {
@@ -100,7 +107,7 @@ export class LocationService {
   /**
    * Handle user's anchor click
    *
-   * @param anchor {HTMLAnchorElement} - the anchor element clicked
+   * @param anchor The anchor element clicked
    * @param button Number of the mouse button held down. 0 means left or none
    * @param ctrlKey True if control key held down
    * @param metaKey True if command or window key held down
@@ -118,7 +125,6 @@ export class LocationService {
    * `AppComponent`, whose element contains all the of the application and so captures all
    * link clicks both inside and outside the `DocViewerComponent`.
    */
-
   handleAnchorClick(anchor: HTMLAnchorElement, button = 0, ctrlKey = false, metaKey = false) {
 
     // Check for modifier keys and non-left-button, which indicate the user wants to control navigation
@@ -139,11 +145,16 @@ export class LocationService {
     }
 
     const { pathname, search, hash } = anchor;
-    const relativeUrl = pathname + search + hash;
+    // Fix in-page anchors that are supposed to point to fragments inside the page, but are resolved
+    // relative the the root path (`/`), due to the base URL being set to `/`.
+    // (See https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base#in-page_anchors.)
+    const isInPageAnchor = anchor.getAttribute('href')?.startsWith('#') ?? false;
+    const correctPathname = isInPageAnchor ? this.location.path() : pathname;
+    const relativeUrl = correctPathname + search + hash;
     this.urlParser.href = relativeUrl;
 
     // don't navigate if external link or has extension
-    if ( anchor.href !== this.urlParser.href ||
+    if ( (!isInPageAnchor && anchor.href !== this.urlParser.href) ||
          !/\/[^/.]*$/.test(pathname) ) {
       return true;
     }

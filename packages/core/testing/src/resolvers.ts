@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright Google Inc. All Rights Reserved.
+ * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
@@ -40,7 +40,9 @@ abstract class OverrideResolver<T> implements Resolver<T> {
 
   setOverrides(overrides: Array<[Type<any>, MetadataOverride<T>]>) {
     this.overrides.clear();
-    overrides.forEach(([type, override]) => { this.addOverride(type, override); });
+    overrides.forEach(([type, override]) => {
+      this.addOverride(type, override);
+    });
   }
 
   getAnnotation(type: Type<any>): T|null {
@@ -55,14 +57,14 @@ abstract class OverrideResolver<T> implements Resolver<T> {
       const isKnownType = annotation instanceof Directive || annotation instanceof Component ||
           annotation instanceof Pipe || annotation instanceof NgModule;
       if (isKnownType) {
-        return annotation instanceof this.type ? annotation : null;
+        return annotation instanceof this.type ? annotation as unknown as T : null;
       }
     }
     return null;
   }
 
   resolve(type: Type<any>): T|null {
-    let resolved = this.resolved.get(type) || null;
+    let resolved: T|null = this.resolved.get(type) || null;
 
     if (!resolved) {
       resolved = this.getAnnotation(type);
@@ -71,7 +73,7 @@ abstract class OverrideResolver<T> implements Resolver<T> {
         if (overrides) {
           const overrider = new MetadataOverrider();
           overrides.forEach(override => {
-            resolved = overrider.overrideMetadata(this.type, resolved !, override);
+            resolved = overrider.overrideMetadata(this.type, resolved!, override);
           });
         }
       }
@@ -84,17 +86,25 @@ abstract class OverrideResolver<T> implements Resolver<T> {
 
 
 export class DirectiveResolver extends OverrideResolver<Directive> {
-  get type() { return Directive; }
+  override get type() {
+    return Directive;
+  }
 }
 
 export class ComponentResolver extends OverrideResolver<Component> {
-  get type() { return Component; }
+  override get type() {
+    return Component;
+  }
 }
 
 export class PipeResolver extends OverrideResolver<Pipe> {
-  get type() { return Pipe; }
+  override get type() {
+    return Pipe;
+  }
 }
 
 export class NgModuleResolver extends OverrideResolver<NgModule> {
-  get type() { return NgModule; }
+  override get type() {
+    return NgModule;
+  }
 }
