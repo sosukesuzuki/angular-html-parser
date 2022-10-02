@@ -1,6 +1,6 @@
-import { parse, TagContentType } from "../src/index";
-import { humanizeDom } from "../../compiler/test/ml_parser/ast_spec_utils";
-import * as html from "../../compiler/src/ml_parser/ast";
+import { parse, TagContentType } from "../src/index.js";
+import { humanizeDom } from "../../compiler/test/ml_parser/ast_spec_utils.js";
+import * as html from "../../compiler/src/ml_parser/ast.js";
 
 describe("options", () => {
   describe("getTagContentType", () => {

@@ -1,11 +1,10 @@
 # angular-html-parser
 
 [![npm](https://img.shields.io/npm/v/angular-html-parser.svg)](https://www.npmjs.com/package/angular-html-parser)
-[![build](https://img.shields.io/travis/com/ikatyang/angular-html-parser/master.svg)](https://travis-ci.com/ikatyang/angular-html-parser/builds)
 
-A HTML parser extracted from Angular with some [modifications](#modifications)
+An HTML parser extracted from Angular with some [modifications](#modifications)
 
-[Changelog](https://github.com/ikatyang/angular-html-parser/blob/master/packages/angular-html-parser/CHANGELOG.md)
+[Changelog](https://github.com/prettier/angular-html-parser/blob/master/packages/angular-html-parser/CHANGELOG.md)
 
 ## Install
 
@@ -22,7 +21,7 @@ yarn add angular-html-parser
 ```js
 const ngHtmlParser = require('angular-html-parser');
 
-const { rootNodes, errors } = ngHtmlParser.parse('<div>hello world</div>');
+const {rootNodes, errors} = ngHtmlParser.parse('<div>hello world</div>');
 ```
 
 ## API
@@ -38,7 +37,7 @@ interface Options {
    */
   canSelfClose?: boolean;
   /**
-   * support [`htm`](https://github.com/developit/htm) component closing tags (`<//>`) 
+   * support [`htm`](https://github.com/developit/htm) component closing tags (`<//>`)
    *
    * defaults to false
    */
@@ -54,7 +53,12 @@ interface Options {
    *
    * defaults to the content type defined in the HTML spec
    */
-  getTagContentType?: (tagName: string, prefix: string, hasParent: boolean) => void | ng.TagContentType,
+  getTagContentType?: (
+    tagName: string,
+    prefix: string,
+    hasParent: boolean,
+    attrs: Array<{prefix: string; name: string; value?: string | undefined}>
+  ) => void | ng.TagContentType;
 }
 ```
 
@@ -66,7 +70,7 @@ interface Options {
 - allow case-insensitive closing tags for non-foreign elements
 - fix `Comment#sourceSpan`
 - support [bogus comments](https://www.w3.org/TR/html5/syntax.html#bogus-comment-state) (`<!...>`, `<?...>`)
-- support full [named entities](https://html.spec.whatwg.org/multipage/entities.json)
+- ~~support full [named entities](https://html.spec.whatwg.org/multipage/entities.json)~~ (fixed upstream)
 - add `type` property to nodes
 - value span for attributes includes quotes
 

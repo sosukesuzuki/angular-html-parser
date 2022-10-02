@@ -1,5 +1,6 @@
-import { HtmlParser } from "../../compiler/src/ml_parser/html_parser";
-import { TagContentType } from '../../compiler/src/ml_parser/tags';
+import { HtmlParser } from "../../compiler/src/ml_parser/html_parser.js";
+import { TagContentType } from '../../compiler/src/ml_parser/tags.js';
+import { ParseTreeResult } from "../../compiler/src/ml_parser/parser.js";
 
 let parser: HtmlParser | null = null;
 
@@ -47,7 +48,7 @@ export interface ParseOptions {
 export function parse(
   input: string,
   options: ParseOptions = {}
-) {
+): ParseTreeResult {
   const {
     canSelfClose = false,
     allowHtmComponentClosingTags = false,
