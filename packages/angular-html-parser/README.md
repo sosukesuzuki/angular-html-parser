@@ -19,9 +19,19 @@ yarn add angular-html-parser
 ## Usage
 
 ```js
-const ngHtmlParser = require('angular-html-parser');
+import {parse} from 'angular-html-parser';
 
-const {rootNodes, errors} = ngHtmlParser.parse('<div>hello world</div>');
+const {rootNodes, errors} = parse(`
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Hello world!</title>
+  </head>
+  <body>
+    <div>Hello world!</div>
+  </body>
+</html>
+`);
 ```
 
 ## API
