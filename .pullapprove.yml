@@ -127,12 +127,16 @@ groups:
           'packages/animations/**/{*,.*}',
           'packages/platform-browser/animations/**/{*,.*}',
           'aio/content/guide/animations.md',
+          'aio/content/guide/animate-state-style.md',
+          'aio/content/guide/animation-api-summary.md',
           'aio/content/examples/animations/**/{*,.*}',
           'aio/content/images/guide/animations/**/{*,.*}',
           'aio/content/guide/complex-animation-sequences.md',
           'aio/content/guide/reusable-animations.md',
           'aio/content/guide/route-animations.md',
-          'aio/content/guide/transition-and-triggers.md'
+          'aio/content/guide/transition-and-triggers.md',
+          'aio/content/guide/animations-attach-to-html-template.md',
+          'aio/content/guide/animation-transition-timing.md'
           ])
     reviewers:
       users:
@@ -843,6 +847,7 @@ groups:
           'aio/content/images/guide/setup-local/**/{*,.*}',
           'aio/content/tutorial/**/{*,.*}',
           'aio/content/images/guide/toh/**/{*,.*}',
+          'aio/content/demos/first-app/**/{*,.*}',
           'aio/content/examples/toh-pt0/**/{*,.*}',
           'aio/content/examples/toh-pt1/**/{*,.*}',
           'aio/content/examples/toh-pt2/**/{*,.*}',
@@ -853,6 +858,7 @@ groups:
           'aio/content/examples/getting-started-v0/**/{*,.*}',
           'aio/content/examples/getting-started/**/{*,.*}',
           'aio/content/start/**/{*,.*}',
+          'aio/content/guide/quick-start.md',
           'aio/content/images/guide/start/**/{*,.*}',
           'aio/content/examples/what-is-angular/**/{*,.*}',
           'aio/content/guide/what-is-angular.md'
@@ -870,6 +876,7 @@ groups:
     conditions:
       - >
         contains_any_globs(files.exclude("aio/content/marketing/contributors.json"), [
+          'aio/content/examples/marketing-first-app/**/{*,.*}',
           'aio/content/guide/roadmap.md',
           'aio/content/marketing/**/{*,.*}',
           'aio/content/images/marketing/**/{*,.*}',
@@ -1073,6 +1080,7 @@ groups:
           'aio/tests/**/{*,.*}',
           'aio/tools/**/{*,.*}',
           'aio/tools/examples/shared/boilerplate/cli/.vscode/**/{*,.*}',
+          'aio/content/BUILD.bazel',
           'aio/content/images/guide/contributors-guide/**/{*,.*}',
           'aio/content/guide/contributors-guide-overview.md',
           'aio/content/guide/docs-style-guide.md',
@@ -1162,6 +1170,7 @@ groups:
           'tools/bazel-repo-patches/**/{*,.*}',
           'tools/circular_dependency_test/**/{*,.*}',
           'tools/contributing-stats/**/{*,.*}',
+          'tools/esm-interop/**/{*,.*}',
           'tools/gulp-tasks/**/{*,.*}',
           'tools/legacy-saucelabs/**/{*,.*}',
           'tools/rxjs/**/{*,.*}',
@@ -1283,6 +1292,7 @@ groups:
         - andrewseguin
         - dgp1130
         - ~jelbourn
+        - jessicajaniuk
         - josephperrott
 
   ####################################################################################

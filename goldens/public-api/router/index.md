@@ -16,7 +16,6 @@ import { EventEmitter } from '@angular/core';
 import * as i0 from '@angular/core';
 import { InjectionToken } from '@angular/core';
 import { Injector } from '@angular/core';
-import { Location as Location_2 } from '@angular/common';
 import { LocationStrategy } from '@angular/common';
 import { ModuleWithProviders } from '@angular/core';
 import { NgModuleFactory } from '@angular/core';
@@ -139,13 +138,13 @@ export interface CanDeactivate<T> {
 // @public
 export type CanDeactivateFn<T> = (component: T, currentRoute: ActivatedRouteSnapshot, currentState: RouterStateSnapshot, nextState: RouterStateSnapshot) => Observable<boolean | UrlTree> | Promise<boolean | UrlTree> | boolean | UrlTree;
 
-// @public
+// @public @deprecated
 export interface CanLoad {
     // (undocumented)
     canLoad(route: Route, segments: UrlSegment[]): Observable<boolean | UrlTree> | Promise<boolean | UrlTree> | boolean | UrlTree;
 }
 
-// @public
+// @public @deprecated
 export type CanLoadFn = (route: Route, segments: UrlSegment[]) => Observable<boolean | UrlTree> | Promise<boolean | UrlTree> | boolean | UrlTree;
 
 // @public
@@ -248,7 +247,7 @@ export type DisabledInitialNavigationFeature = RouterFeature<RouterFeatureKind.D
 export type EnabledBlockingInitialNavigationFeature = RouterFeature<RouterFeatureKind.EnabledBlockingInitialNavigationFeature>;
 
 // @public
-type Event_2 = RouterEvent | NavigationStart | NavigationEnd | NavigationCancel | NavigationError | RoutesRecognized | GuardsCheckStart | GuardsCheckEnd | RouteConfigLoadStart | RouteConfigLoadEnd | ChildActivationStart | ChildActivationEnd | ActivationStart | ActivationEnd | Scroll | ResolveStart | ResolveEnd;
+type Event_2 = RouterEvent | NavigationStart | NavigationEnd | NavigationCancel | NavigationError | RoutesRecognized | GuardsCheckStart | GuardsCheckEnd | RouteConfigLoadStart | RouteConfigLoadEnd | ChildActivationStart | ChildActivationEnd | ActivationStart | ActivationEnd | Scroll | ResolveStart | ResolveEnd | NavigationSkipped;
 export { Event_2 as Event }
 
 // @public
@@ -271,6 +270,8 @@ export const enum EventType {
     NavigationEnd = 1,
     // (undocumented)
     NavigationError = 3,
+    // (undocumented)
+    NavigationSkipped = 16,
     // (undocumented)
     NavigationStart = 0,
     // (undocumented)
@@ -359,7 +360,7 @@ export interface IsActiveMatchOptions {
 }
 
 // @public
-export type LoadChildren = LoadChildrenCallback | ɵDeprecatedLoadChildren;
+export type LoadChildren = LoadChildrenCallback;
 
 // @public
 export type LoadChildrenCallback = () => Type<any> | NgModuleFactory<any> | Routes | Observable<Type<any> | Routes | DefaultExport<Type<any>> | DefaultExport<Routes>> | Promise<NgModuleFactory<any> | Type<any> | Routes | DefaultExport<Type<any>> | DefaultExport<Routes>>;
@@ -377,6 +378,7 @@ export interface Navigation {
 
 // @public
 export interface NavigationBehaviorOptions {
+    onSameUrlNavigation?: Extract<OnSameUrlNavigation, 'reload'>;
     replaceUrl?: boolean;
     skipLocationChange?: boolean;
     state?: {
@@ -442,6 +444,25 @@ export interface NavigationExtras extends UrlCreationOptions, NavigationBehavior
 }
 
 // @public
+export class NavigationSkipped extends RouterEvent {
+    constructor(
+    id: number,
+    url: string,
+    reason: string,
+    code?: NavigationSkippedCode | undefined);
+    readonly code?: NavigationSkippedCode | undefined;
+    reason: string;
+    // (undocumented)
+    readonly type = EventType.NavigationSkipped;
+}
+
+// @public
+export const enum NavigationSkippedCode {
+    IgnoredByUrlHandlingStrategy = 1,
+    IgnoredSameUrlNavigation = 0
+}
+
+// @public
 export class NavigationStart extends RouterEvent {
     constructor(
     id: number,
@@ -471,6 +492,9 @@ export class NoPreloading implements PreloadingStrategy {
     // (undocumented)
     static ɵprov: i0.ɵɵInjectableDeclaration<NoPreloading>;
 }
+
+// @public
+export type OnSameUrlNavigation = 'reload' | 'ignore';
 
 // @public
 export class OutletContext {
@@ -585,6 +609,7 @@ export interface Route {
     canActivate?: Array<CanActivateFn | any>;
     canActivateChild?: Array<CanActivateChildFn | any>;
     canDeactivate?: Array<CanDeactivateFn<any> | any>;
+    // @deprecated
     canLoad?: Array<CanLoadFn | any>;
     canMatch?: Array<Type<CanMatch> | InjectionToken<CanMatchFn> | CanMatchFn>;
     children?: Routes;
@@ -629,7 +654,7 @@ export class RouteConfigLoadStart {
 
 // @public
 export class Router {
-    constructor(rootComponentType: Type<any> | null, urlSerializer: UrlSerializer, rootContexts: ChildrenOutletContexts, location: Location_2, injector: Injector, compiler: Compiler, config: Routes);
+    constructor();
     // @deprecated
     canceledNavigationResolution: 'replace' | 'computed';
     // (undocumented)
@@ -638,7 +663,7 @@ export class Router {
     dispose(): void;
     // @deprecated
     errorHandler: ErrorHandler;
-    readonly events: Observable<Event_2>;
+    get events(): Observable<Event_2>;
     getCurrentNavigation(): Navigation | null;
     initialNavigation(): void;
     // @deprecated
@@ -652,7 +677,7 @@ export class Router {
     // (undocumented)
     ngOnDestroy(): void;
     // @deprecated
-    onSameUrlNavigation: 'reload' | 'ignore';
+    onSameUrlNavigation: OnSameUrlNavigation;
     // @deprecated
     paramsInheritanceStrategy: 'emptyOnly' | 'always';
     parseUrl(url: string): UrlTree;
@@ -684,7 +709,7 @@ export const ROUTER_INITIALIZER: InjectionToken<(compRef: ComponentRef<any>) => 
 // @public
 export interface RouterConfigOptions {
     canceledNavigationResolution?: 'replace' | 'computed';
-    onSameUrlNavigation?: 'reload' | 'ignore';
+    onSameUrlNavigation?: OnSameUrlNavigation;
     paramsInheritanceStrategy?: 'emptyOnly' | 'always';
     urlUpdateStrategy?: 'deferred' | 'eager';
 }
@@ -699,6 +724,10 @@ export abstract class RouteReuseStrategy {
     abstract shouldDetach(route: ActivatedRouteSnapshot): boolean;
     abstract shouldReuseRoute(future: ActivatedRouteSnapshot, curr: ActivatedRouteSnapshot): boolean;
     abstract store(route: ActivatedRouteSnapshot, handle: DetachedRouteHandle | null): void;
+    // (undocumented)
+    static ɵfac: i0.ɵɵFactoryDeclaration<RouteReuseStrategy, never>;
+    // (undocumented)
+    static ɵprov: i0.ɵɵInjectableDeclaration<RouteReuseStrategy>;
 }
 
 // @public
@@ -720,6 +749,9 @@ export interface RouterFeature<FeatureKind extends RouterFeatureKind> {
 
 // @public
 export type RouterFeatures = PreloadingFeature | DebugTracingFeature | InitialNavigationFeature | InMemoryScrollingFeature | RouterConfigurationFeature;
+
+// @public
+export type RouterHashLocationFeature = RouterFeature<RouterFeatureKind.RouterHashLocationFeature>;
 
 // @public
 class RouterLink implements OnChanges, OnDestroy {
@@ -764,7 +796,7 @@ export class RouterLinkActive implements OnChanges, OnDestroy, AfterContentInit 
     constructor(router: Router, element: ElementRef, renderer: Renderer2, cdr: ChangeDetectorRef, link?: RouterLink | undefined);
     ariaCurrentWhenActive?: 'page' | 'step' | 'location' | 'date' | 'time' | true | false;
     // (undocumented)
-    readonly isActive: boolean;
+    get isActive(): boolean;
     readonly isActiveChange: EventEmitter<boolean>;
     // (undocumented)
     links: QueryList<RouterLink>;
@@ -950,6 +982,10 @@ export abstract class UrlHandlingStrategy {
     abstract extract(url: UrlTree): UrlTree;
     abstract merge(newUrlPart: UrlTree, rawUrl: UrlTree): UrlTree;
     abstract shouldProcessUrl(url: UrlTree): boolean;
+    // (undocumented)
+    static ɵfac: i0.ɵɵFactoryDeclaration<UrlHandlingStrategy, never>;
+    // (undocumented)
+    static ɵprov: i0.ɵɵInjectableDeclaration<UrlHandlingStrategy>;
 }
 
 // @public
@@ -1034,6 +1070,9 @@ export function withDisabledInitialNavigation(): DisabledInitialNavigationFeatur
 
 // @public
 export function withEnabledBlockingInitialNavigation(): EnabledBlockingInitialNavigationFeature;
+
+// @public
+export function withHashLocation(): RouterConfigurationFeature;
 
 // @public
 export function withInMemoryScrolling(options?: InMemoryScrollingOptions): InMemoryScrollingFeature;
