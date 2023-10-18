@@ -101,7 +101,7 @@ class _TreeBuilder {
         this._consumeStartTag(this._advance());
       } else if (this._peek.type === TokenType.TAG_CLOSE) {
         this._closeVoidElement();
-        this._consumeEndTag(this._advance<TagCloseToken>());
+        this._consumeEndTag(this._advance());
       } else if (this._peek.type === TokenType.CDATA_START) {
         this._closeVoidElement();
         this._consumeCdata(this._advance());
@@ -114,9 +114,6 @@ class _TreeBuilder {
         this._closeVoidElement();
         this._consumeText(this._advance());
       } else if (this._peek.type === TokenType.EXPANSION_FORM_START) {
-        this._consumeExpansion(this._advance<ExpansionFormStartToken>());
-      } else if (this._peek.type === TokenType.DOC_TYPE_START) {
-        this._consumeDocType(this._advance());
         this._consumeExpansion(this._advance());
       } else if (this._peek.type === TokenType.BLOCK_OPEN_START) {
         this._closeVoidElement();
@@ -127,6 +124,8 @@ class _TreeBuilder {
       } else if (this._peek.type === TokenType.INCOMPLETE_BLOCK_OPEN) {
         this._closeVoidElement();
         this._consumeIncompleteBlock(this._advance());
+      } else if (this._peek.type === TokenType.DOC_TYPE_START) {
+        this._consumeDocType(this._advance());
       } else {
         // Skip all other tokens...
         this._advance();
