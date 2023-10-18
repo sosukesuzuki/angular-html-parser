@@ -9,13 +9,16 @@
 import {dirname, resolve} from 'path';
 import ts from 'typescript';
 
-/** Whether the current TypeScript version is after 4.9. */
-const IS_AFTER_TS_49 = isAfterVersion(4, 9);
-
 /** Update recorder for managing imports. */
 export interface ImportManagerUpdateRecorder {
   addNewImport(start: number, importText: string): void;
   updateExistingImport(namedBindings: ts.NamedImports, newNamedBindings: string): void;
+}
+
+/** Possible types of quotes for imports. */
+const enum QuoteStyle {
+  Single,
+  Double,
 }
 
 /**
@@ -35,6 +38,8 @@ export class ImportManager {
     defaultImports: Map<string, ts.Identifier>,
     namedImports: Map<string, ts.ImportSpecifier[]>,
   }> = new Map();
+  /** Map between a file and the implied quote style for imports. */
+  private quoteStyles: Record<string, QuoteStyle> = {};
 
   /**
    * Array of previously resolved symbol imports. Cache can be re-used to return
@@ -58,7 +63,7 @@ export class ImportManager {
    */
   addImportToSourceFile(
       sourceFile: ts.SourceFile, symbolName: string|null, moduleName: string,
-      alias: string|null = null, typeImport = false): ts.Expression {
+      alias: string|null = null, typeImport = false, keepSymbolName = false): ts.Expression {
     const sourceDir = dirname(sourceFile.fileName);
     let importStartIndex = 0;
     let existingImport: ts.ImportDeclaration|null = null;
@@ -130,7 +135,8 @@ export class ImportManager {
     }
 
     if (existingImport) {
-      const {propertyName, name} = this._getImportParts(sourceFile, symbolName!, alias);
+      const {propertyName, name} =
+          this._getImportParts(sourceFile, symbolName!, alias, keepSymbolName);
 
       // Since it can happen that multiple classes need to be imported within the
       // specified source file and we want to add the identifiers to the existing
@@ -160,9 +166,10 @@ export class ImportManager {
     }
 
     if (symbolName) {
-      const {propertyName, name} = this._getImportParts(sourceFile, symbolName, alias);
+      const {propertyName, name} =
+          this._getImportParts(sourceFile, symbolName, alias, keepSymbolName);
       const importMap = this.newImports.get(sourceFile)!.namedImports;
-      identifier = propertyName || name;
+      identifier = name;
 
       if (!importMap.has(moduleName)) {
         importMap.set(moduleName, []);
@@ -205,22 +212,23 @@ export class ImportManager {
 
     this.newImports.forEach(({importStartIndex, defaultImports, namedImports}, sourceFile) => {
       const recorder = this.getUpdateRecorder(sourceFile);
+      const useSingleQuotes = this._getQuoteStyle(sourceFile) === QuoteStyle.Single;
 
       defaultImports.forEach((identifier, moduleName) => {
-        const newImport = createImportDeclaration(
+        const newImport = ts.factory.createImportDeclaration(
             undefined, ts.factory.createImportClause(false, identifier, undefined),
-            ts.factory.createStringLiteral(moduleName));
+            ts.factory.createStringLiteral(moduleName, useSingleQuotes));
 
         recorder.addNewImport(
             importStartIndex, this._getNewImportText(importStartIndex, newImport, sourceFile));
       });
 
       namedImports.forEach((specifiers, moduleName) => {
-        const newImport = createImportDeclaration(
+        const newImport = ts.factory.createImportDeclaration(
             undefined,
             ts.factory.createImportClause(
                 false, undefined, ts.factory.createNamedImports(specifiers)),
-            ts.factory.createStringLiteral(moduleName));
+            ts.factory.createStringLiteral(moduleName, useSingleQuotes));
 
         recorder.addNewImport(
             importStartIndex, this._getNewImportText(importStartIndex, newImport, sourceFile));
@@ -312,7 +320,8 @@ export class ImportManager {
    * would correspond to `import {name as alias}` while `{name: 'name', propertyName: undefined}`
    * corresponds to `import {name}`.
    */
-  private _getImportParts(sourceFile: ts.SourceFile, symbolName: string, alias: string|null) {
+  private _getImportParts(
+      sourceFile: ts.SourceFile, symbolName: string, alias: string|null, keepSymbolName: boolean) {
     const symbolIdentifier = ts.factory.createIdentifier(symbolName);
     const aliasIdentifier = alias ? ts.factory.createIdentifier(alias) : null;
     const generatedUniqueIdentifier = this._getUniqueIdentifier(sourceFile, alias || symbolName);
@@ -320,7 +329,7 @@ export class ImportManager {
     let propertyName: ts.Identifier|undefined;
     let name: ts.Identifier;
 
-    if (needsGeneratedUniqueName) {
+    if (needsGeneratedUniqueName && !keepSymbolName) {
       propertyName = symbolIdentifier;
       name = generatedUniqueIdentifier;
     } else if (aliasIdentifier) {
@@ -332,30 +341,28 @@ export class ImportManager {
 
     return {propertyName, name};
   }
-}
 
-/**
- * Creates a `ts.ImportDeclaration` declaration.
- *
- * TODO(crisbeto): this is a backwards-compatibility layer for versions of TypeScript less than 4.9.
- * We should remove it once we have dropped support for the older versions.
- */
-function createImportDeclaration(
-    modifiers: readonly ts.Modifier[]|undefined, importClause: ts.ImportClause|undefined,
-    moduleSpecifier: ts.Expression, assertClause?: ts.AssertClause): ts.ImportDeclaration {
-  return IS_AFTER_TS_49 ? (ts.factory.createImportDeclaration as any)(
-                              modifiers, importClause, moduleSpecifier, assertClause) :
-                          (ts.factory.createImportDeclaration as any)(
-                              undefined, modifiers, importClause, moduleSpecifier, assertClause);
-}
+  /** Gets the quote style that is used for a file's imports. */
+  private _getQuoteStyle(sourceFile: ts.SourceFile): QuoteStyle {
+    if (!this.quoteStyles.hasOwnProperty(sourceFile.fileName)) {
+      let quoteStyle: QuoteStyle|undefined;
 
-/** Checks if the current version of TypeScript is after the specified major/minor versions. */
-function isAfterVersion(targetMajor: number, targetMinor: number): boolean {
-  const [major, minor] = ts.versionMajorMinor.split('.').map(part => parseInt(part));
+      // Walk through the top-level imports and try to infer the quotes.
+      for (const statement of sourceFile.statements) {
+        if (ts.isImportDeclaration(statement) &&
+            ts.isStringLiteralLike(statement.moduleSpecifier)) {
+          // Use `getText` instead of the actual text since it includes the quotes.
+          quoteStyle = statement.moduleSpecifier.getText().trim().startsWith('"') ?
+              QuoteStyle.Double :
+              QuoteStyle.Single;
+          break;
+        }
+      }
 
-  if (major < targetMajor) {
-    return false;
+      // Otherwise fall back to single quotes.
+      this.quoteStyles[sourceFile.fileName] = quoteStyle ?? QuoteStyle.Single;
+    }
+
+    return this.quoteStyles[sourceFile.fileName];
   }
-
-  return major === targetMajor ? minor >= targetMinor : true;
 }

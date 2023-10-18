@@ -16,7 +16,6 @@ import {
   Directive,
   EnvironmentInjector,
   InjectFlags,
-  InjectionToken,
   InjectOptions,
   Injector,
   NgModule,
@@ -26,7 +25,9 @@ import {
   ProviderToken,
   Type,
   ɵconvertToBitFlags as convertToBitFlags,
+  ɵDeferBlockBehavior as DeferBlockBehavior,
   ɵflushModuleScopingQueueAsMuchAsPossible as flushModuleScopingQueueAsMuchAsPossible,
+  ɵgetAsyncClassMetadata as getAsyncClassMetadata,
   ɵgetUnknownElementStrictMode as getUnknownElementStrictMode,
   ɵgetUnknownPropertyStrictMode as getUnknownPropertyStrictMode,
   ɵRender3ComponentFactory as ComponentFactory,
@@ -35,10 +36,13 @@ import {
   ɵsetAllowDuplicateNgModuleIdsForTest as setAllowDuplicateNgModuleIdsForTest,
   ɵsetUnknownElementStrictMode as setUnknownElementStrictMode,
   ɵsetUnknownPropertyStrictMode as setUnknownPropertyStrictMode,
-  ɵstringify as stringify
+  ɵstringify as stringify,
+  ɵZoneAwareQueueingScheduler as ZoneAwareQueueingScheduler,
 } from '@angular/core';
 
 /* clang-format on */
+
+
 
 import {ComponentFixture} from './component_fixture';
 import {MetadataOverride} from './metadata_override';
@@ -108,7 +112,7 @@ export interface TestBed {
   /**
    * Runs the given function in the `EnvironmentInjector` context of `TestBed`.
    *
-   * @see EnvironmentInjector#runInContext
+   * @see {@link EnvironmentInjector#runInContext}
    */
   runInInjectionContext<T>(fn: () => T): T;
 
@@ -137,6 +141,14 @@ export interface TestBed {
   overrideTemplateUsingTestingModule(component: Type<any>, template: string): TestBed;
 
   createComponent<T>(component: Type<T>): ComponentFixture<T>;
+
+
+  /**
+   * Execute any pending effects.
+   *
+   * @developerPreview
+   */
+  flushEffects(): void;
 }
 
 let _nextRootElementId = 0;
@@ -187,6 +199,12 @@ export class TestBedImpl implements TestBed {
    * These options take precedence over the environment-level ones.
    */
   private _instanceTeardownOptions: ModuleTeardownOptions|undefined;
+
+  /**
+   * Defer block behavior option that specifies whether defer blocks will be triggered manually
+   * or set to play through.
+   */
+  private _instanceDeferBlockBehavior = DeferBlockBehavior.Manual;
 
   /**
    * "Error on unknown elements" option that has been configured at the `TestBed` instance level.
@@ -335,7 +353,7 @@ export class TestBedImpl implements TestBed {
   /**
    * Runs the given function in the `EnvironmentInjector` context of `TestBed`.
    *
-   * @see EnvironmentInjector#runInContext
+   * @see {@link EnvironmentInjector#runInContext}
    */
   static runInInjectionContext<T>(fn: () => T): T {
     return TestBedImpl.INSTANCE.runInInjectionContext(fn);
@@ -359,6 +377,10 @@ export class TestBedImpl implements TestBed {
 
   static get ngModule(): Type<any>|Type<any>[] {
     return TestBedImpl.INSTANCE.ngModule;
+  }
+
+  static flushEffects(): void {
+    return TestBedImpl.INSTANCE.flushEffects();
   }
 
   // Properties
@@ -458,6 +480,7 @@ export class TestBedImpl implements TestBed {
         this._instanceTeardownOptions = undefined;
         this._instanceErrorOnUnknownElementsOption = undefined;
         this._instanceErrorOnUnknownPropertiesOption = undefined;
+        this._instanceDeferBlockBehavior = DeferBlockBehavior.Manual;
       }
     }
     return this;
@@ -465,7 +488,7 @@ export class TestBedImpl implements TestBed {
 
   configureCompiler(config: {providers?: any[]; useJit?: boolean;}): this {
     if (config.useJit != null) {
-      throw new Error('the Render3 compiler JiT mode is not configurable !');
+      throw new Error('JIT compiler is not configurable via TestBed APIs.');
     }
 
     if (config.providers !== undefined) {
@@ -475,7 +498,7 @@ export class TestBedImpl implements TestBed {
   }
 
   configureTestingModule(moduleDef: TestModuleMetadata): this {
-    this.assertNotInstantiated('R3TestBed.configureTestingModule', 'configure the test module');
+    this.assertNotInstantiated('TestBed.configureTestingModule', 'configure the test module');
 
     // Trigger module scoping queue flush before executing other TestBed operations in a test.
     // This is needed for the first test invocation to ensure that globally declared modules have
@@ -488,6 +511,7 @@ export class TestBedImpl implements TestBed {
     this._instanceTeardownOptions = moduleDef.teardown;
     this._instanceErrorOnUnknownElementsOption = moduleDef.errorOnUnknownElements;
     this._instanceErrorOnUnknownPropertiesOption = moduleDef.errorOnUnknownProperties;
+    this._instanceDeferBlockBehavior = moduleDef.deferBlockBehavior ?? DeferBlockBehavior.Manual;
     // Store the current value of the strict mode option,
     // so we can restore it later
     this._previousErrorOnUnknownElementsOption = getUnknownElementStrictMode();
@@ -555,7 +579,7 @@ export class TestBedImpl implements TestBed {
 
   overrideTemplateUsingTestingModule(component: Type<any>, template: string): this {
     this.assertNotInstantiated(
-        'R3TestBed.overrideTemplateUsingTestingModule',
+        'TestBed.overrideTemplateUsingTestingModule',
         'Cannot override template when the test module has already been instantiated');
     this.compiler.overrideTemplateUsingTestingModule(component, template);
     return this;
@@ -592,23 +616,27 @@ export class TestBedImpl implements TestBed {
     const rootElId = `root${_nextRootElementId++}`;
     testComponentRenderer.insertRootElement(rootElId);
 
+    if (getAsyncClassMetadata(type)) {
+      throw new Error(
+          `Component '${type.name}' has unresolved metadata. ` +
+          `Please call \`await TestBed.compileComponents()\` before running this test.`);
+    }
+
     const componentDef = (type as any).ɵcmp;
 
     if (!componentDef) {
       throw new Error(`It looks like '${stringify(type)}' has not been compiled.`);
     }
 
-    // TODO: Don't cast as `InjectionToken<boolean>`, proper type is boolean[]
-    const noNgZone = this.inject(ComponentFixtureNoNgZone as InjectionToken<boolean>, false);
-    // TODO: Don't cast as `InjectionToken<boolean>`, proper type is boolean[]
-    const autoDetect: boolean =
-        this.inject(ComponentFixtureAutoDetect as InjectionToken<boolean>, false);
+    const noNgZone = this.inject(ComponentFixtureNoNgZone, false);
+    const autoDetect: boolean = this.inject(ComponentFixtureAutoDetect, false);
     const ngZone: NgZone|null = noNgZone ? null : this.inject(NgZone, null);
     const componentFactory = new ComponentFactory(componentDef);
     const initComponent = () => {
       const componentRef =
           componentFactory.create(Injector.NULL, [], `#${rootElId}`, this.testModuleRef);
-      return new ComponentFixture<any>(componentRef, ngZone, autoDetect);
+      return new ComponentFixture<any>(
+          componentRef, ngZone, this.inject(ZoneAwareQueueingScheduler, null), autoDetect);
     };
     const fixture = ngZone ? ngZone.run(initComponent) : initComponent();
     this._activeFixtures.push(fixture);
@@ -721,6 +749,10 @@ export class TestBedImpl implements TestBed {
         TEARDOWN_TESTING_MODULE_ON_DESTROY_DEFAULT;
   }
 
+  getDeferBlockBehavior(): DeferBlockBehavior {
+    return this._instanceDeferBlockBehavior;
+  }
+
   tearDownTestingModule() {
     // If the module ref has already been destroyed, we won't be able to get a test renderer.
     if (this._testModuleRef === null) {
@@ -743,6 +775,15 @@ export class TestBedImpl implements TestBed {
     } finally {
       testRenderer.removeAllRootElements?.();
     }
+  }
+
+  /**
+   * Execute any pending effects.
+   *
+   * @developerPreview
+   */
+  flushEffects(): void {
+    this.inject(ZoneAwareQueueingScheduler).flush();
   }
 }
 

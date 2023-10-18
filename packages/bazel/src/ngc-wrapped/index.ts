@@ -12,7 +12,6 @@ import {PerfPhase} from '@angular/compiler-cli/private/bazel';
 import tscw from '@bazel/concatjs/internal/tsc_wrapped/index.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as tsickle from 'tsickle';
 import ts from 'typescript';
 
 import {EXT, patchNgHostWithFileNameToModuleName as patchNgHost, relativeToRootDirs} from './utils';
@@ -23,10 +22,9 @@ interface BazelOptions extends tscw.BazelOptions {
   unusedInputsListPath?: string;
 }
 
-const NGC_GEN_FILES = /^(.*?)\.(ngfactory|ngsummary|ngstyle|shim\.ngstyle)(.*)$/;
 // FIXME: we should be able to add the assets to the tsconfig so FileLoader
 // knows about them
-const NGC_ASSETS = /\.(css|html|ngsummary\.json)$/;
+const NGC_ASSETS = /\.(css|html)$/;
 
 const BAZEL_BIN = /\b(blaze|bazel)-out\b.*?\bbin\b/;
 
@@ -88,6 +86,7 @@ export async function runOneBuild(
     'preserveWhitespaces',
     'createExternalSymbolFactoryReexports',
     'extendedDiagnostics',
+    'forbidOrphanComponents',
   ]);
 
   const userOverrides = Object.entries(userOptions)
@@ -242,19 +241,6 @@ export function compile({
   // synthetic and added to the `programWithStubs` based on real inputs.
   const origBazelHostFileExist = bazelHost.fileExists;
   bazelHost.fileExists = (fileName: string) => {
-    const match = NGC_GEN_FILES.exec(fileName);
-    if (match) {
-      const [, file, suffix, ext] = match;
-      // Performance: skip looking for files other than .d.ts or .ts
-      if (ext !== '.ts' && ext !== '.d.ts') return false;
-      if (suffix.indexOf('ngstyle') >= 0) {
-        // Look for foo.css on disk
-        fileName = file;
-      } else {
-        // Look for foo.d.ts or foo.ts on disk
-        fileName = file + (ext || '');
-      }
-    }
     if (NGC_ASSETS.test(fileName)) {
       return tsHost.fileExists(fileName);
     }
@@ -282,7 +268,7 @@ export function compile({
         fileName === path.posix.join(baseUrl, 'external', targetWorkspace, flatModuleOutPath))
       return true;
 
-    return origBazelHostShouldNameModule(fileName) || NGC_GEN_FILES.test(fileName);
+    return origBazelHostShouldNameModule(fileName);
   };
 
   const ngHost = ng.createCompilerHost({options: compilerOpts, tsHost: bazelHost});
@@ -309,7 +295,7 @@ export function compile({
     console.error('Check that it\'s included in the `assets` attribute of the `ng_module` rule.\n');
   };
 
-  const emitCallback: ng.TsEmitCallback<tsickle.EmitResult> = ({
+  const emitCallback: ng.TsEmitCallback<ts.EmitResult> = ({
     program,
     targetSourceFile,
     writeFile,
@@ -317,36 +303,21 @@ export function compile({
     emitOnlyDtsFiles,
     customTransformers = {},
   }) =>
-      tsickle.emitWithTsickle(
-          program, bazelHost!, bazelHost!, compilerOpts, targetSourceFile, writeFile,
-          cancellationToken, emitOnlyDtsFiles, {
-            beforeTs: customTransformers.before,
-            afterTs: customTransformers.after,
-            afterDeclarations: customTransformers.afterDeclarations,
-          });
+      program.emit(
+          targetSourceFile, writeFile, cancellationToken, emitOnlyDtsFiles, customTransformers);
+
 
   if (!gatherDiagnostics) {
     gatherDiagnostics = (program) =>
         gatherDiagnosticsForInputsOnly(compilerOpts, bazelOpts, program);
   }
-  const {diagnostics, emitResult, program} = ng.performCompilation({
-    rootNames: files,
-    options: compilerOpts,
-    host: ngHost,
-    emitCallback,
-    mergeEmitResultsCallback: tsickle.mergeEmitResults,
-    gatherDiagnostics
-  });
-  const tsickleEmitResult = emitResult as tsickle.EmitResult;
+  const {diagnostics, emitResult, program} = ng.performCompilation(
+      {rootNames: files, options: compilerOpts, host: ngHost, emitCallback, gatherDiagnostics});
   let externs = '/** @externs */\n';
   const hasError = diagnostics.some((diag) => diag.category === ts.DiagnosticCategory.Error);
   if (!hasError) {
-    if (bazelOpts.tsickleGenerateExterns) {
-      externs += tsickle.getGeneratedExterns(tsickleEmitResult.externs, rootDir);
-    }
     if (bazelOpts.manifest) {
-      const manifest = tscw.constructManifest(tsickleEmitResult.modulesManifest, bazelHost);
-      fs.writeFileSync(bazelOpts.manifest, manifest);
+      fs.writeFileSync(bazelOpts.manifest, '// Empty. Should not be used.');
     }
   }
 
@@ -419,8 +390,7 @@ export function maybeWriteUnusedInputsList(
 }
 
 function isCompilationTarget(bazelOpts: BazelOptions, sf: ts.SourceFile): boolean {
-  return !NGC_GEN_FILES.test(sf.fileName) &&
-      (bazelOpts.compilationTargetSrc.indexOf(sf.fileName) !== -1);
+  return bazelOpts.compilationTargetSrc.indexOf(sf.fileName) !== -1;
 }
 
 function convertToForwardSlashPath(filePath: string): string {
@@ -448,7 +418,13 @@ function gatherDiagnosticsForInputsOnly(
     // Note: We only get the diagnostics for individual files
     // to e.g. not check libraries.
     diagnostics.push(...tsProgram.getSyntacticDiagnostics(sf));
-    diagnostics.push(...tsProgram.getSemanticDiagnostics(sf));
+
+    // In local mode compilation the TS semantic check issues tons of diagnostics due to the fact
+    // that the file dependencies (.d.ts files) are not available in the program. So it needs to be
+    // disabled.
+    if (options.compilationMode !== 'experimental-local') {
+      diagnostics.push(...tsProgram.getSemanticDiagnostics(sf));
+    }
   }
 
   if (ngProgram instanceof ng.NgtscProgram) {

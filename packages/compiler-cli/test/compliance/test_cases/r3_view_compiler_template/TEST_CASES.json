@@ -11,6 +11,7 @@
           "files": [
             {
               "expected": "nested_template_context_template.js",
+              "templatePipelineExpected": "nested_template_context.pipeline.js",
               "generated": "nested_template_context.js"
             }
           ],
@@ -79,6 +80,7 @@
           "files": [
             {
               "expected": "ng_for_parent_context_variables_template.js",
+              "templatePipelineExpected": "ng_for_parent_context_variables.pipeline.js",
               "generated": "ng_for_parent_context_variables.js"
             }
           ],
@@ -135,7 +137,8 @@
           ],
           "failureMessage": "Incorrect template"
         }
-      ]
+      ],
+      "skipForTemplatePipeline": true
     },
     {
       "description": "should support directive outputs on <ng-template>",
@@ -152,7 +155,8 @@
           ],
           "failureMessage": "Incorrect template"
         }
-      ]
+      ],
+      "skipForTemplatePipeline": true
     },
     {
       "description": "should allow directive inputs as an interpolated prop on <ng-template>",
@@ -195,7 +199,8 @@
           ],
           "failureMessage": "Incorrect outer template"
         }
-      ]
+      ],
+      "skipForTemplatePipeline": true
     },
     {
       "description": "should create unique template function names even for similar nested template structures",
@@ -205,7 +210,11 @@
       "expectations": [
         {
           "extraChecks": [
-            ["verifyUniqueFunctions", "Template", 16]
+            [
+              "verifyUniqueFunctions",
+              "Template",
+              16
+            ]
           ]
         }
       ]
@@ -218,7 +227,11 @@
       "expectations": [
         {
           "extraChecks": [
-            ["verifyUniqueFunctions", "Template", 4]
+            [
+              "verifyUniqueFunctions",
+              "Template",
+              4
+            ]
           ]
         }
       ]
@@ -231,7 +244,11 @@
       "expectations": [
         {
           "extraChecks": [
-            ["verifyUniqueFunctions", "listener", 3]
+            [
+              "verifyUniqueFunctions",
+              "listener",
+              3
+            ]
           ]
         }
       ]
@@ -317,6 +334,17 @@
               "generated": "self_closing_tags_nested.js"
             }
           ],
+          "failureMessage": "Incorrect template"
+        }
+      ]
+    },
+    {
+      "description": "should handle structural directive on ng-template",
+      "inputFiles": [
+        "template_with_structural_directive.ts"
+      ],
+      "expectations": [
+        {
           "failureMessage": "Incorrect template"
         }
       ]

@@ -20,7 +20,6 @@ def _exclude_pkgs(packages, *args):
 # All framework packages published to NPM.
 ALL_PACKAGES = [
     "@angular/animations",
-    "@angular/bazel",
     "@angular/benchpress",
     "@angular/common",
     "@angular/compiler",
@@ -59,6 +58,7 @@ DOCS_ENTRYPOINTS = [
     "common/upgrade",
     "compiler",
     "core",
+    "core/rxjs-interop",
     "core/src/compiler",
     "core/src/di/interface",
     "core/src/interface",
@@ -74,6 +74,7 @@ DOCS_ENTRYPOINTS = [
     "examples/platform-browser",
     "examples/router/activated-route",
     "examples/router/testing",
+    "examples/router",
     "examples/service-worker/push",
     "examples/service-worker/registration-options",
     "examples/test-utils",
@@ -91,6 +92,7 @@ DOCS_ENTRYPOINTS = [
     "platform-browser-dynamic",
     "platform-browser-dynamic/testing",
     "platform-browser/animations",
+    "platform-browser/animations/async",
     "platform-browser/testing",
     "platform-server",
     "platform-server/init",

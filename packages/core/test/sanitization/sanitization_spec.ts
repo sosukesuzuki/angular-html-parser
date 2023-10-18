@@ -8,7 +8,7 @@
  */
 
 import {SECURITY_SCHEMA} from '@angular/compiler/src/schema/dom_security_schema';
-import {LView} from '@angular/core/src/render3/interfaces/view';
+import {ENVIRONMENT, LView} from '@angular/core/src/render3/interfaces/view';
 import {enterView, leaveView} from '@angular/core/src/render3/state';
 
 import {bypassSanitizationTrustHtml, bypassSanitizationTrustResourceUrl, bypassSanitizationTrustScript, bypassSanitizationTrustStyle, bypassSanitizationTrustUrl} from '../../src/sanitization/bypass';
@@ -16,7 +16,9 @@ import {getUrlSanitizer, ɵɵsanitizeHtml, ɵɵsanitizeResourceUrl, ɵɵsanitize
 import {SecurityContext} from '../../src/sanitization/security';
 
 function fakeLView(): LView {
-  return [null, {}] as LView;
+  const fake = [null, {}] as LView;
+  fake[ENVIRONMENT] = {} as any;
+  return fake;
 }
 
 describe('sanitization', () => {
@@ -89,8 +91,7 @@ describe('sanitization', () => {
     const sanitizerNameByContext: Map<number, Function> = new Map([
       [SecurityContext.URL, ɵɵsanitizeUrl], [SecurityContext.RESOURCE_URL, ɵɵsanitizeResourceUrl]
     ]);
-    Object.keys(schema).forEach(key => {
-      const context = schema[key];
+    Object.entries(schema).forEach(([key, context]) => {
       if (context === SecurityContext.URL || SecurityContext.RESOURCE_URL) {
         const [tag, prop] = key.split('|');
         const contexts = contextsByProp.get(prop) || new Set<number>();
