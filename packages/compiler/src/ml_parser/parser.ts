@@ -444,10 +444,10 @@ class _TreeBuilder {
     for (let stackIndex = this._containerStack.length - 1; stackIndex >= 0; stackIndex--) {
       const node = this._containerStack[stackIndex];
 
-      if (!expectedName ||
-          (/* isForeignElement */ getNsPrefix(node.name) ?
-               node.name == expectedName :
-               node.name.toLowerCase() == expectedName.toLowerCase())) {
+      if ((/* isForeignElement */ getNsPrefix(node.name) ?
+               node.name === expectedName :
+               (expectedName == null || node.name.toLowerCase() === expectedName.toLowerCase()) &&
+                   node instanceof expectedType)) {
         // Record the parse span with the element that is being closed. Any elements that are
         // removed from the element stack at this point are closed implicitly, so they won't get
         // an end source span (as there is no explicit closing element).
