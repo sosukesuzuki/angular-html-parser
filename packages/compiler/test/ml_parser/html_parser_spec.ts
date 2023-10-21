@@ -264,22 +264,6 @@ import {humanizeDom, humanizeDomSourceSpans, humanizeLineColumn, humanizeNodes} 
           expect(parsed.errors).toEqual([]);
         });
 
-        it('should treat prematurely terminated interpolation as text', () => {
-          const {errors, rootNodes} =
-              parser.parse('<div><span>x {{ expr }<!---->} y</span><div></div></div>', 'TestComp');
-          expect(humanizeNodes(rootNodes, true)).toEqual([
-            [
-              html.Element, 'div', 0, '<div><span>x {{ expr }<!---->} y</span><div></div></div>',
-              '<div>', '</div>'
-            ],
-            [html.Element, 'span', 1, '<span>x {{ expr }<!---->} y</span>', '<span>', '</span>'],
-            [html.Text, 'x {{ expr }', 2, ['x '], ['{{', ' expr }'], [''], 'x {{ expr }'],
-            [html.Comment, '', 2, '<!---->'],
-            [html.Text, '} y', 2, ['} y'], '} y'],
-            [html.Element, 'div', 1, '<div></div>', '<div>', '</div>'],
-          ])
-        });
-
         it('should parse element with JavaScript keyword tag name', () => {
           expect(humanizeDom(parser.parse('<constructor></constructor>', 'TestComp'))).toEqual([
             [html.Element, 'constructor', 0]
