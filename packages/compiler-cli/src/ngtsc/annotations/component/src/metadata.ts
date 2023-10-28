@@ -6,11 +6,11 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {AnimationTriggerNames, R3ClassMetadata, R3ComponentMetadata, R3TemplateDependencyMetadata, SchemaMetadata} from '@angular/compiler';
+import {AnimationTriggerNames, R3ClassDebugInfo, R3ClassMetadata, R3ComponentMetadata, R3TemplateDependencyMetadata, SchemaMetadata} from '@angular/compiler';
 import ts from 'typescript';
 
 import {Reference} from '../../../imports';
-import {ClassPropertyMapping, ComponentResources, DirectiveTypeCheckMeta, HostDirectiveMeta} from '../../../metadata';
+import {ClassPropertyMapping, ComponentResources, DirectiveTypeCheckMeta, HostDirectiveMeta, InputMapping} from '../../../metadata';
 import {ClassDeclaration} from '../../../reflection';
 import {SubsetOfKeys} from '../../../util/src/typescript';
 
@@ -23,7 +23,8 @@ import {ParsedTemplateWithSource, StyleUrlMeta} from './resources';
  * be included here.
  */
 export type ComponentMetadataResolvedFields = SubsetOfKeys<
-    R3ComponentMetadata<R3TemplateDependencyMetadata>, 'declarations'|'declarationListEmitMode'>;
+    R3ComponentMetadata<R3TemplateDependencyMetadata>,
+    'declarations'|'declarationListEmitMode'|'deferBlocks'|'deferrableDeclToImportDecl'>;
 
 export interface ComponentAnalysisData {
   /**
@@ -35,8 +36,9 @@ export interface ComponentAnalysisData {
   typeCheckMeta: DirectiveTypeCheckMeta;
   template: ParsedTemplateWithSource;
   classMetadata: R3ClassMetadata|null;
+  classDebugInfo: R3ClassDebugInfo|null;
 
-  inputs: ClassPropertyMapping;
+  inputs: ClassPropertyMapping<InputMapping>;
   outputs: ClassPropertyMapping;
 
   /**

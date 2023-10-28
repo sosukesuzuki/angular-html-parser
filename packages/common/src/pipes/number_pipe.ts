@@ -22,7 +22,7 @@ import {invalidPipeArgumentError} from './invalid_pipe_argument_error';
  * Locale determines group sizing and separator,
  * decimal point character, and other locale-specific configurations.
  *
- * @see `formatNumber()`
+ * @see {@link formatNumber}
  *
  * @usageNotes
  *
@@ -118,7 +118,7 @@ export class DecimalPipe implements PipeTransform {
  * separator, decimal-point character, and other locale-specific
  * configurations.
  *
- * @see `formatPercent()`
+ * @see {@link formatPercent}
  *
  * @usageNotes
  * The following code shows how the pipe transforms numbers
@@ -176,28 +176,9 @@ export class PercentPipe implements PipeTransform {
  * that determine group sizing and separator, decimal-point character,
  * and other locale-specific configurations.
  *
- * {@a currency-code-deprecation}
- * <div class="alert is-helpful">
  *
- * **Deprecation notice:**
- *
- * The default currency code is currently always `USD` but this is deprecated from v9.
- *
- * **In v11 the default currency code will be taken from the current locale identified by
- * the `LOCALE_ID` token. See the [i18n guide](guide/i18n-common-locale-id) for
- * more information.**
- *
- * If you need the previous behavior then set it by creating a `DEFAULT_CURRENCY_CODE` provider in
- * your application `NgModule`:
- *
- * ```ts
- * {provide: DEFAULT_CURRENCY_CODE, useValue: 'USD'}
- * ```
- *
- * </div>
- *
- * @see `getCurrencySymbol()`
- * @see `formatCurrency()`
+ * @see {@link getCurrencySymbol}
+ * @see {@link formatCurrency}
  *
  * @usageNotes
  * The following code shows how the pipe transforms numbers

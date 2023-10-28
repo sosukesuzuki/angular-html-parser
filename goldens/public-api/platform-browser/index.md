@@ -4,14 +4,17 @@
 
 ```ts
 
+import { ApplicationConfig as ApplicationConfig_2 } from '@angular/core';
 import { ApplicationRef } from '@angular/core';
 import { ComponentRef } from '@angular/core';
 import { DebugElement } from '@angular/core';
 import { DebugNode } from '@angular/core';
 import { EnvironmentProviders } from '@angular/core';
+import { HttpTransferCacheOptions } from '@angular/common/http';
 import * as i0 from '@angular/core';
 import * as i1 from '@angular/common';
 import { InjectionToken } from '@angular/core';
+import { makeStateKey as makeStateKey_2 } from '@angular/core';
 import { ModuleWithProviders } from '@angular/core';
 import { NgZone } from '@angular/core';
 import { PlatformRef } from '@angular/core';
@@ -19,14 +22,14 @@ import { Predicate } from '@angular/core';
 import { Provider } from '@angular/core';
 import { Sanitizer } from '@angular/core';
 import { SecurityContext } from '@angular/core';
+import { StateKey as StateKey_2 } from '@angular/core';
 import { StaticProvider } from '@angular/core';
+import { TransferState as TransferState_2 } from '@angular/core';
 import { Type } from '@angular/core';
 import { Version } from '@angular/core';
 
-// @public
-export interface ApplicationConfig {
-    providers: Array<Provider | EnvironmentProviders>;
-}
+// @public @deprecated
+export type ApplicationConfig = ApplicationConfig_2;
 
 // @public
 export function bootstrapApplication(rootComponent: Type<unknown>, options?: ApplicationConfig): Promise<ApplicationRef>;
@@ -34,6 +37,7 @@ export function bootstrapApplication(rootComponent: Type<unknown>, options?: App
 // @public
 export class BrowserModule {
     constructor(providersAlreadyPresent: boolean | null);
+    // @deprecated
     static withServerTransition(params: {
         appId: string;
     }): ModuleWithProviders<BrowserModule>;
@@ -43,16 +47,6 @@ export class BrowserModule {
     static ɵinj: i0.ɵɵInjectorDeclaration<BrowserModule>;
     // (undocumented)
     static ɵmod: i0.ɵɵNgModuleDeclaration<BrowserModule, never, never, [typeof i1.CommonModule, typeof i0.ApplicationModule]>;
-}
-
-// @public @deprecated
-export class BrowserTransferStateModule {
-    // (undocumented)
-    static ɵfac: i0.ɵɵFactoryDeclaration<BrowserTransferStateModule, never>;
-    // (undocumented)
-    static ɵinj: i0.ɵɵInjectorDeclaration<BrowserTransferStateModule>;
-    // (undocumented)
-    static ɵmod: i0.ɵɵNgModuleDeclaration<BrowserTransferStateModule, never, never, never>;
 }
 
 // @public
@@ -92,13 +86,20 @@ export const EVENT_MANAGER_PLUGINS: InjectionToken<EventManagerPlugin[]>;
 export class EventManager {
     constructor(plugins: EventManagerPlugin[], _zone: NgZone);
     addEventListener(element: HTMLElement, eventName: string, handler: Function): Function;
-    // @deprecated
-    addGlobalEventListener(target: string, eventName: string, handler: Function): Function;
     getZone(): NgZone;
     // (undocumented)
     static ɵfac: i0.ɵɵFactoryDeclaration<EventManager, never>;
     // (undocumented)
     static ɵprov: i0.ɵɵInjectableDeclaration<EventManager>;
+}
+
+// @public
+export abstract class EventManagerPlugin {
+    constructor(_doc: any);
+    abstract addEventListener(element: HTMLElement, eventName: string, handler: Function): Function;
+    // (undocumented)
+    manager: EventManager;
+    abstract supports(eventName: string): boolean;
 }
 
 // @public
@@ -144,7 +145,23 @@ export class HammerModule {
 }
 
 // @public
-export function makeStateKey<T = void>(key: string): StateKey<T>;
+export interface HydrationFeature<FeatureKind extends HydrationFeatureKind> {
+    // (undocumented)
+    ɵkind: FeatureKind;
+    // (undocumented)
+    ɵproviders: Provider[];
+}
+
+// @public
+export const enum HydrationFeatureKind {
+    // (undocumented)
+    HttpTransferCacheOptions = 1,
+    // (undocumented)
+    NoHttpTransferCache = 0
+}
+
+// @public @deprecated
+export const makeStateKey: typeof makeStateKey_2;
 
 // @public
 export class Meta {
@@ -181,7 +198,13 @@ export type MetaDefinition = {
 export const platformBrowser: (extraProviders?: StaticProvider[]) => PlatformRef;
 
 // @public
+export function provideClientHydration(...features: HydrationFeature<HydrationFeatureKind>[]): EnvironmentProviders;
+
+// @public
 export function provideProtractorTestingSupport(): Provider[];
+
+// @public
+export const REMOVE_STYLES_ON_COMPONENT_DESTROY: InjectionToken<boolean>;
 
 // @public
 export interface SafeHtml extends SafeValue {
@@ -207,11 +230,8 @@ export interface SafeUrl extends SafeValue {
 export interface SafeValue {
 }
 
-// @public
-export type StateKey<T> = string & {
-    __not_a_string: never;
-    __value_type?: T;
-};
+// @public @deprecated
+export type StateKey<T> = StateKey_2<T>;
 
 // @public
 export class Title {
@@ -224,23 +244,22 @@ export class Title {
     static ɵprov: i0.ɵɵInjectableDeclaration<Title>;
 }
 
-// @public
-export class TransferState {
-    get<T>(key: StateKey<T>, defaultValue: T): T;
-    hasKey<T>(key: StateKey<T>): boolean;
-    get isEmpty(): boolean;
-    onSerialize<T>(key: StateKey<T>, callback: () => T): void;
-    remove<T>(key: StateKey<T>): void;
-    set<T>(key: StateKey<T>, value: T): void;
-    toJson(): string;
-    // (undocumented)
-    static ɵfac: i0.ɵɵFactoryDeclaration<TransferState, never>;
-    // (undocumented)
-    static ɵprov: i0.ɵɵInjectableDeclaration<TransferState>;
-}
+// @public @deprecated
+export type TransferState = TransferState_2;
+
+// @public (undocumented)
+export const TransferState: {
+    new (): TransferState_2;
+};
 
 // @public (undocumented)
 export const VERSION: Version;
+
+// @public
+export function withHttpTransferCacheOptions(options: HttpTransferCacheOptions): HydrationFeature<HydrationFeatureKind.HttpTransferCacheOptions>;
+
+// @public
+export function withNoHttpTransferCache(): HydrationFeature<HydrationFeatureKind.NoHttpTransferCache>;
 
 // (No @packageDocumentation comment for this package)
 

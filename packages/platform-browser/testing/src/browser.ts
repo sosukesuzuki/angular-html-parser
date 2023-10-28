@@ -7,15 +7,11 @@
  */
 import {PlatformLocation} from '@angular/common';
 import {MockPlatformLocation} from '@angular/common/testing';
-import {APP_ID, createPlatformFactory, NgModule, NgZone, PLATFORM_INITIALIZER, platformCore, StaticProvider} from '@angular/core';
+import {APP_ID, createPlatformFactory, NgModule, PLATFORM_INITIALIZER, platformCore, provideZoneChangeDetection, StaticProvider, ɵEffectScheduler as EffectScheduler, ɵZoneAwareQueueingScheduler as ZoneAwareQueueingScheduler} from '@angular/core';
 import {BrowserModule, ɵBrowserDomAdapter as BrowserDomAdapter} from '@angular/platform-browser';
-
-import {BrowserDetection, createNgZone} from './browser_util';
-import {ENABLE_MOCK_PLATFORM_LOCATION} from './mock_platform_location_flag';
 
 function initBrowserTests() {
   BrowserDomAdapter.makeCurrent();
-  BrowserDetection.setup();
 }
 
 const _TEST_BROWSER_PLATFORM_PROVIDERS: StaticProvider[] =
@@ -38,9 +34,10 @@ export const platformBrowserTesting =
   exports: [BrowserModule],
   providers: [
     {provide: APP_ID, useValue: 'a'},
-    {provide: NgZone, useFactory: createNgZone},
-    (ENABLE_MOCK_PLATFORM_LOCATION ? [{provide: PlatformLocation, useClass: MockPlatformLocation}] :
-                                     []),
+    provideZoneChangeDetection(),
+    {provide: PlatformLocation, useClass: MockPlatformLocation},
+    {provide: ZoneAwareQueueingScheduler},
+    {provide: EffectScheduler, useExisting: ZoneAwareQueueingScheduler},
   ]
 })
 export class BrowserTestingModule {

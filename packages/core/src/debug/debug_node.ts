@@ -178,9 +178,10 @@ export class DebugElement extends DebugNode {
   /**
    *  A map of attribute names to attribute values for an element.
    */
+  // TODO: replace null by undefined in the return type
   get attributes(): {[key: string]: string|null} {
     const attributes: {[key: string]: string|null} = {};
-    const element = this.nativeElement;
+    const element = this.nativeElement as Element | undefined;
 
     if (!element) {
       return attributes;
@@ -220,17 +221,11 @@ export class DebugElement extends DebugNode {
       }
     }
 
-    const eAttrs = element.attributes;
-    for (let i = 0; i < eAttrs.length; i++) {
-      const attr = eAttrs[i];
-      const lowercaseName = attr.name.toLowerCase();
-
+    for (const attr of element.attributes) {
       // Make sure that we don't assign the same attribute both in its
       // case-sensitive form and the lower-cased one from the browser.
-      if (lowercaseTNodeAttrs.indexOf(lowercaseName) === -1) {
-        // Save the lowercase name to align the behavior between browsers.
-        // IE preserves the case, while all other browser convert it to lower case.
-        attributes[lowercaseName] = attr.value;
+      if (!lowercaseTNodeAttrs.includes(attr.name)) {
+        attributes[attr.name] = attr.value;
       }
     }
 
@@ -239,16 +234,11 @@ export class DebugElement extends DebugNode {
 
   /**
    * The inline styles of the DOM element.
-   *
-   * Will be `null` if there is no `style` property on the underlying DOM element.
-   *
-   * @see [ElementCSSInlineStyle](https://developer.mozilla.org/en-US/docs/Web/API/ElementCSSInlineStyle/style)
    */
+  // TODO: replace null by undefined in the return type
   get styles(): {[key: string]: string|null} {
-    if (this.nativeElement && (this.nativeElement as HTMLElement).style) {
-      return (this.nativeElement as HTMLElement).style as {[key: string]: any};
-    }
-    return {};
+    const element = this.nativeElement as HTMLElement | null;
+    return (element?.style ?? {}) as {[key: string]: string | null};
   }
 
   /**
@@ -658,11 +648,6 @@ export function getDebugNode(nativeNode: any): DebugNode|null {
     }
     return (nativeNode as any)[NG_DEBUG_PROPERTY];
   }
-  return null;
-}
-
-// TODO: cleanup all references to this function and remove it.
-export function getDebugNodeR2(_nativeNode: any): DebugNode|null {
   return null;
 }
 

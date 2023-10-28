@@ -12,8 +12,7 @@ import {MockAnimationDriver, MockAnimationPlayer} from '@angular/animations/brow
 import {Component, HostBinding} from '@angular/core';
 import {fakeAsync, flushMicrotasks, TestBed, tick} from '@angular/core/testing';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
-import {ActivatedRoute, Router, RouterOutlet} from '@angular/router';
-import {RouterTestingModule} from '@angular/router/testing';
+import {ActivatedRoute, Router, RouterModule, RouterOutlet} from '@angular/router';
 
 (function() {
 // these tests are only meant to be run within the DOM (for now)
@@ -31,7 +30,7 @@ describe('Animation Router Tests', function() {
   beforeEach(() => {
     resetLog();
     TestBed.configureTestingModule({
-      imports: [RouterTestingModule, BrowserAnimationsModule],
+      imports: [RouterModule.forRoot([]), BrowserAnimationsModule],
       providers: [{provide: AnimationDriver, useClass: MockAnimationDriver}]
     });
   });
@@ -108,7 +107,7 @@ describe('Animation Router Tests', function() {
 
        TestBed.configureTestingModule({
          declarations: [Page1Cmp, Page2Cmp, ContainerCmp],
-         imports: [RouterTestingModule.withRoutes([
+         imports: [RouterModule.forRoot([
            {path: 'page1', component: Page1Cmp, data: makeAnimationData('page1')},
            {path: 'page2', component: Page2Cmp, data: makeAnimationData('page2')}
          ])]
@@ -215,7 +214,7 @@ describe('Animation Router Tests', function() {
 
        TestBed.configureTestingModule({
          declarations: [Page1Cmp, Page2Cmp, ContainerCmp],
-         imports: [RouterTestingModule.withRoutes([
+         imports: [RouterModule.forRoot([
            {path: 'page1', component: Page1Cmp, data: makeAnimationData('page1')},
            {path: 'page2', component: Page2Cmp, data: makeAnimationData('page2')}
          ])]
@@ -320,7 +319,7 @@ describe('Animation Router Tests', function() {
 
        TestBed.configureTestingModule({
          declarations: [Page1Cmp, Page2Cmp, ContainerCmp],
-         imports: [RouterTestingModule.withRoutes([
+         imports: [RouterModule.forRoot([
            {path: 'page1', component: Page1Cmp, data: makeAnimationData('page1')},
            {path: 'page2', component: Page2Cmp, data: makeAnimationData('page2')}
          ])]
@@ -414,7 +413,7 @@ describe('Animation Router Tests', function() {
 
        TestBed.configureTestingModule({
          declarations: [Page1Cmp, Page2Cmp, ContainerCmp],
-         imports: [RouterTestingModule.withRoutes([
+         imports: [RouterModule.forRoot([
            {path: 'page1', component: Page1Cmp, data: makeAnimationData('page1')},
            {path: 'page2', component: Page2Cmp, data: makeAnimationData('page2')}
          ])]
@@ -490,15 +489,15 @@ describe('Animation Router Tests', function() {
 
          constructor(private container: ContainerCmp, private route: ActivatedRoute) {
            this.route.data.subscribe(data => {
-             this.container.log.push(`DEPTH ${data.depth}`);
-             this.depth = data.depth;
+             this.container.log.push(`DEPTH ${data['depth']}`);
+             this.depth = data['depth'];
            });
          }
        }
 
        TestBed.configureTestingModule({
          declarations: [ContainerCmp, RecurPageCmp],
-         imports: [RouterTestingModule.withRoutes([{
+         imports: [RouterModule.forRoot([{
            path: 'recur',
            component: RecurPageCmp,
            outlet: 'recur',

@@ -8,10 +8,9 @@
 
 import {Observable} from 'rxjs';
 
-import {Inject, Injectable, InjectionToken, Optional} from './di';
-import {isObservable, isPromise} from './util/lang';
-import {noop} from './util/noop';
-
+import {inject, Injectable, InjectionToken} from './di';
+import {RuntimeError, RuntimeErrorCode} from './errors';
+import {isPromise, isSubscribable} from './util/lang';
 
 /**
  * A [DI token](guide/glossary#di-token "DI token definition") that you can use to provide
@@ -26,13 +25,13 @@ import {noop} from './util/noop';
  * The function is executed during the application bootstrap process,
  * and the needed data is available on startup.
  *
- * @see `ApplicationInitStatus`
+ * @see {@link ApplicationInitStatus}
  *
  * @usageNotes
  *
  * The following example illustrates how to configure a multi-provider using `APP_INITIALIZER` token
  * and a function returning a promise.
- *
+ * ### Example with NgModule-based application
  * ```
  *  function initializeApp(): Promise<any> {
  *    return new Promise((resolve, reject) => {
@@ -54,11 +53,38 @@ import {noop} from './util/noop';
  *  export class AppModule {}
  * ```
  *
+ * ### Example with standalone application
+ * ```
+ * export function initializeApp(http: HttpClient) {
+ *   return (): Promise<any> =>
+ *     firstValueFrom(
+ *       http
+ *         .get("https://someUrl.com/api/user")
+ *         .pipe(tap(user => { ... }))
+ *     );
+ * }
+ *
+ * bootstrapApplication(App, {
+ *   providers: [
+ *     provideHttpClient(),
+ *     {
+ *       provide: APP_INITIALIZER,
+ *       useFactory: initializeApp,
+ *       multi: true,
+ *       deps: [HttpClient],
+ *     },
+ *   ],
+ * });
+
+ * ```
+ *
+ *
  * It's also possible to configure a multi-provider using `APP_INITIALIZER` token and a function
  * returning an observable, see an example below. Note: the `HttpClient` in this example is used for
  * demo purposes to illustrate how the factory function can work with other providers available
  * through DI.
  *
+ * ### Example with NgModule-based application
  * ```
  *  function initializeAppFactory(httpClient: HttpClient): () => Observable<any> {
  *   return () => httpClient.get("https://someUrl.com/api/user")
@@ -81,6 +107,27 @@ import {noop} from './util/noop';
  *  export class AppModule {}
  * ```
  *
+ * ### Example with standalone application
+ *
+ *  function initializeAppFactory(httpClient: HttpClient): () => Observable<any> {
+ *   return () => httpClient.get("https://someUrl.com/api/user")
+ *     .pipe(
+ *        tap(user => { ... })
+ *     );
+ *  }
+ *
+ * bootstrapApplication(App, {
+ *   providers: [
+ *     provideHttpClient(),
+ *     {
+ *       provide: APP_INITIALIZER,
+ *       useFactory: initializeApp,
+ *       multi: true,
+ *       deps: [HttpClient],
+ *     },
+ *   ],
+ * });
+ *
  * @publicApi
  */
 export const APP_INITIALIZER =
@@ -94,19 +141,29 @@ export const APP_INITIALIZER =
  */
 @Injectable({providedIn: 'root'})
 export class ApplicationInitStatus {
-  private resolve = noop;
-  private reject = noop;
-  private initialized = false;
-  public readonly donePromise: Promise<any>;
-  public readonly done = false;
+  // Using non null assertion, these fields are defined below
+  // within the `new Promise` callback (synchronously).
+  private resolve!: (...args: any[]) => void;
+  private reject!: (...args: any[]) => void;
 
-  constructor(@Inject(APP_INITIALIZER) @Optional() private readonly appInits:
-                  ReadonlyArray<() => Observable<unknown>| Promise<unknown>| void>) {
-    // TODO: Throw RuntimeErrorCode.INVALID_MULTI_PROVIDER if appInits is not an array
-    this.donePromise = new Promise((res, rej) => {
-      this.resolve = res;
-      this.reject = rej;
-    });
+  private initialized = false;
+  public readonly done = false;
+  public readonly donePromise: Promise<any> = new Promise((res, rej) => {
+    this.resolve = res;
+    this.reject = rej;
+  });
+
+  private readonly appInits = inject(APP_INITIALIZER, {optional: true}) ?? [];
+
+  constructor() {
+    if ((typeof ngDevMode === 'undefined' || ngDevMode) && !Array.isArray(this.appInits)) {
+      throw new RuntimeError(
+          RuntimeErrorCode.INVALID_MULTI_PROVIDER,
+          'Unexpected type of the `APP_INITIALIZER` token value ' +
+              `(expected an array, but got ${typeof this.appInits}). ` +
+              'Please check that the `APP_INITIALIZER` token is configured as a ' +
+              '`multi: true` provider.');
+    }
   }
 
   /** @internal */
@@ -115,26 +172,24 @@ export class ApplicationInitStatus {
       return;
     }
 
-    const asyncInitPromises: Promise<any>[] = [];
-
-    const complete = () => {
-      (this as {done: boolean}).done = true;
-      this.resolve();
-    };
-
-    if (this.appInits) {
-      for (let i = 0; i < this.appInits.length; i++) {
-        const initResult = this.appInits[i]();
-        if (isPromise(initResult)) {
-          asyncInitPromises.push(initResult);
-        } else if (isObservable(initResult)) {
-          const observableAsPromise = new Promise<void>((resolve, reject) => {
-            initResult.subscribe({complete: resolve, error: reject});
-          });
-          asyncInitPromises.push(observableAsPromise);
-        }
+    const asyncInitPromises = [];
+    for (const appInits of this.appInits) {
+      const initResult = appInits();
+      if (isPromise(initResult)) {
+        asyncInitPromises.push(initResult);
+      } else if (isSubscribable(initResult)) {
+        const observableAsPromise = new Promise<void>((resolve, reject) => {
+          initResult.subscribe({complete: resolve, error: reject});
+        });
+        asyncInitPromises.push(observableAsPromise);
       }
     }
+
+    const complete = () => {
+      // @ts-expect-error overwriting a readonly
+      this.done = true;
+      this.resolve();
+    };
 
     Promise.all(asyncInitPromises)
         .then(() => {

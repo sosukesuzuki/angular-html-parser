@@ -200,7 +200,7 @@ runInEachFileSystem(() => {
             'i0.ɵɵsetComponentScope(ModuleCmp, function () { return [i1.StandaloneCmp]; }, []);');
 
         const cmpJs = env.getContents('component.js');
-        expect(cmpJs).toContain('dependencies: function () { return [Module, i1.ModuleCmp]; }');
+        expect(cmpJs).toContain('dependencies: () => [Module, i1.ModuleCmp]');
       });
 
       it('should error when a non-standalone component tries to use imports', () => {
@@ -250,7 +250,7 @@ runInEachFileSystem(() => {
 
         // verify schemas are not included in the generated code
         const jsCodeAoT = jsCode.slice(
-            0, jsCode.indexOf('(function () { (typeof ngDevMode === "undefined" || ngDevMode)'));
+            0, jsCode.indexOf('(() => { (typeof ngDevMode === "undefined" || ngDevMode)'));
         expect(jsCodeAoT).not.toContain('schemas: [NO_ERRORS_SCHEMA]');
       });
 
@@ -578,7 +578,7 @@ runInEachFileSystem(() => {
 
         expect(diags.length).toBe(0);
         expect(jsCode).toContain('standalone: true');
-        expect(jsCode).toContain('dependencies: function () { return [StandaloneComponent]; }');
+        expect(jsCode).toContain('dependencies: () => [StandaloneComponent]');
       });
     });
 
@@ -902,13 +902,22 @@ runInEachFileSystem(() => {
     });
 
     describe('optimizations', () => {
-      it('does emit standalone components in injector imports', () => {
+      it('does emit standalone components in injector imports if they contain providers', () => {
         env.write('test.ts', `
-          import {Component, NgModule} from '@angular/core';
+          import {Component, Injectable, NgModule} from '@angular/core';
+
+          @Injectable()
+          export class Service {}
+
+          @NgModule({
+            providers: [Service],
+          })
+          export class DepModule {}
 
           @Component({
             standalone: true,
             selector: 'standalone-cmp',
+            imports: [DepModule],
             template: '',
           })
           export class StandaloneCmp {}
@@ -924,6 +933,74 @@ runInEachFileSystem(() => {
         const jsCode = env.getContents('test.js');
         expect(jsCode).toContain('i0.ɵɵdefineInjector({ imports: [StandaloneCmp] });');
       });
+
+      it('does emit standalone components in injector imports if they import a NgModule from .d.ts',
+         () => {
+           env.write('dep.d.ts', `
+            import {ɵɵNgModuleDeclaration} from '@angular/core';
+
+            declare class DepModule {
+              static ɵmod: ɵɵNgModuleDeclaration<DepModule, never, never, never>;
+            }
+          `);
+
+           env.write('test.ts', `
+            import {Component, Injectable, NgModule} from '@angular/core';
+            import {DepModule} from './dep';
+
+            @Component({
+              standalone: true,
+              selector: 'standalone-cmp',
+              imports: [DepModule],
+              template: '',
+            })
+            export class StandaloneCmp {}
+
+            @NgModule({
+              imports: [StandaloneCmp],
+              exports: [StandaloneCmp],
+            })
+            export class Module {}
+          `);
+           env.driveMain();
+
+           const jsCode = env.getContents('test.js');
+           expect(jsCode).toContain('i0.ɵɵdefineInjector({ imports: [StandaloneCmp] });');
+         });
+
+      it('does emit standalone components in injector imports if they import a component from .d.ts',
+         () => {
+           env.write('dep.d.ts', `
+              import {ɵɵComponentDeclaration} from '@angular/core';
+
+              export declare class DepCmp {
+                static ɵcmp: ɵɵComponentDeclaration<DepCmp, "dep-cmp", never, {}, {}, never, never, true>
+              }
+            `);
+
+           env.write('test.ts', `
+              import {Component, Injectable, NgModule} from '@angular/core';
+              import {DepCmp} from './dep';
+
+              @Component({
+                standalone: true,
+                selector: 'standalone-cmp',
+                imports: [DepCmp],
+                template: '',
+              })
+              export class StandaloneCmp {}
+
+              @NgModule({
+                imports: [StandaloneCmp],
+                exports: [StandaloneCmp],
+              })
+              export class Module {}
+            `);
+           env.driveMain();
+
+           const jsCode = env.getContents('test.js');
+           expect(jsCode).toContain('i0.ɵɵdefineInjector({ imports: [StandaloneCmp] });');
+         });
 
       it('does not emit standalone directives or pipes in injector imports', () => {
         env.write('test.ts', `
@@ -951,6 +1028,33 @@ runInEachFileSystem(() => {
         `);
         env.driveMain();
 
+        const jsCode = env.getContents('test.js');
+        expect(jsCode).toContain('i0.ɵɵdefineInjector({});');
+      });
+
+      it('should exclude directives from NgModule imports if they expose no providers', () => {
+        env.write('test.ts', `
+            import {Component, NgModule} from '@angular/core';
+
+            @NgModule({})
+            export class DepModule {}
+
+            @Component({
+              standalone: true,
+              selector: 'test-cmp',
+              imports: [DepModule],
+              template: '',
+            })
+            export class TestCmp {}
+
+            @NgModule({
+              imports: [TestCmp],
+              exports: [TestCmp],
+            })
+            export class TestModule {}
+          `);
+
+        env.driveMain();
         const jsCode = env.getContents('test.js');
         expect(jsCode).toContain('i0.ɵɵdefineInjector({});');
       });

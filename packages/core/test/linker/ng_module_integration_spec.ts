@@ -6,12 +6,11 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {ANALYZE_FOR_ENTRY_COMPONENTS, Compiler, Component, ComponentFactoryResolver, CUSTOM_ELEMENTS_SCHEMA, Directive, forwardRef, getModuleFactory, getNgModuleById, HostBinding, Inject, Injectable, InjectionToken, Injector, Input, NgModule, NgModuleRef, Optional, Pipe, Provider, Self, Type, ɵɵdefineNgModule as defineNgModule} from '@angular/core';
+import {Compiler, Component, CUSTOM_ELEMENTS_SCHEMA, Directive, forwardRef, getModuleFactory, getNgModuleById, HostBinding, Inject, Injectable, InjectionToken, Injector, Input, NgModule, NgModuleRef, Optional, Pipe, Provider, Self, Type} from '@angular/core';
 import {ɵɵdefineInjectable} from '@angular/core/src/di/interface/defs';
 import {NgModuleType} from '@angular/core/src/render3';
 import {getNgModuleDef} from '@angular/core/src/render3/definition';
 import {ComponentFixture, inject} from '@angular/core/testing';
-import {expect} from '@angular/platform-browser/testing/src/matchers';
 
 import {InternalNgModuleRef, NgModuleFactory} from '../../src/linker/ng_module_factory';
 import {clearModulesForTest, setAllowDuplicateNgModuleIdsForTest} from '../../src/linker/ng_module_registration';
@@ -59,8 +58,7 @@ class SomeComp {
 
 @Directive({selector: '[someDir]'})
 class SomeDirective {
-  // TODO(issue/24571): remove '!'.
-  @HostBinding('title') @Input() someDir!: string;
+  @HostBinding('title') @Input() someDir: string|undefined;
 }
 
 @Pipe({name: 'somePipe'})
@@ -109,7 +107,7 @@ describe('NgModule', () => {
 
     const comp = cf.create(Injector.NULL);
 
-    return new ComponentFixture(comp, null!, false);
+    return new ComponentFixture(comp, null, null, false);
   }
 
   describe('errors', () => {
@@ -310,115 +308,13 @@ describe('NgModule', () => {
          }
 
          // Verify that we can retrieve NgModule factory by id.
-         expect(getModuleFactory('child')).toBeAnInstanceOf(NgModuleFactory);
+         expect(getModuleFactory('child')).toBeInstanceOf(NgModuleFactory);
 
          // Verify that we can also retrieve NgModule class by id.
          const moduleType = getNgModuleById('child');
          expect(moduleType).toBeTruthy();
          expect(moduleType).toBe(ChildModule as NgModuleType);
        });
-  });
-
-  describe('entryComponents', () => {
-    it('should create ComponentFactories in root modules', () => {
-      @NgModule({declarations: [SomeComp], entryComponents: [SomeComp]})
-      class SomeModule {
-      }
-
-      const ngModule = createModule(SomeModule);
-      expect(ngModule.componentFactoryResolver.resolveComponentFactory(SomeComp)!.componentType)
-          .toBe(SomeComp);
-      expect(ngModule.injector.get(ComponentFactoryResolver)
-                 .resolveComponentFactory(SomeComp)
-                 .componentType)
-          .toBe(SomeComp);
-    });
-
-    it('should throw if we cannot find a module associated with a module-level entryComponent', () => {
-      @Component({template: ''})
-      class SomeCompWithEntryComponents {
-      }
-
-      @NgModule({declarations: [], entryComponents: [SomeCompWithEntryComponents]})
-      class SomeModule {
-      }
-
-      expect(() => createModule(SomeModule))
-          .toThrowError(
-              'Component SomeCompWithEntryComponents is not part of any NgModule or the module has not been imported into your module.');
-    });
-
-    it('should throw if we cannot find a module associated with a component-level entryComponent',
-       () => {
-         @Component({template: '', entryComponents: [SomeComp]})
-         class SomeCompWithEntryComponents {
-         }
-
-         @NgModule({declarations: [SomeCompWithEntryComponents]})
-         class SomeModule {
-         }
-
-         expect(() => createModule(SomeModule))
-             .toThrowError(
-                 'Component SomeComp is not part of any NgModule or the module has not been imported into your module.');
-       });
-
-    it('should create ComponentFactories via ANALYZE_FOR_ENTRY_COMPONENTS', () => {
-      @NgModule({
-        declarations: [SomeComp],
-        providers: [{
-          provide: ANALYZE_FOR_ENTRY_COMPONENTS,
-          multi: true,
-          useValue: [{a: 'b', component: SomeComp}]
-        }]
-      })
-      class SomeModule {
-      }
-
-      const ngModule = createModule(SomeModule);
-      expect(ngModule.componentFactoryResolver.resolveComponentFactory(SomeComp)!.componentType)
-          .toBe(SomeComp);
-      expect(ngModule.injector.get(ComponentFactoryResolver)
-                 .resolveComponentFactory(SomeComp)
-                 .componentType)
-          .toBe(SomeComp);
-    });
-
-    it('should create ComponentFactories in imported modules', () => {
-      @NgModule({declarations: [SomeComp], entryComponents: [SomeComp]})
-      class SomeImportedModule {
-      }
-
-      @NgModule({imports: [SomeImportedModule]})
-      class SomeModule {
-      }
-
-      const ngModule = createModule(SomeModule);
-      expect(ngModule.componentFactoryResolver.resolveComponentFactory(SomeComp)!.componentType)
-          .toBe(SomeComp);
-      expect(ngModule.injector.get(ComponentFactoryResolver)
-                 .resolveComponentFactory(SomeComp)
-                 .componentType)
-          .toBe(SomeComp);
-    });
-
-    it('should create ComponentFactories if the component was imported', () => {
-      @NgModule({declarations: [SomeComp], exports: [SomeComp]})
-      class SomeImportedModule {
-      }
-
-      @NgModule({imports: [SomeImportedModule], entryComponents: [SomeComp]})
-      class SomeModule {
-      }
-
-      const ngModule = createModule(SomeModule);
-      expect(ngModule.componentFactoryResolver.resolveComponentFactory(SomeComp)!.componentType)
-          .toBe(SomeComp);
-      expect(ngModule.injector.get(ComponentFactoryResolver)
-                 .resolveComponentFactory(SomeComp)
-                 .componentType)
-          .toBe(SomeComp);
-    });
   });
 
   describe('bootstrap components', () => {
@@ -428,7 +324,7 @@ describe('NgModule', () => {
       }
 
       const ngModule = createModule(SomeModule);
-      expect(ngModule.componentFactoryResolver.resolveComponentFactory(SomeComp)!.componentType)
+      expect(ngModule.componentFactoryResolver.resolveComponentFactory(SomeComp).componentType)
           .toBe(SomeComp);
     });
 
@@ -605,30 +501,30 @@ describe('NgModule', () => {
     }
 
     it('should provide the module', () => {
-      expect(createInjector([]).get(moduleType)).toBeAnInstanceOf(moduleType);
+      expect(createInjector([]).get(moduleType)).toBeInstanceOf(moduleType);
     });
 
     it('should instantiate a class without dependencies', () => {
       const injector = createInjector([Engine]);
       const engine = injector.get(Engine);
 
-      expect(engine).toBeAnInstanceOf(Engine);
+      expect(engine).toBeInstanceOf(Engine);
     });
 
     it('should resolve dependencies based on type information', () => {
       const injector = createInjector([Engine, Car]);
       const car = injector.get(Car);
 
-      expect(car).toBeAnInstanceOf(Car);
-      expect(car.engine).toBeAnInstanceOf(Engine);
+      expect(car).toBeInstanceOf(Car);
+      expect(car.engine).toBeInstanceOf(Engine);
     });
 
     it('should resolve dependencies based on @Inject annotation', () => {
       const injector = createInjector([TurboEngine, Engine, CarWithInject]);
       const car = injector.get(CarWithInject);
 
-      expect(car).toBeAnInstanceOf(CarWithInject);
-      expect(car.engine).toBeAnInstanceOf(TurboEngine);
+      expect(car).toBeInstanceOf(CarWithInject);
+      expect(car.engine).toBeInstanceOf(TurboEngine);
     });
 
     it('should throw when no type and not @Inject (class case)', () => {
@@ -661,8 +557,8 @@ describe('NgModule', () => {
           createInjector([Engine, {provide: Car, useFactory: sportsCarFactory, deps: [Engine]}]);
 
       const car = injector.get(Car);
-      expect(car).toBeAnInstanceOf(SportsCar);
-      expect(car.engine).toBeAnInstanceOf(Engine);
+      expect(car).toBeInstanceOf(SportsCar);
+      expect(car.engine).toBeInstanceOf(Engine);
     });
 
     it('should supporting provider to null', () => {
@@ -678,7 +574,7 @@ describe('NgModule', () => {
 
       const car = injector.get(Car);
       const sportsCar = injector.get(SportsCar);
-      expect(car).toBeAnInstanceOf(SportsCar);
+      expect(car).toBeInstanceOf(SportsCar);
       expect(car).toBe(sportsCar);
     });
 
@@ -690,8 +586,8 @@ describe('NgModule', () => {
 
       const cars = injector.get(CARS);
       expect(cars.length).toEqual(2);
-      expect(cars[0]).toBeAnInstanceOf(SportsCar);
-      expect(cars[1]).toBeAnInstanceOf(CarWithOptionalEngine);
+      expect(cars[0]).toBeInstanceOf(SportsCar);
+      expect(cars[1]).toBeInstanceOf(CarWithOptionalEngine);
     });
 
     it('should support multiProviders that are created using useExisting', () => {
@@ -715,7 +611,7 @@ describe('NgModule', () => {
         {provide: 'originalEngine', useClass: forwardRef(() => Engine)},
         {provide: 'aliasedEngine', useExisting: <any>forwardRef(() => 'originalEngine')}
       ]);
-      expect(injector.get('aliasedEngine')).toBeAnInstanceOf(Engine);
+      expect(injector.get('aliasedEngine')).toBeInstanceOf(Engine);
     });
 
     it('should support overriding factory dependencies', () => {
@@ -723,8 +619,8 @@ describe('NgModule', () => {
           [Engine, {provide: Car, useFactory: (e: Engine) => new SportsCar(e), deps: [Engine]}]);
 
       const car = injector.get(Car);
-      expect(car).toBeAnInstanceOf(SportsCar);
-      expect(car.engine).toBeAnInstanceOf(Engine);
+      expect(car).toBeInstanceOf(SportsCar);
+      expect(car.engine).toBeInstanceOf(Engine);
     });
 
     it('should support optional dependencies', () => {
@@ -738,14 +634,14 @@ describe('NgModule', () => {
       const injector = createInjector([[[Engine, Car]]]);
 
       const car = injector.get(Car);
-      expect(car).toBeAnInstanceOf(Car);
+      expect(car).toBeInstanceOf(Car);
     });
 
     it('should use the last provider when there are multiple providers for same token', () => {
       const injector = createInjector(
           [{provide: Engine, useClass: Engine}, {provide: Engine, useClass: TurboEngine}]);
 
-      expect(injector.get(Engine)).toBeAnInstanceOf(TurboEngine);
+      expect(injector.get(Engine)).toBeInstanceOf(TurboEngine);
     });
 
     it('should use non-type tokens', () => {
@@ -873,7 +769,7 @@ describe('NgModule', () => {
         class MyService1 {
           public innerService: MyService2;
           constructor(injector: Injector) {
-            // Create MyService2 before it it's initialized by TestModule.
+            // Create MyService2 before it's initialized by TestModule.
             this.innerService = injector.get(MyService2);
           }
         }
@@ -933,7 +829,7 @@ describe('NgModule', () => {
            const child = createInjector([{provide: Engine, useClass: TurboEngine}], parent);
 
            const carFromChild = child.get(Car);
-           expect(carFromChild.engine).toBeAnInstanceOf(Engine);
+           expect(carFromChild.engine).toBeInstanceOf(Engine);
          });
 
       it('should create new instance in a child injector', () => {
@@ -944,7 +840,7 @@ describe('NgModule', () => {
         const engineFromChild = child.get(Engine);
 
         expect(engineFromParent).not.toBe(engineFromChild);
-        expect(engineFromChild).toBeAnInstanceOf(TurboEngine);
+        expect(engineFromChild).toBeInstanceOf(TurboEngine);
       });
     });
 
@@ -956,7 +852,7 @@ describe('NgModule', () => {
             {provide: Car, useFactory: (e: Engine) => new Car(e), deps: [[Engine, new Self()]]}
           ]);
 
-          expect(inj.get(Car)).toBeAnInstanceOf(Car);
+          expect(inj.get(Car)).toBeInstanceOf(Car);
         });
       });
 
@@ -970,7 +866,7 @@ describe('NgModule', () => {
               ],
               parent);
 
-          expect(child.get(Car).engine).toBeAnInstanceOf(TurboEngine);
+          expect(child.get(Car).engine).toBeInstanceOf(TurboEngine);
         });
       });
     });
@@ -1076,8 +972,8 @@ describe('NgModule', () => {
 
         const injector = createModule(SomeModule).injector;
 
-        expect(injector.get(SomeModule)).toBeAnInstanceOf(SomeModule);
-        expect(injector.get(ImportedModule)).toBeAnInstanceOf(ImportedModule);
+        expect(injector.get(SomeModule)).toBeInstanceOf(SomeModule);
+        expect(injector.get(ImportedModule)).toBeInstanceOf(ImportedModule);
         expect(injector.get('token1')).toBe('imported');
       });
 
@@ -1096,8 +992,8 @@ describe('NgModule', () => {
 
         const injector = createModule(SomeModule).injector;
 
-        expect(injector.get(SomeModule)).toBeAnInstanceOf(SomeModule);
-        expect(injector.get(ImportedModule)).toBeAnInstanceOf(ImportedModule);
+        expect(injector.get(SomeModule)).toBeInstanceOf(SomeModule);
+        expect(injector.get(ImportedModule)).toBeInstanceOf(ImportedModule);
         expect(injector.get('token1')).toBe('imported');
       });
 
@@ -1161,8 +1057,8 @@ describe('NgModule', () => {
 
         const injector = createModule(SomeModule).injector;
 
-        expect(injector.get(SomeModule)).toBeAnInstanceOf(SomeModule);
-        expect(injector.get(ExportedValue)).toBeAnInstanceOf(ExportedValue);
+        expect(injector.get(SomeModule)).toBeInstanceOf(SomeModule);
+        expect(injector.get(ExportedValue)).toBeInstanceOf(ExportedValue);
         expect(injector.get('token1')).toBe('exported');
       });
 

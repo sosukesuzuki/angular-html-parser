@@ -9,6 +9,9 @@
     "name": "APP_INITIALIZER"
   },
   {
+    "name": "AfterRenderEventManager"
+  },
+  {
     "name": "AnonymousSubject"
   },
   {
@@ -18,10 +21,25 @@
     "name": "ApplicationRef"
   },
   {
+    "name": "BLOOM_BUCKET_BITS"
+  },
+  {
+    "name": "BLOOM_MASK"
+  },
+  {
+    "name": "BehaviorSubject"
+  },
+  {
     "name": "BrowserDomAdapter"
   },
   {
     "name": "CIRCULAR"
+  },
+  {
+    "name": "CONTAINER_HEADER_OFFSET"
+  },
+  {
+    "name": "ChainedInjector"
   },
   {
     "name": "ComponentFactory"
@@ -36,6 +54,9 @@
     "name": "ComponentFactoryResolver2"
   },
   {
+    "name": "ComponentRef"
+  },
+  {
     "name": "ComponentRef2"
   },
   {
@@ -46,6 +67,15 @@
   },
   {
     "name": "DOCUMENT2"
+  },
+  {
+    "name": "DistinctUntilChangedOperator"
+  },
+  {
+    "name": "DistinctUntilChangedSubscriber"
+  },
+  {
+    "name": "DomAdapter"
   },
   {
     "name": "EMPTY_ARRAY"
@@ -72,6 +102,15 @@
     "name": "EventEmitter"
   },
   {
+    "name": "GenericBrowserDomAdapter"
+  },
+  {
+    "name": "HAS_CHILD_VIEWS_TO_REFRESH"
+  },
+  {
+    "name": "HAS_TRANSPLANTED_VIEWS"
+  },
+  {
     "name": "HelloWorldModule"
   },
   {
@@ -82,6 +121,12 @@
   },
   {
     "name": "INJECTOR_SCOPE"
+  },
+  {
+    "name": "INTERNAL_APPLICATION_ERROR_HANDLER"
+  },
+  {
+    "name": "InitialRenderPendingTasks"
   },
   {
     "name": "InjectFlags"
@@ -99,6 +144,15 @@
     "name": "LifecycleHooksFeature"
   },
   {
+    "name": "MONKEY_PATCH_KEY_NAME"
+  },
+  {
+    "name": "MOVED_VIEWS"
+  },
+  {
+    "name": "MapOperator"
+  },
+  {
     "name": "MapSubscriber"
   },
   {
@@ -108,6 +162,9 @@
     "name": "MergeMapSubscriber"
   },
   {
+    "name": "NATIVE"
+  },
+  {
     "name": "NEW_LINE"
   },
   {
@@ -115,6 +172,9 @@
   },
   {
     "name": "NG_ELEMENT_ID"
+  },
+  {
+    "name": "NG_ENV_ID"
   },
   {
     "name": "NG_FACTORY_DEF"
@@ -135,6 +195,9 @@
     "name": "NG_PROV_DEF"
   },
   {
+    "name": "NG_TEMPLATE_SELECTOR"
+  },
+  {
     "name": "NOT_FOUND"
   },
   {
@@ -147,7 +210,16 @@
     "name": "NO_CHANGE"
   },
   {
+    "name": "NO_PARENT_INJECTOR"
+  },
+  {
     "name": "NULL_INJECTOR"
+  },
+  {
+    "name": "NgModuleFactory"
+  },
+  {
+    "name": "NgModuleFactory2"
   },
   {
     "name": "NgModuleRef"
@@ -159,10 +231,16 @@
     "name": "NgZone"
   },
   {
+    "name": "NgZoneChangeDetectionScheduler"
+  },
+  {
     "name": "NodeInjector"
   },
   {
     "name": "NodeInjectorFactory"
+  },
+  {
+    "name": "NoopNgZone"
   },
   {
     "name": "NullInjector"
@@ -183,10 +261,16 @@
     "name": "PLATFORM_INITIALIZER"
   },
   {
+    "name": "PRESERVE_HOST_CONTENT"
+  },
+  {
     "name": "PlatformRef"
   },
   {
     "name": "R3Injector"
+  },
+  {
+    "name": "REACTIVE_LVIEW_CONSUMER_NODE"
   },
   {
     "name": "RefCountOperator"
@@ -195,13 +279,25 @@
     "name": "RefCountSubscriber"
   },
   {
+    "name": "RendererFactory2"
+  },
+  {
+    "name": "RootViewRef"
+  },
+  {
     "name": "RuntimeError"
+  },
+  {
+    "name": "SIMPLE_CHANGES_STORE"
   },
   {
     "name": "SafeSubscriber"
   },
   {
     "name": "Sanitizer"
+  },
+  {
+    "name": "SimpleChange"
   },
   {
     "name": "SimpleInnerSubscriber"
@@ -225,6 +321,12 @@
     "name": "Subscription"
   },
   {
+    "name": "SwitchMapOperator"
+  },
+  {
+    "name": "SwitchMapSubscriber"
+  },
+  {
     "name": "TESTABILITY"
   },
   {
@@ -232,6 +334,9 @@
   },
   {
     "name": "TRACKED_LVIEWS"
+  },
+  {
+    "name": "TYPE"
   },
   {
     "name": "USE_VALUE"
@@ -246,6 +351,12 @@
     "name": "ViewEncapsulation"
   },
   {
+    "name": "ViewRef"
+  },
+  {
+    "name": "ZONE_IS_STABLE_OBSERVABLE"
+  },
+  {
     "name": "_DOM"
   },
   {
@@ -253,6 +364,9 @@
   },
   {
     "name": "__forward_ref__"
+  },
+  {
+    "name": "_applyRootElementTransformImpl"
   },
   {
     "name": "_currentInjector"
@@ -264,13 +378,22 @@
     "name": "_global"
   },
   {
+    "name": "_icuContainerIterate"
+  },
+  {
     "name": "_injectImplementation"
   },
   {
     "name": "_platformInjector"
   },
   {
+    "name": "_retrieveHydrationInfoImpl"
+  },
+  {
     "name": "_wrapInTimeout"
+  },
+  {
+    "name": "activeConsumer"
   },
   {
     "name": "addPropertyAlias"
@@ -294,6 +417,9 @@
     "name": "applyView"
   },
   {
+    "name": "assertConsumerNode"
+  },
+  {
     "name": "attachPatchData"
   },
   {
@@ -304,6 +430,9 @@
   },
   {
     "name": "callHook"
+  },
+  {
+    "name": "callHookInternal"
   },
   {
     "name": "callHooks"
@@ -318,6 +447,12 @@
     "name": "collectNativeNodes"
   },
   {
+    "name": "collectNativeNodesInLContainer"
+  },
+  {
+    "name": "commitLViewConsumerIfHasProducers"
+  },
+  {
     "name": "concatStringsWithSpace"
   },
   {
@@ -328,6 +463,18 @@
   },
   {
     "name": "connectableObservableDescriptor"
+  },
+  {
+    "name": "consumerAfterComputation"
+  },
+  {
+    "name": "consumerBeforeComputation"
+  },
+  {
+    "name": "consumerDestroy"
+  },
+  {
+    "name": "consumerIsLive"
   },
   {
     "name": "convertToBitFlags"
@@ -348,6 +495,9 @@
     "name": "createLView"
   },
   {
+    "name": "createLViewConsumer"
+  },
+  {
     "name": "createNodeInjector"
   },
   {
@@ -357,6 +507,9 @@
     "name": "createTView"
   },
   {
+    "name": "currentConsumer"
+  },
+  {
     "name": "deepForEach"
   },
   {
@@ -364,6 +517,18 @@
   },
   {
     "name": "detachMovedView"
+  },
+  {
+    "name": "detectChangesInChildComponents"
+  },
+  {
+    "name": "detectChangesInComponent"
+  },
+  {
+    "name": "detectChangesInEmbeddedViews"
+  },
+  {
+    "name": "detectChangesInViewIfAttached"
   },
   {
     "name": "detectChangesInternal"
@@ -403,6 +568,12 @@
   },
   {
     "name": "forwardRef"
+  },
+  {
+    "name": "from"
+  },
+  {
+    "name": "fromArray"
   },
   {
     "name": "generateInitialInputs"
@@ -465,6 +636,9 @@
     "name": "getNullInjector"
   },
   {
+    "name": "getOrCreateCurrentLViewConsumer"
+  },
+  {
     "name": "getOrCreateInjectable"
   },
   {
@@ -498,10 +672,13 @@
     "name": "getPromiseCtor"
   },
   {
+    "name": "getReactiveLViewConsumer"
+  },
+  {
     "name": "getSimpleChangesStore"
   },
   {
-    "name": "getSymbolIterator2"
+    "name": "getSymbolIterator"
   },
   {
     "name": "getTNodeFromLView"
@@ -525,6 +702,9 @@
     "name": "incrementInitPhaseFlags"
   },
   {
+    "name": "inject"
+  },
+  {
     "name": "injectArgs"
   },
   {
@@ -538,6 +718,9 @@
   },
   {
     "name": "injectableDefOrInjectorDefFactory"
+  },
+  {
+    "name": "innerSubscribe"
   },
   {
     "name": "insertBloom"
@@ -588,6 +771,12 @@
     "name": "isPromise2"
   },
   {
+    "name": "isScheduler"
+  },
+  {
+    "name": "isStableFactory"
+  },
+  {
     "name": "isTypeProvider"
   },
   {
@@ -615,7 +804,22 @@
     "name": "makeRecord"
   },
   {
+    "name": "map"
+  },
+  {
+    "name": "markAncestorsForTraversal"
+  },
+  {
+    "name": "markViewDirty"
+  },
+  {
+    "name": "markViewForRefresh"
+  },
+  {
     "name": "maybeWrapInNotSelector"
+  },
+  {
+    "name": "mergeAll"
   },
   {
     "name": "mergeHostAttribute"
@@ -634,6 +838,9 @@
   },
   {
     "name": "ngOnChangesSetInput"
+  },
+  {
+    "name": "ngZoneApplicationErrorHandlerFactory"
   },
   {
     "name": "noop"
@@ -663,16 +870,13 @@
     "name": "processInjectorTypesWithProviders"
   },
   {
-    "name": "promise"
+    "name": "producerRemoveLiveConsumerAtIndex"
+  },
+  {
+    "name": "profiler"
   },
   {
     "name": "refCount"
-  },
-  {
-    "name": "refreshComponent"
-  },
-  {
-    "name": "refreshContainsDirtyView"
   },
   {
     "name": "refreshContentQueries"
@@ -702,6 +906,9 @@
     "name": "resolveForwardRef"
   },
   {
+    "name": "retrieveHydrationInfo"
+  },
+  {
     "name": "rxSubscriber"
   },
   {
@@ -712,6 +919,9 @@
   },
   {
     "name": "searchTokensOnInjector"
+  },
+  {
+    "name": "setActiveConsumer"
   },
   {
     "name": "setBindingRootForHostBindings"
@@ -738,6 +948,9 @@
     "name": "setUpAttributes"
   },
   {
+    "name": "share"
+  },
+  {
     "name": "shareSubjectFactory"
   },
   {
@@ -756,6 +969,9 @@
     "name": "subscribeToArray"
   },
   {
+    "name": "switchMap"
+  },
+  {
     "name": "throwProviderNotFoundError"
   },
   {
@@ -771,9 +987,6 @@
     "name": "updateMicroTaskStatus"
   },
   {
-    "name": "updateTransplantedViewCount"
-  },
-  {
     "name": "urlParsingNode"
   },
   {
@@ -784,6 +997,9 @@
   },
   {
     "name": "writeDirectClass"
+  },
+  {
+    "name": "writeToDirectiveInput"
   },
   {
     "name": "ɵɵdefineInjectable"

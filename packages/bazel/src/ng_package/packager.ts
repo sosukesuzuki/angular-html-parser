@@ -9,42 +9,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-/**
- * Interface describing a file captured in the Bazel action.
- * https://docs.bazel.build/versions/main/skylark/lib/File.html.
- */
-interface BazelFileInfo {
-  /** Execroot-relative path pointing to the file. */
-  path: string;
-  /** The path of this file relative to its root. e.g. omitting `bazel-out/<..>/bin`. */
-  shortPath: string;
-}
-
-/** Interface describing an entry-point. */
-interface EntryPointInfo {
-  /** ES2020 index file for the APF entry-point. */
-  index: BazelFileInfo;
-  /** Flat ES2020 ES module bundle file. */
-  fesm2020Bundle: BazelFileInfo;
-  /** Flat ES2015 ES module bundle file. */
-  fesm2015Bundle: BazelFileInfo;
-  /** Index type definition file for the APF entry-point. */
-  typings: BazelFileInfo;
-  /**
-   * Whether the index or typing paths have been guessed. For entry-points built
-   * through `ts_library`, there is no explicit setting that declares the entry-point
-   * so the index file is guessed.
-   */
-  guessedPaths: boolean;
-}
-
-/** Interface capturing relevant metadata for packaging. */
-interface PackageMetadata {
-  /** NPM package name of the output. */
-  npmPackageName: string;
-  /** Record of entry-points (including the primary one) and their info. */
-  entryPoints: Record<string, EntryPointInfo>;
-}
+import {BazelFileInfo, PackageMetadata} from './api';
+import {analyzeFileAndEnsureNoCrossImports} from './cross_entry_points_imports';
 
 /**
  * List of known `package.json` fields which provide information about
@@ -52,12 +18,10 @@ interface PackageMetadata {
  */
 const knownFormatPackageJsonFormatFields = [
   'main',
-  'fesm2020',
-  'esm2020',
-  'es2020',
+  'esm2022',
+  'esm',
   'typings',
   'module',
-  'fesm2015',
 ] as const;
 
 /** Union type matching known `package.json` format fields. */
@@ -68,11 +32,9 @@ type KnownPackageJsonFormatFields = typeof knownFormatPackageJsonFormatFields[nu
  * https://nodejs.org/api/packages.html#packages_conditional_exports
  */
 type ConditionalExport = {
-  node?: string;
   types?: string;
-  esm2020?: string;
-  es2020?: string;
-  es2015?: string;
+  esm2022?: string;
+  esm?: string;
   default?: string;
 };
 
@@ -114,14 +76,11 @@ function main(args: string[]): void {
       // Path to the package's README.md.
       readmeMd,
 
-      // List of rolled-up flat ES2020 modules
-      fesm2020Arg,
+      // List of rolled-up flat ES2022 modules
+      fesm2022Arg,
 
-      // List of individual ES2020 modules
-      esm2020Arg,
-
-      // List of rolled-up flat ES2015 modules
-      fesm2015Arg,
+      // List of individual ES2022 modules
+      esm2022Arg,
 
       // List of static files that should be copied into the package.
       staticFilesArg,
@@ -130,9 +89,8 @@ function main(args: string[]): void {
       typeDefinitionsArg,
   ] = params;
 
-  const fesm2020 = JSON.parse(fesm2020Arg) as BazelFileInfo[];
-  const esm2020 = JSON.parse(esm2020Arg) as BazelFileInfo[];
-  const fesm2015 = JSON.parse(fesm2015Arg) as BazelFileInfo[];
+  const fesm2022 = JSON.parse(fesm2022Arg) as BazelFileInfo[];
+  const esm2022 = JSON.parse(esm2022Arg) as BazelFileInfo[];
   const typeDefinitions = JSON.parse(typeDefinitionsArg) as BazelFileInfo[];
   const staticFiles = JSON.parse(staticFilesArg) as BazelFileInfo[];
   const metadata = JSON.parse(metadataArg) as PackageMetadata;
@@ -178,31 +136,31 @@ function main(args: string[]): void {
     return path.relative(owningPackageName, file.shortPath);
   }
 
-  /** Writes an ESM file into the `esm2020` output directory. */
-  function writeEsm2020File(file: BazelFileInfo) {
+  /** Writes an ESM file into the `esm2022` output directory. */
+  function writeEsm2022File(file: BazelFileInfo) {
     // Note: files which do not belong to the owning package of this `ng_package` are omitted.
     // this prevents us from accidentally bringing in transitive node module dependencies.
     const packageRelativePath = getOwningPackageRelativePath(file);
     if (!packageRelativePath.startsWith('..')) {
-      copyFile(file.path, getEsm2020OutputRelativePath(file));
+      copyFile(file.path, getEsm2022OutputRelativePath(file));
     }
   }
 
   /** Gets the output-relative path where the given flat ESM file should be written to. */
   function getFlatEsmOutputRelativePath(file: BazelFileInfo) {
     // Flat ESM files should be put into their owning package relative sub-path. e.g. if
-    // there is a bundle in `packages/animations/fesm2020/browser/testing.mjs` then we
-    // want the bundle to be stored in `fesm2020/browser/testing.mjs`. Same thing applies
-    // for the `fesm2015` bundles. The directory name for `fesm` is already declared as
+    // there is a bundle in `packages/animations/fesm2022/browser/testing.mjs` then we
+    // want the bundle to be stored in `fesm2022/browser/testing.mjs`. Same thing applies
+    // for the `fesm2022` bundles. The directory name for `fesm` is already declared as
     // part of the Bazel action generating these files. See `ng_package.bzl`.
     return getOwningPackageRelativePath(file);
   }
 
-  /** Gets the output-relative path where a non-flat ESM2020 file should be written to. */
-  function getEsm2020OutputRelativePath(file: BazelFileInfo) {
-    // Path computed relative to the current package in bazel-bin. e.g. a ES2020 output file
-    // in `bazel-out/<..>/packages/core/src/di.mjs` should be stored in `esm2020/src/di.mjs`.
-    return path.join('esm2020', getOwningPackageRelativePath(file));
+  /** Gets the output-relative path where a non-flat ESM2022 file should be written to. */
+  function getEsm2022OutputRelativePath(file: BazelFileInfo) {
+    // Path computed relative to the current package in bazel-bin. e.g. a ES2022 output file
+    // in `bazel-out/<..>/packages/core/src/di.mjs` should be stored in `esm2022/src/di.mjs`.
+    return path.join('esm2022', getOwningPackageRelativePath(file));
   }
 
   /** Gets the output-relative path where the typing file is being written to. */
@@ -232,11 +190,20 @@ function main(args: string[]): void {
     return getEntryPointSubpath(moduleName) !== '';
   }
 
-  esm2020.forEach(file => writeEsm2020File(file));
+  const crossEntryPointFailures: string[] = [];
+
+  esm2022.forEach(file => {
+    crossEntryPointFailures.push(...analyzeFileAndEnsureNoCrossImports(file, metadata));
+    writeEsm2022File(file);
+  });
+
+  if (crossEntryPointFailures.length) {
+    console.error(crossEntryPointFailures);
+    process.exit(1);
+  }
 
   // Copy all FESM files into the package output.
-  fesm2020.forEach(f => copyFile(f.path, getFlatEsmOutputRelativePath(f)));
-  fesm2015.forEach(f => copyFile(f.path, getFlatEsmOutputRelativePath(f)));
+  fesm2022.forEach(f => copyFile(f.path, getFlatEsmOutputRelativePath(f)));
 
   // Copy all type definitions into the package, preserving the sub-path from the
   // owning package. e.g. a file like `packages/animations/browser/__index.d.ts` will
@@ -330,24 +297,13 @@ function main(args: string[]): void {
       return packageJson;
     }
 
-    const fesm2020RelativeOutPath = getFlatEsmOutputRelativePath(entryPointInfo.fesm2020Bundle);
-    const fesm2015RelativeOutPath = getFlatEsmOutputRelativePath(entryPointInfo.fesm2015Bundle);
-    const esm2020RelativeOutPath = getEsm2020OutputRelativePath(entryPointInfo.index);
+    const fesm2022RelativeOutPath = getFlatEsmOutputRelativePath(entryPointInfo.fesm2022Bundle);
     const typingsRelativeOutPath = getTypingOutputRelativePath(entryPointInfo.typings);
 
-    packageJson.fesm2020 =
-        normalizePath(path.relative(packageJsonContainingDir, fesm2020RelativeOutPath));
-    packageJson.fesm2015 =
-        normalizePath(path.relative(packageJsonContainingDir, fesm2015RelativeOutPath));
-    packageJson.esm2020 =
-        normalizePath(path.relative(packageJsonContainingDir, esm2020RelativeOutPath));
+    packageJson.module =
+        normalizePath(path.relative(packageJsonContainingDir, fesm2022RelativeOutPath));
     packageJson.typings =
         normalizePath(path.relative(packageJsonContainingDir, typingsRelativeOutPath));
-
-    // For now, we point the primary entry points at the fesm files, because of Webpack
-    // performance issues with a large number of individual files.
-    packageJson.module = packageJson.fesm2015;
-    packageJson.es2020 = packageJson.fesm2020;
 
     return packageJson;
   }
@@ -376,29 +332,19 @@ function main(args: string[]): void {
     for (const [moduleName, entryPoint] of Object.entries(metadata.entryPoints)) {
       const subpath =
           isSecondaryEntryPoint(moduleName) ? `./${getEntryPointSubpath(moduleName)}` : '.';
-      const esm2020IndexOutRelativePath = getEsm2020OutputRelativePath(entryPoint.index);
-      const fesm2020OutRelativePath = getFlatEsmOutputRelativePath(entryPoint.fesm2020Bundle);
-      const fesm2015OutRelativePath = getFlatEsmOutputRelativePath(entryPoint.fesm2015Bundle);
+      const esmIndexOutRelativePath = getEsm2022OutputRelativePath(entryPoint.index);
+      const fesm2022OutRelativePath = getFlatEsmOutputRelativePath(entryPoint.fesm2022Bundle);
       const typesOutRelativePath = getTypingOutputRelativePath(entryPoint.typings);
 
-      // Insert the export mapping for the entry-point. We set `default` to the FESM 2020
+      // Insert the export mapping for the entry-point. We set `default` to the FESM 2022
       // output, and also set the `types` condition which will be respected by TS 4.5.
       // https://github.com/microsoft/TypeScript/pull/45884.
       insertExportMappingOrError(newPackageJson, subpath, {
         types: normalizePath(typesOutRelativePath),
-        esm2020: normalizePath(esm2020IndexOutRelativePath),
-        es2020: normalizePath(fesm2020OutRelativePath),
-        // We also expose a non-standard condition that would allow consumers to resolve
-        // to the `ES2015` output outside of NodeJS, if desired.
-        // TODO(devversion): remove/replace this if NodeJS v12 is no longer supported.
-        es2015: normalizePath(fesm2015OutRelativePath),
-        // We declare the `node` condition and point to the ES2015 output as we currently still
-        // support NodeJS v12 which does not fully support ES2020 output. We chose ES2015 over
-        // ES2020 because we wan async/await downleveled as this allows for patching withZoneJS.
-        // TODO(devversion): remove/replace this if NodeJS v12 is no longer supported.
-        node: normalizePath(fesm2015OutRelativePath),
+        esm2022: normalizePath(esmIndexOutRelativePath),
+        esm: normalizePath(esmIndexOutRelativePath),
         // Note: The default conditions needs to be the last one.
-        default: normalizePath(fesm2020OutRelativePath),
+        default: normalizePath(fesm2022OutRelativePath),
       });
     }
 
@@ -440,8 +386,8 @@ function main(args: string[]): void {
   function hasExplicitFormatProperties(parsedPackage: Readonly<PackageJson>): boolean {
     return Object.keys(parsedPackage)
         .some(
-            (fieldName: KnownPackageJsonFormatFields) =>
-                knownFormatPackageJsonFormatFields.includes(fieldName));
+            (fieldName: string) => knownFormatPackageJsonFormatFields.includes(
+                fieldName as KnownPackageJsonFormatFields));
   }
 
   /**

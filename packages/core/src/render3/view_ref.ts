@@ -6,28 +6,28 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {ChangeDetectorRef as viewEngine_ChangeDetectorRef} from '../change_detection/change_detector_ref';
+import {ChangeDetectorRef} from '../change_detection/change_detector_ref';
 import {RuntimeError, RuntimeErrorCode} from '../errors';
-import {EmbeddedViewRef as viewEngine_EmbeddedViewRef, InternalViewRef as viewEngine_InternalViewRef, ViewRefTracker} from '../linker/view_ref';
+import {EmbeddedViewRef, InternalViewRef, ViewRefTracker} from '../linker/view_ref';
 import {removeFromArray} from '../util/array_utils';
 import {assertEqual} from '../util/assert';
 
 import {collectNativeNodes} from './collect_native_nodes';
-import {checkNoChangesInternal, detectChangesInternal, markViewDirty, storeCleanupWithContext} from './instructions/shared';
+import {checkNoChangesInternal, detectChangesInternal} from './instructions/change_detection';
+import {markViewDirty} from './instructions/mark_view_dirty';
 import {CONTAINER_HEADER_OFFSET, VIEW_REFS} from './interfaces/container';
 import {isLContainer} from './interfaces/type_checks';
 import {CONTEXT, FLAGS, LView, LViewFlags, PARENT, TVIEW} from './interfaces/view';
-import {destroyLView, detachView, renderDetachView} from './node_manipulation';
-
+import {destroyLView, detachView, detachViewFromDOM} from './node_manipulation';
+import {storeLViewOnDestroy, updateAncestorTraversalFlagsOnAttach} from './util/view_utils';
 
 
 // Needed due to tsickle downleveling where multiple `implements` with classes creates
 // multiple @extends in Closure annotations, which is illegal. This workaround fixes
 // the multiple @extends by making the annotation @implements instead
-export interface viewEngine_ChangeDetectorRef_interface extends viewEngine_ChangeDetectorRef {}
+interface ChangeDetectorRefInterface extends ChangeDetectorRef {}
 
-export class ViewRef<T> implements viewEngine_EmbeddedViewRef<T>, viewEngine_InternalViewRef,
-                                   viewEngine_ChangeDetectorRef_interface {
+export class ViewRef<T> implements EmbeddedViewRef<T>, InternalViewRef, ChangeDetectorRefInterface {
   private _appRef: ViewRefTracker|null = null;
   private _attachedToViewContainer = false;
 
@@ -63,7 +63,19 @@ export class ViewRef<T> implements viewEngine_EmbeddedViewRef<T>, viewEngine_Int
     return this._lView[CONTEXT] as unknown as T;
   }
 
+  /**
+   * @deprecated Replacing the full context object is not supported. Modify the context
+   *   directly, or consider using a `Proxy` if you need to replace the full object.
+   * // TODO(devversion): Remove this.
+   */
   set context(value: T) {
+    if (ngDevMode) {
+      // Note: We have a warning message here because the `@deprecated` JSDoc will not be picked
+      // up for assignments on the setter. We want to let users know about the deprecated usage.
+      console.warn(
+          'Angular: Replacing the `context` object of an `EmbeddedViewRef` is deprecated.');
+    }
+
     this._lView[CONTEXT] = value as unknown as {};
   }
 
@@ -94,13 +106,13 @@ export class ViewRef<T> implements viewEngine_EmbeddedViewRef<T>, viewEngine_Int
   }
 
   onDestroy(callback: Function) {
-    storeCleanupWithContext(this._lView[TVIEW], this._lView, null, callback);
+    storeLViewOnDestroy(this._lView, callback as () => void);
   }
 
   /**
    * Marks a view and all of its ancestors dirty.
    *
-   * This can be used to ensure an {@link ChangeDetectionStrategy#OnPush OnPush} component is
+   * This can be used to ensure an {@link ChangeDetectionStrategy#OnPush} component is
    * checked when it needs to be re-rendered but the two normal triggers haven't marked it
    * dirty (i.e. inputs haven't changed and events haven't fired in the view).
    *
@@ -137,7 +149,7 @@ export class ViewRef<T> implements viewEngine_EmbeddedViewRef<T>, viewEngine_Int
    *
    * Detached views will not be checked during change detection runs until they are
    * re-attached, even if they are dirty. `detach` can be used in combination with
-   * {@link ChangeDetectorRef#detectChanges detectChanges} to implement local change
+   * {@link ChangeDetectorRef#detectChanges} to implement local change
    * detection checks.
    *
    * <!-- TODO: Add a link to a chapter on detach/reattach/local digest -->
@@ -193,7 +205,7 @@ export class ViewRef<T> implements viewEngine_EmbeddedViewRef<T>, viewEngine_Int
    * Re-attaches a view to the change detection tree.
    *
    * This can be used to re-attach views that were previously detached from the tree
-   * using {@link ChangeDetectorRef#detach detach}. Views are attached to the tree by default.
+   * using {@link ChangeDetectorRef#detach}. Views are attached to the tree by default.
    *
    * <!-- TODO: Add a link to a chapter on detach/reattach/local digest -->
    *
@@ -246,13 +258,14 @@ export class ViewRef<T> implements viewEngine_EmbeddedViewRef<T>, viewEngine_Int
    * ```
    */
   reattach(): void {
+    updateAncestorTraversalFlagsOnAttach(this._lView);
     this._lView[FLAGS] |= LViewFlags.Attached;
   }
 
   /**
    * Checks the view and its children.
    *
-   * This can also be used in combination with {@link ChangeDetectorRef#detach detach} to implement
+   * This can also be used in combination with {@link ChangeDetectorRef#detach} to implement
    * local change detection checks.
    *
    * <!-- TODO: Add a link to a chapter on detach/reattach/local digest -->
@@ -268,7 +281,7 @@ export class ViewRef<T> implements viewEngine_EmbeddedViewRef<T>, viewEngine_Int
    * We can do that by detaching the component's change detector and doing a local change detection
    * check every five seconds.
    *
-   * See {@link ChangeDetectorRef#detach detach} for more information.
+   * See {@link ChangeDetectorRef#detach} for more information.
    */
   detectChanges(): void {
     detectChangesInternal(this._lView[TVIEW], this._lView, this.context as unknown as {});
@@ -297,7 +310,7 @@ export class ViewRef<T> implements viewEngine_EmbeddedViewRef<T>, viewEngine_Int
 
   detachFromAppRef() {
     this._appRef = null;
-    renderDetachView(this._lView[TVIEW], this._lView);
+    detachViewFromDOM(this._lView[TVIEW], this._lView);
   }
 
   attachToAppRef(appRef: ViewRefTracker) {

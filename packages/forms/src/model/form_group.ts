@@ -6,6 +6,8 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
+import {ɵWritable as Writable} from '@angular/core';
+
 import {AsyncValidatorFn, ValidatorFn} from '../directives/validators';
 
 import {AbstractControl, AbstractControlOptions, assertAllValuesPresent, assertControlPresent, pickAsyncValidators, pickValidators, ɵRawValue, ɵTypedOrUntyped, ɵValue} from './abstract_model';
@@ -483,8 +485,9 @@ export class FormGroup<TControl extends {[K in keyof TControl]: AbstractControl<
       value: ɵTypedOrUntyped<TControl, ɵFormGroupValue<TControl>, any> = {} as unknown as
           ɵFormGroupValue<TControl>,
       options: {onlySelf?: boolean, emitEvent?: boolean} = {}): void {
-    this._forEachChild((control, name) => {
-      control.reset((value as any)[name], {onlySelf: true, emitEvent: options.emitEvent});
+    this._forEachChild((control: AbstractControl, name) => {
+      control.reset(
+          value ? (value as any)[name] : null, {onlySelf: true, emitEvent: options.emitEvent});
     });
     this._updatePristine(options);
     this._updateTouched(options);
@@ -533,7 +536,7 @@ export class FormGroup<TControl extends {[K in keyof TControl]: AbstractControl<
 
   /** @internal */
   override _updateValue(): void {
-    (this as {value: any}).value = this._reduceValue();
+    (this as Writable<this>).value = this._reduceValue() as any;
   }
 
   /** @internal */
@@ -598,7 +601,7 @@ interface UntypedFormGroupCtor {
 }
 
 /**
- * UntypedFormGroup is a non-strongly-typed version of @see FormGroup.
+ * UntypedFormGroup is a non-strongly-typed version of `FormGroup`.
  */
 export type UntypedFormGroup = FormGroup<any>;
 
