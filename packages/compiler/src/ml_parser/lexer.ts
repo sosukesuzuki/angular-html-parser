@@ -736,7 +736,6 @@ class _Tokenizer {
   }
 
   private _consumeAttributeValue() {
-    let value: string;
     if (this._cursor.peek() === chars.$SQ || this._cursor.peek() === chars.$DQ) {
       const quoteChar = this._cursor.peek();
       this._consumeQuote(quoteChar);

@@ -36,6 +36,9 @@
     "name": "AnimationGroupPlayer"
   },
   {
+    "name": "AnimationMetadataType"
+  },
+  {
     "name": "AnimationRenderer"
   },
   {
@@ -774,9 +777,6 @@
     "name": "collectNativeNodesInLContainer"
   },
   {
-    "name": "commitLViewConsumerIfHasProducers"
-  },
-  {
     "name": "computeStaticStyling"
   },
   {
@@ -843,9 +843,6 @@
     "name": "createLView"
   },
   {
-    "name": "createLViewConsumer"
-  },
-  {
     "name": "createNodeInjector"
   },
   {
@@ -885,6 +882,9 @@
     "name": "detectChangesInEmbeddedViews"
   },
   {
+    "name": "detectChangesInView"
+  },
+  {
     "name": "detectChangesInViewIfAttached"
   },
   {
@@ -892,9 +892,6 @@
   },
   {
     "name": "diPublicInInjector"
-  },
-  {
-    "name": "disableStylesheet"
   },
   {
     "name": "documentElement"
@@ -1033,9 +1030,6 @@
   },
   {
     "name": "getOrCreateComponentTView"
-  },
-  {
-    "name": "getOrCreateCurrentLViewConsumer"
   },
   {
     "name": "getOrCreateInjectable"
@@ -1332,9 +1326,6 @@
     "name": "noSideEffects"
   },
   {
-    "name": "nonNegativeNumber"
-  },
-  {
     "name": "nonNull"
   },
   {
@@ -1369,9 +1360,6 @@
   },
   {
     "name": "parseTimelineCommand"
-  },
-  {
-    "name": "parseTransitionExpr"
   },
   {
     "name": "platformBrowser"

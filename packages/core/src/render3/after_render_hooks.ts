@@ -130,6 +130,11 @@ export interface InternalAfterNextRenderOptions {
   injector?: Injector;
 }
 
+/** `AfterRenderRef` that does nothing. */
+const NOOP_AFTER_RENDER_REF: AfterRenderRef = {
+  destroy() {}
+};
+
 /**
  * Register a callback to run once before any userspace `afterRender` or
  * `afterNextRender` callbacks.
@@ -148,6 +153,11 @@ export interface InternalAfterNextRenderOptions {
 export function internalAfterNextRender(
     callback: VoidFunction, options?: InternalAfterNextRenderOptions) {
   const injector = options?.injector ?? inject(Injector);
+
+  // Similarly to the public `afterNextRender` function, an internal one
+  // is only invoked in a browser.
+  if (!isPlatformBrowser(injector)) return;
+
   const afterRenderEventManager = injector.get(AfterRenderEventManager);
   afterRenderEventManager.internalCallbacks.push(callback);
 }
@@ -211,24 +221,23 @@ export function afterRender(callback: VoidFunction, options?: AfterRenderOptions
   const injector = options?.injector ?? inject(Injector);
 
   if (!isPlatformBrowser(injector)) {
-    return {destroy() {}};
+    return NOOP_AFTER_RENDER_REF;
   }
 
-  let destroy: VoidFunction|undefined;
-  const unregisterFn = injector.get(DestroyRef).onDestroy(() => destroy?.());
+  performance.mark('mark_use_counter', {detail: {feature: 'NgAfterRender'}});
+
   const afterRenderEventManager = injector.get(AfterRenderEventManager);
   // Lazily initialize the handler implementation, if necessary. This is so that it can be
   // tree-shaken if `afterRender` and `afterNextRender` aren't used.
   const callbackHandler = afterRenderEventManager.handler ??= new AfterRenderCallbackHandlerImpl();
-  const ngZone = injector.get(NgZone);
-  const errorHandler = injector.get(ErrorHandler, null, {optional: true});
   const phase = options?.phase ?? AfterRenderPhase.MixedReadWrite;
-  const instance = new AfterRenderCallback(ngZone, errorHandler, phase, callback);
-
-  destroy = () => {
+  const destroy = () => {
     callbackHandler.unregister(instance);
     unregisterFn();
   };
+  const unregisterFn = injector.get(DestroyRef).onDestroy(destroy);
+  const instance = new AfterRenderCallback(injector, phase, callback);
+
   callbackHandler.register(instance);
   return {destroy};
 }
@@ -288,27 +297,26 @@ export function afterNextRender(
   const injector = options?.injector ?? inject(Injector);
 
   if (!isPlatformBrowser(injector)) {
-    return {destroy() {}};
+    return NOOP_AFTER_RENDER_REF;
   }
 
-  let destroy: VoidFunction|undefined;
-  const unregisterFn = injector.get(DestroyRef).onDestroy(() => destroy?.());
+  performance.mark('mark_use_counter', {detail: {feature: 'NgAfterNextRender'}});
+
   const afterRenderEventManager = injector.get(AfterRenderEventManager);
   // Lazily initialize the handler implementation, if necessary. This is so that it can be
   // tree-shaken if `afterRender` and `afterNextRender` aren't used.
   const callbackHandler = afterRenderEventManager.handler ??= new AfterRenderCallbackHandlerImpl();
-  const ngZone = injector.get(NgZone);
-  const errorHandler = injector.get(ErrorHandler, null, {optional: true});
   const phase = options?.phase ?? AfterRenderPhase.MixedReadWrite;
-  const instance = new AfterRenderCallback(ngZone, errorHandler, phase, () => {
-    destroy?.();
-    callback();
-  });
-
-  destroy = () => {
+  const destroy = () => {
     callbackHandler.unregister(instance);
     unregisterFn();
   };
+  const unregisterFn = injector.get(DestroyRef).onDestroy(destroy);
+  const instance = new AfterRenderCallback(injector, phase, () => {
+    destroy();
+    callback();
+  });
+
   callbackHandler.register(instance);
   return {destroy};
 }
@@ -317,9 +325,15 @@ export function afterNextRender(
  * A wrapper around a function to be used as an after render callback.
  */
 class AfterRenderCallback {
+  private zone: NgZone;
+  private errorHandler: ErrorHandler|null;
+
   constructor(
-      private zone: NgZone, private errorHandler: ErrorHandler|null,
-      public readonly phase: AfterRenderPhase, private callbackFn: VoidFunction) {}
+      injector: Injector, public readonly phase: AfterRenderPhase,
+      private callbackFn: VoidFunction) {
+    this.zone = injector.get(NgZone);
+    this.errorHandler = injector.get(ErrorHandler, null, {optional: true});
+  }
 
   invoke() {
     try {

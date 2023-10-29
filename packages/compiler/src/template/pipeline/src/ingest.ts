@@ -14,6 +14,7 @@ import {splitNsName} from '../../../ml_parser/tags';
 import * as o from '../../../output/output_ast';
 import {ParseSourceSpan} from '../../../parse_util';
 import * as t from '../../../render3/r3_ast';
+import {Identifiers} from '../../../render3/r3_identifiers';
 import {BindingParser} from '../../../template_parser/binding_parser';
 import * as ir from '../ir';
 
@@ -129,6 +130,10 @@ function ingestNodes(unit: ViewCompilationUnit, template: t.Node[]): void {
       ingestSwitchBlock(unit, node);
     } else if (node instanceof t.DeferredBlock) {
       ingestDeferBlock(unit, node);
+    } else if (node instanceof t.Icu) {
+      ingestIcu(unit, node);
+    } else if (node instanceof t.ForLoopBlock) {
+      ingestForBlock(unit, node);
     } else {
       throw new Error(`Unsupported template node: ${node.constructor.name}`);
     }
@@ -201,7 +206,7 @@ function ingestTemplate(unit: ViewCompilationUnit, tmpl: t.Template): void {
   ingestNodes(childView, tmpl.children);
 
   for (const {name, value} of tmpl.variables) {
-    childView.contextVariables.set(name, value);
+    childView.contextVariables.set(name, value !== '' ? value : '$implicit');
   }
 
   // If this is a plain template and there is an i18n message associated with it, insert i18n start
@@ -218,7 +223,7 @@ function ingestTemplate(unit: ViewCompilationUnit, tmpl: t.Template): void {
  * Ingest a literal text node from the AST into the given `ViewCompilation`.
  */
 function ingestContent(unit: ViewCompilationUnit, content: t.Content): void {
-  const op = ir.createProjectionOp(unit.job.allocateXrefId(), content.selector);
+  const op = ir.createProjectionOp(unit.job.allocateXrefId(), content.selector, content.sourceSpan);
   for (const attr of content.attributes) {
     ingestBinding(
         unit, op.xref, attr.name, o.literal(attr.value), e.BindingType.Attribute, null,
@@ -383,6 +388,74 @@ function ingestDeferBlock(unit: ViewCompilationUnit, deferBlock: t.DeferredBlock
   unit.create.push(deferOnOp);
 }
 
+function ingestIcu(unit: ViewCompilationUnit, icu: t.Icu) {
+  if (icu.i18n instanceof i18n.Message) {
+    const xref = unit.job.allocateXrefId();
+    unit.create.push(ir.createIcuOp(xref, icu.i18n, null!));
+    unit.update.push(ir.createIcuUpdateOp(xref, null!));
+  } else {
+    throw Error(`Unhandled i18n metadata type for ICU: ${icu.i18n?.constructor.name}`);
+  }
+}
+
+/**
+ * Ingest an `@for` block into the given `ViewCompilation`.
+ */
+function ingestForBlock(unit: ViewCompilationUnit, forBlock: t.ForLoopBlock): void {
+  const repeaterView = unit.job.allocateView(unit.xref);
+
+  const createRepeaterAlias = (ident: string, repeaterVar: ir.DerivedRepeaterVarIdentity) => {
+    repeaterView.aliases.add({
+      kind: ir.SemanticVariableKind.Alias,
+      name: null,
+      identifier: ident,
+      expression: new ir.DerivedRepeaterVarExpr(repeaterView.xref, repeaterVar),
+    });
+  };
+
+  // Set all the context variables and aliases available in the repeater.
+  repeaterView.contextVariables.set(forBlock.item.name, forBlock.item.value);
+  repeaterView.contextVariables.set(
+      forBlock.contextVariables.$index.name, forBlock.contextVariables.$index.value);
+  repeaterView.contextVariables.set(
+      forBlock.contextVariables.$count.name, forBlock.contextVariables.$count.value);
+  createRepeaterAlias(forBlock.contextVariables.$first.name, ir.DerivedRepeaterVarIdentity.First);
+  createRepeaterAlias(forBlock.contextVariables.$last.name, ir.DerivedRepeaterVarIdentity.Last);
+  createRepeaterAlias(forBlock.contextVariables.$even.name, ir.DerivedRepeaterVarIdentity.Even);
+  createRepeaterAlias(forBlock.contextVariables.$odd.name, ir.DerivedRepeaterVarIdentity.Odd);
+
+  const sourceSpan = convertSourceSpan(forBlock.trackBy.span, forBlock.sourceSpan);
+  const track = convertAst(forBlock.trackBy, unit.job, sourceSpan);
+
+  ingestNodes(repeaterView, forBlock.children);
+
+  let emptyView: ViewCompilationUnit|null = null;
+  if (forBlock.empty !== null) {
+    emptyView = unit.job.allocateView(unit.xref);
+    ingestNodes(emptyView, forBlock.empty.children);
+  }
+
+  const varNames: ir.RepeaterVarNames = {
+    $index: forBlock.contextVariables.$index.name,
+    $count: forBlock.contextVariables.$count.name,
+    $first: forBlock.contextVariables.$first.name,
+    $last: forBlock.contextVariables.$last.name,
+    $even: forBlock.contextVariables.$even.name,
+    $odd: forBlock.contextVariables.$odd.name,
+    $implicit: forBlock.item.name,
+  };
+
+  const repeaterCreate = ir.createRepeaterCreateOp(
+      repeaterView.xref, emptyView?.xref ?? null, track, varNames, forBlock.sourceSpan);
+  unit.create.push(repeaterCreate);
+
+  const expression = convertAst(
+      forBlock.expression, unit.job,
+      convertSourceSpan(forBlock.expression.span, forBlock.sourceSpan));
+  const repeater = ir.createRepeaterOp(repeaterCreate.xref, expression, forBlock.sourceSpan);
+  unit.update.push(repeater);
+}
+
 /**
  * Convert a template AST expression into an output AST expression.
  */
@@ -440,7 +513,8 @@ function convertAst(
   } else if (ast instanceof e.LiteralMap) {
     const entries = ast.keys.map((key, idx) => {
       const value = ast.values[idx];
-      // TODO: should literals have source maps, or do we just map the whole surrounding expression?
+      // TODO: should literals have source maps, or do we just map the whole surrounding
+      // expression?
       return new o.LiteralMapEntry(key.key, convertAst(value, job, baseSourceSpan), key.quoted);
     });
     return new o.LiteralMapExpr(entries, undefined, convertSourceSpan(ast.span, baseSourceSpan));

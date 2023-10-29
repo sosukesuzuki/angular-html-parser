@@ -190,10 +190,10 @@ function createOrReusePlatformInjector(providers: StaticProvider[] = []): Inject
   // is already bootstrapped and no additional actions are required.
   if (_platformInjector) return _platformInjector;
 
+  publishDefaultGlobalUtils();
   // Otherwise, setup a new platform injector and run platform initializers.
   const injector = createPlatformInjector(providers);
   _platformInjector = injector;
-  publishDefaultGlobalUtils();
   publishSignalConfiguration();
   runPlatformInitializers(injector);
   return injector;
@@ -1288,7 +1288,7 @@ export function internalProvideZoneChangeDetection(ngZoneFactory: () => NgZone):
  * `BootstrapOptions` instead.
  *
  * @usageNotes
- * ```typescript=
+ * ```typescript
  * bootstrapApplication(MyApp, {providers: [
  *   provideZoneChangeDetection({eventCoalescing: true}),
  * ]});

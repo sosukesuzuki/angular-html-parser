@@ -252,6 +252,9 @@
     "name": "EventManagerPlugin"
   },
   {
+    "name": "EventType"
+  },
+  {
     "name": "FilterOperator"
   },
   {
@@ -456,6 +459,9 @@
     "name": "NavigationCancel"
   },
   {
+    "name": "NavigationCancellationCode"
+  },
+  {
     "name": "NavigationEnd"
   },
   {
@@ -466,6 +472,9 @@
   },
   {
     "name": "NavigationSkipped"
+  },
+  {
+    "name": "NavigationSkippedCode"
   },
   {
     "name": "NavigationStart"
@@ -999,9 +1008,6 @@
     "name": "combineLatest"
   },
   {
-    "name": "commitLViewConsumerIfHasProducers"
-  },
-  {
     "name": "compare"
   },
   {
@@ -1081,9 +1087,6 @@
   },
   {
     "name": "createLView"
-  },
-  {
-    "name": "createLViewConsumer"
   },
   {
     "name": "createNewSegmentChildren"
@@ -1170,6 +1173,9 @@
     "name": "detectChangesInEmbeddedViews"
   },
   {
+    "name": "detectChangesInView"
+  },
+  {
     "name": "detectChangesInViewIfAttached"
   },
   {
@@ -1177,9 +1183,6 @@
   },
   {
     "name": "diPublicInInjector"
-  },
-  {
-    "name": "disableStylesheet"
   },
   {
     "name": "dispatch"
@@ -1264,6 +1267,9 @@
   },
   {
     "name": "first"
+  },
+  {
+    "name": "flattenRouteTree"
   },
   {
     "name": "flattenUnsubscriptionErrors"
@@ -1353,6 +1359,9 @@
     "name": "getIdxOfMatchingSelector"
   },
   {
+    "name": "getInherited"
+  },
+  {
     "name": "getInjectableDef"
   },
   {
@@ -1390,9 +1399,6 @@
   },
   {
     "name": "getOrCreateComponentTView"
-  },
-  {
-    "name": "getOrCreateCurrentLViewConsumer"
   },
   {
     "name": "getOrCreateInjectable"
@@ -1507,9 +1513,6 @@
   },
   {
     "name": "incrementInitPhaseFlags"
-  },
-  {
-    "name": "inheritedParamsDataResolve"
   },
   {
     "name": "initFeatures"
@@ -1794,9 +1797,6 @@
     "name": "nodeChildrenAsMap"
   },
   {
-    "name": "nonNegativeNumber"
-  },
-  {
     "name": "nonNull"
   },
   {
@@ -1891,6 +1891,9 @@
   },
   {
     "name": "resetPreOrderHookFlags"
+  },
+  {
+    "name": "resolveData"
   },
   {
     "name": "resolveForwardRef"

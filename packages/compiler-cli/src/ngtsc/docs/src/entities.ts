@@ -32,6 +32,12 @@ export enum MemberType {
   EnumItem = 'enum_item',
 }
 
+export enum DecoratorType {
+  Class = 'class',
+  Member = 'member',
+  Parameter = 'parameter',
+}
+
 /** Informational tags applicable to class members. */
 export enum MemberTags {
   Abstract = 'abstract',
@@ -41,6 +47,7 @@ export enum MemberTags {
   Optional = 'optional',
   Input = 'input',
   Output = 'output',
+  Inherited = 'override',
 }
 
 /** Documentation entity for single JsDoc tag. */
@@ -88,6 +95,12 @@ export type InterfaceEntry = ClassEntry;
 /** Documentation entity for a TypeScript enum. */
 export interface EnumEntry extends DocEntry {
   members: EnumMemberEntry[];
+}
+
+/** Documentation entity for an Angular decorator. */
+export interface DecoratorEntry extends DocEntry {
+  decoratorType: DecoratorType;
+  options: PropertyEntry[];
 }
 
 /** Documentation entity for an Angular directives and components. */

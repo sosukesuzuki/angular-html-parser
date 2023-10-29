@@ -699,9 +699,6 @@
     "name": "collectStylingFromTAttrs"
   },
   {
-    "name": "commitLViewConsumerIfHasProducers"
-  },
-  {
     "name": "computeStaticStyling"
   },
   {
@@ -756,9 +753,6 @@
     "name": "createLView"
   },
   {
-    "name": "createLViewConsumer"
-  },
-  {
     "name": "createNodeInjector"
   },
   {
@@ -798,6 +792,9 @@
     "name": "detectChangesInEmbeddedViews"
   },
   {
+    "name": "detectChangesInView"
+  },
+  {
     "name": "detectChangesInViewIfAttached"
   },
   {
@@ -805,9 +802,6 @@
   },
   {
     "name": "diPublicInInjector"
-  },
-  {
-    "name": "disableStylesheet"
   },
   {
     "name": "empty"
@@ -952,9 +946,6 @@
   },
   {
     "name": "getOrCreateComponentTView"
-  },
-  {
-    "name": "getOrCreateCurrentLViewConsumer"
   },
   {
     "name": "getOrCreateInjectable"
@@ -1288,9 +1279,6 @@
   },
   {
     "name": "noSideEffects"
-  },
-  {
-    "name": "nonNegativeNumber"
   },
   {
     "name": "nonNull"

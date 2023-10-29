@@ -1,3 +1,98 @@
+<a name="17.0.0-rc.1"></a>
+# 17.0.0-rc.1 (2023-10-25)
+### compiler
+| Commit | Type | Description |
+| -- | -- | -- |
+| [6795cccbbb](https://github.com/angular/angular/commit/6795cccbbbfc17bbf88fb8197aa172cca67fa2d2) | fix | account for type-only imports in defer blocks ([#52343](https://github.com/angular/angular/pull/52343)) |
+| [81c315ec6e](https://github.com/angular/angular/commit/81c315ec6ea37c55d951d3b38b6c551226173be5) | fix | template type checking not reporting diagnostics for incompatible type comparisons ([#52322](https://github.com/angular/angular/pull/52322)) |
+### core
+| Commit | Type | Description |
+| -- | -- | -- |
+| [ea6d75291f](https://github.com/angular/angular/commit/ea6d75291fbedd25c08da6397bce2d3351b595d8) | fix | emit provider configured event when a service is configured with `providedIn` ([#52365](https://github.com/angular/angular/pull/52365)) |
+| [1dd8558f82](https://github.com/angular/angular/commit/1dd8558f82aeb5f5819629d5e25b616343d27f1f) | fix | Ensure backwards-referenced transplanted views are refreshed ([#51854](https://github.com/angular/angular/pull/51854)) |
+| [957effa404](https://github.com/angular/angular/commit/957effa404aa887a5b3ebce1adc3e0739cfaa26e) | fix | get root and platform injector providers in special cases ([#52365](https://github.com/angular/angular/pull/52365)) |
+| [a803c89a21](https://github.com/angular/angular/commit/a803c89a217286dd9e16a2e14a4bb1c54ff2e329) | fix | load global utils before creating platform injector in the standalone case ([#52365](https://github.com/angular/angular/pull/52365)) |
+| [1dc14d9853](https://github.com/angular/angular/commit/1dc14d98539b9063b14c6463a534a4129b0a4643) | perf | avoid unnecessary callbacks in after render hooks ([#52292](https://github.com/angular/angular/pull/52292)) |
+### http
+| Commit | Type | Description |
+| -- | -- | -- |
+| [bd9e91ecf7](https://github.com/angular/angular/commit/bd9e91ecf7af877e4ecf08a16eda7b4e59707541) | perf | reduce data transfer when using HTTP caching ([#52347](https://github.com/angular/angular/pull/52347)) |
+### language-service
+| Commit | Type | Description |
+| -- | -- | -- |
+| [9d565cd6d6](https://github.com/angular/angular/commit/9d565cd6d682e5c86ee8d43e1ee1c0f8866eb274) | fix | Autocomplete block keywords in more cases ([#52198](https://github.com/angular/angular/pull/52198)) |
+### migrations
+| Commit | Type | Description |
+| -- | -- | -- |
+| [4c878f90d2](https://github.com/angular/angular/commit/4c878f90d2cba689703d8def9dade3b7f8f6e8f1) | fix | Add support for nested structures inside a switch statement ([#52358](https://github.com/angular/angular/pull/52358)) |
+| [54fed68bbf](https://github.com/angular/angular/commit/54fed68bbfed34a631df64ac6a32e99d2fade50a) | fix | Fixes the root level template offset in control flow migration ([#52355](https://github.com/angular/angular/pull/52355)) |
+| [54bc384661](https://github.com/angular/angular/commit/54bc384661ae7b884dbb822592e75df281aa02dd) | fix | handle nested classes in block entities migration ([#52309](https://github.com/angular/angular/pull/52309)) |
+| [c9b1ddff4d](https://github.com/angular/angular/commit/c9b1ddff4d16cca149ca2b1faae729bf454b61e5) | fix | handle nested classes in control flow migration ([#52309](https://github.com/angular/angular/pull/52309)) |
+### platform-server
+| Commit | Type | Description |
+| -- | -- | -- |
+| [0c66e2424c](https://github.com/angular/angular/commit/0c66e2424c84f92765c727a98f8d2199f4b1a809) | fix | resolve relative requests URL ([#52326](https://github.com/angular/angular/pull/52326)) |
+### router
+| Commit | Type | Description |
+| -- | -- | -- |
+| [6858149eb1](https://github.com/angular/angular/commit/6858149eb15814b0bdd460cb501de32715fe9a76) | fix | `RouterTestingHarness` should throw if a component is expected but navigation fails ([#52357](https://github.com/angular/angular/pull/52357)) |
+| [4dce8766f8](https://github.com/angular/angular/commit/4dce8766f8a3a33ffab0b3df5981ad209db42c77) | fix | Ensure newly resolved data is inherited by child routes ([#52167](https://github.com/angular/angular/pull/52167)) |
+
+<!-- CHANGELOG SPLIT MARKER -->
+
+<a name="16.2.11"></a>
+# 16.2.11 (2023-10-25)
+### core
+| Commit | Type | Description |
+| -- | -- | -- |
+| [54ea3b65c3](https://github.com/angular/angular/commit/54ea3b65c35254b220054541f2fbc52384486156) | fix | emit provider configured event when a service is configured with `providedIn` ([#52365](https://github.com/angular/angular/pull/52365)) |
+| [78533324dc](https://github.com/angular/angular/commit/78533324dcda2e884fbe489aaa6b37fa9a6fadbc) | fix | get root and platform injector providers in special cases ([#52365](https://github.com/angular/angular/pull/52365)) |
+| [019a0f4c22](https://github.com/angular/angular/commit/019a0f4c225d6bb6f741b37bf272b62899fe1f69) | fix | load global utils before creating platform injector in the standalone case ([#52365](https://github.com/angular/angular/pull/52365)) |
+### router
+| Commit | Type | Description |
+| -- | -- | -- |
+| [b79b4aca91](https://github.com/angular/angular/commit/b79b4aca914aefda1605fc8d069ac8d84283f1b3) | fix | `RouterTestingHarness` should throw if a component is expected but navigation fails ([#52357](https://github.com/angular/angular/pull/52357)) |
+
+<!-- CHANGELOG SPLIT MARKER -->
+
+<a name="17.0.0-rc.0"></a>
+# 17.0.0-rc.0 (2023-10-18)
+## Deprecations
+### core
+- NgProbeToken
+  
+  The `NgProbeToken` is not used internally since the transition from View Engine to Ivy. The token has no utility and can be removed from applications and libraries.
+### common
+| Commit | Type | Description |
+| -- | -- | -- |
+| [65b460448e](https://github.com/angular/angular/commit/65b460448ec5fdcee5aecca0cdc3cf498b0832cb) | fix | missing space in ngSwitch equality warning ([#52180](https://github.com/angular/angular/pull/52180)) |
+### compiler
+| Commit | Type | Description |
+| -- | -- | -- |
+| [073ebfe09e](https://github.com/angular/angular/commit/073ebfe09eccd5d01d27fcc46fc5d4465c1851ff) | fix | apply style on :host attributes in prod builds. ([#49118](https://github.com/angular/angular/pull/49118)) |
+| [81a287a79a](https://github.com/angular/angular/commit/81a287a79afc16d43c0fd24d7aea54be4414940a) | fix | avoid error in template parser for tag names that can occur in object prototype ([#52225](https://github.com/angular/angular/pull/52225)) |
+### core
+| Commit | Type | Description |
+| -- | -- | -- |
+| [99e7629159](https://github.com/angular/angular/commit/99e7629159afbb8550957a265c5bd75f7e13f052) | fix | do not remove used ng-template nodes in control flow migration ([#52186](https://github.com/angular/angular/pull/52186)) |
+| [ffe9b1fcc2](https://github.com/angular/angular/commit/ffe9b1fcc2ecb8dc0d36c7f9228ac1a052554eef) | fix | handle for alias with as in control flow migration ([#52183](https://github.com/angular/angular/pull/52183)) |
+| [e5720edb46](https://github.com/angular/angular/commit/e5720edb460a1bb51475c78d3bd442da52991a46) | fix | handle if alias in control flow migration ([#52181](https://github.com/angular/angular/pull/52181)) |
+| [8e4a7ab52b](https://github.com/angular/angular/commit/8e4a7ab52bc85172efd12e42304e1b8da446ff75) | perf | avoid repeated access to LContainer and trackBy calculation ([#52227](https://github.com/angular/angular/pull/52227)) |
+| [1032c1e1a5](https://github.com/angular/angular/commit/1032c1e1a5f5de28f38ede1786cf973f8e8b7a53) | perf | cache LiveCollectionLContainerImpl ([#52227](https://github.com/angular/angular/pull/52227)) |
+| [37d627dbd4](https://github.com/angular/angular/commit/37d627dbd4083662b103de2e28102e6ff31a9192) | perf | minimze trackBy calculations ([#52227](https://github.com/angular/angular/pull/52227)) |
+| [ba9fc2419e](https://github.com/angular/angular/commit/ba9fc2419eee0d72c573463016a872a4b69f71c1) | refactor | deprecate the `NgProbeToken` ([#51396](https://github.com/angular/angular/pull/51396)) |
+### platform-browser
+| Commit | Type | Description |
+| -- | -- | -- |
+| [c9cde3ab10](https://github.com/angular/angular/commit/c9cde3ab103699bc3f941d8176ee0b0373fcf7e0) | perf | only append style element on creation ([#52237](https://github.com/angular/angular/pull/52237)) |
+
+<!-- CHANGELOG SPLIT MARKER -->
+
+<a name="16.2.10"></a>
+# 16.2.10 (2023-10-18)
+
+<!-- CHANGELOG SPLIT MARKER -->
+
 <a name="17.0.0-next.8"></a>
 # 17.0.0-next.8 (2023-10-11)
 ## Breaking Changes

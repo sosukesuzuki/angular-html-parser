@@ -6,14 +6,14 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {Expression, LiteralExpr, R3DependencyMetadata, ReadPropExpr, WrappedNodeExpr} from '@angular/compiler';
+import {Expression, LiteralExpr, R3DependencyMetadata, WrappedNodeExpr} from '@angular/compiler';
 import ts from 'typescript';
 
 import {ErrorCode, FatalDiagnosticError, makeRelatedInformation} from '../../../diagnostics';
 import {ClassDeclaration, CtorParameter, ReflectionHost, TypeValueReferenceKind, UnavailableValue, ValueUnavailableKind,} from '../../../reflection';
-import {CompilationMode} from '../../../transform';
 
 import {isAngularCore, valueReferenceToExpression} from './util';
+
 
 export type ConstructorDeps = {
   deps: R3DependencyMetadata[];
@@ -29,8 +29,7 @@ export interface ConstructorDepError {
 }
 
 export function getConstructorDependencies(
-    clazz: ClassDeclaration, reflector: ReflectionHost, isCore: boolean,
-    compilationMode: CompilationMode): ConstructorDeps|null {
+    clazz: ClassDeclaration, reflector: ReflectionHost, isCore: boolean): ConstructorDeps|null {
   const deps: R3DependencyMetadata[] = [];
   const errors: ConstructorDepError[] = [];
   let ctorParams = reflector.getConstructorParameters(clazz);
@@ -42,28 +41,7 @@ export function getConstructorDependencies(
     }
   }
   ctorParams.forEach((param, idx) => {
-    let token: Expression|null = null;
-
-    if (compilationMode === CompilationMode.LOCAL &&
-        param.typeValueReference.kind === TypeValueReferenceKind.UNAVAILABLE &&
-        param.typeValueReference.reason.kind !== ValueUnavailableKind.MISSING_TYPE) {
-      // The case of local compilation where injection token cannot be resolved because it is
-      // "probably" imported from another file
-
-      const typeNode = param.typeValueReference.reason.typeNode;
-
-      if (ts.isTypeReferenceNode(typeNode)) {
-        // Here we manually create the token out of the typeName without caring about its
-        // references for better TS tracking. This is because in this code path the typeNode is
-        // imported from another file and since we are in local compilation mode (=single file
-        // mode) the reference of this node (or its typeName node) cannot be resolved. So all we
-        // can do is just to create a new expression.
-        token = toQualifiedExpression(typeNode.typeName);
-      }
-    } else {
-      // In all other cases resolve the injection token
-      token = valueReferenceToExpression(param.typeValueReference);
-    }
+    let token = valueReferenceToExpression(param.typeValueReference);
 
     let attributeNameType: Expression|null = null;
     let optional = false, self = false, skipSelf = false, host = false;
@@ -119,20 +97,12 @@ export function getConstructorDependencies(
       deps.push({token, attributeNameType, optional, self, skipSelf, host});
     }
   });
+
   if (errors.length === 0) {
     return {deps};
   } else {
     return {deps: null, errors};
   }
-}
-
-/** Converts a TS qualified name to output expression. */
-function toQualifiedExpression(entity: ts.EntityName): Expression {
-  if (ts.isIdentifier(entity)) {
-    return new WrappedNodeExpr(entity);
-  }
-
-  return new ReadPropExpr(toQualifiedExpression(entity.left), entity.right.text);
 }
 
 /**
@@ -155,10 +125,10 @@ export function unwrapConstructorDependencies(deps: ConstructorDeps|null): R3Dep
 }
 
 export function getValidConstructorDependencies(
-    clazz: ClassDeclaration, reflector: ReflectionHost, isCore: boolean,
-    compilationMode: CompilationMode): R3DependencyMetadata[]|null {
+    clazz: ClassDeclaration, reflector: ReflectionHost, isCore: boolean): R3DependencyMetadata[]|
+    null {
   return validateConstructorDependencies(
-      clazz, getConstructorDependencies(clazz, reflector, isCore, compilationMode));
+      clazz, getConstructorDependencies(clazz, reflector, isCore));
 }
 
 /**

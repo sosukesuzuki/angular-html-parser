@@ -16,9 +16,8 @@ import {RuntimeErrorCode} from './errors';
  * @see {@link HydrationFeature}
  *
  * @publicApi
- * @developerPreview
  */
-export const enum HydrationFeatureKind {
+export enum HydrationFeatureKind {
   NoHttpTransferCache,
   HttpTransferCacheOptions,
 }
@@ -27,7 +26,6 @@ export const enum HydrationFeatureKind {
  * Helper type to represent a Hydration feature.
  *
  * @publicApi
- * @developerPreview
  */
 export interface HydrationFeature<FeatureKind extends HydrationFeatureKind> {
   ɵkind: FeatureKind;
@@ -48,7 +46,6 @@ function hydrationFeature<FeatureKind extends HydrationFeatureKind>(
  * server and other one on the browser.
  *
  * @publicApi
- * @developerPreview
  */
 export function withNoHttpTransferCache():
     HydrationFeature<HydrationFeatureKind.NoHttpTransferCache> {
@@ -64,7 +61,6 @@ export function withNoHttpTransferCache():
  * particular request should be cached.
  *
  * @publicApi
- * @developerPreview
  */
 export function withHttpTransferCacheOptions(
     options: HttpTransferCacheOptions,
@@ -110,7 +106,7 @@ function provideZoneJsCompatibilityDetector(): Provider[] {
  * * Reconciling DOM hydration. Learn more about it [here](guide/hydration).
  * * [`HttpClient`](api/common/http/HttpClient) response caching while running on the server and
  * transferring this cache to the client to avoid extra HTTP requests. Learn more about data caching
- * [here](/guide/universal#caching-data-when-using-httpclient).
+ * [here](/guide/ssr#caching-data-when-using-httpclient).
  *
  * These functions allow you to disable some of the default features or configure features
  * * {@link withNoHttpTransferCache} to disable HTTP transfer cache
@@ -144,7 +140,6 @@ function provideZoneJsCompatibilityDetector(): Provider[] {
  * @returns A set of providers to enable hydration.
  *
  * @publicApi
- * @developerPreview
  */
 export function provideClientHydration(...features: HydrationFeature<HydrationFeatureKind>[]):
     EnvironmentProviders {

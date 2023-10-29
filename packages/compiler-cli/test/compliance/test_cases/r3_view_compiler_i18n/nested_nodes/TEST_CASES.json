@@ -168,6 +168,13 @@
       ],
       "expectations": [
         {
+          "files": [
+            {
+              "generated": "nested_templates.js",
+              "expected": "nested_templates.template.js",
+              "templatePipelineExpected": "nested_templates.pipeline.js"
+            }
+          ],
           "extraChecks": [
             "verifyPlaceholdersIntegrity",
             "verifyUniqueConsts"
@@ -213,6 +220,13 @@
       ],
       "expectations": [
         {
+          "files": [
+            {
+              "generated": "directives.js",
+              "expected": "directives.template.js",
+              "templatePipelineExpected": "directives.pipeline.js"
+            }
+          ],
           "extraChecks": [
             "verifyPlaceholdersIntegrity",
             "verifyUniqueConsts"

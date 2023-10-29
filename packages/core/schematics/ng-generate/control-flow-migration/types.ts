@@ -9,18 +9,27 @@
 import {Attribute, Element, RecursiveVisitor} from '@angular/compiler';
 
 export const ngif = '*ngIf';
+export const boundngif = '[ngIf]';
+export const nakedngif = 'ngIf';
 export const ngfor = '*ngFor';
 export const ngswitch = '[ngSwitch]';
+export const boundcase = '[ngSwitchCase]';
+export const switchcase = '*ngSwitchCase';
+export const nakedcase = 'ngSwitchCase';
+export const switchdefault = '*ngSwitchDefault';
+export const nakeddefault = 'ngSwitchDefault';
 
 const attributesToMigrate = [
   ngif,
+  nakedngif,
+  boundngif,
   ngfor,
   ngswitch,
-];
-
-const casesToMigrate = [
-  '*ngSwitchCase',
-  '*ngSwitchDefault',
+  boundcase,
+  switchcase,
+  nakedcase,
+  switchdefault,
+  nakeddefault,
 ];
 
 /**
@@ -28,6 +37,16 @@ const casesToMigrate = [
  * means that it's until the end of the file.
  */
 type Range = [start: number, end?: number];
+
+export type Offsets = {
+  pre: number,
+  post: number,
+};
+
+export type Result = {
+  tmpl: string,
+  offsets: Offsets,
+};
 
 /**
  * Represents an error that happened during migration
@@ -44,6 +63,7 @@ export class ElementToMigrate {
   el: Element;
   attr: Attribute;
   nestCount = 0;
+  hasLineBreaks = false;
 
   constructor(el: Element, attr: Attribute) {
     this.el = el;
@@ -65,31 +85,15 @@ export class ElementToMigrate {
   }
 
   start(offset: number): number {
-    return this.el.sourceSpan?.start.offset - this.nestCount - offset;
+    return this.el.sourceSpan?.start.offset - offset;
   }
 
   end(offset: number): number {
-    return this.el.sourceSpan?.end.offset - this.nestCount - offset;
+    return this.el.sourceSpan?.end.offset - offset;
   }
 
   length(): number {
     return this.el.sourceSpan?.end.offset - this.el.sourceSpan?.start.offset;
-  }
-
-  openLength(): number {
-    return this.el.children[0]?.sourceSpan.start.offset - this.el.sourceSpan?.start.offset;
-  }
-
-  closeLength(): number {
-    return this.el.sourceSpan?.end.offset - this.el.children[0]?.sourceSpan.end.offset;
-  }
-
-  preOffset(newOffset: number): number {
-    return newOffset - this.openLength() + 1;
-  }
-
-  postOffset(newOffset: number): number {
-    return newOffset - this.closeLength();
   }
 }
 
@@ -98,6 +102,7 @@ export class Template {
   count: number = 0;
   contents: string = '';
   children: string = '';
+  used: boolean = false;
 
   constructor(el: Element) {
     this.el = el;
@@ -167,22 +172,6 @@ export class ElementCollector extends RecursiveVisitor {
         }
       }
     }
-    super.visitElement(el, null);
-  }
-}
-
-export class CaseCollector extends RecursiveVisitor {
-  readonly elements: ElementToMigrate[] = [];
-
-  override visitElement(el: Element): void {
-    if (el.attrs.length > 0) {
-      for (const attr of el.attrs) {
-        if (casesToMigrate.includes(attr.name)) {
-          this.elements.push(new ElementToMigrate(el, attr));
-        }
-      }
-    }
-
     super.visitElement(el, null);
   }
 }

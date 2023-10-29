@@ -33,6 +33,9 @@
     "name": "BLOOM_MASK"
   },
   {
+    "name": "BODY"
+  },
+  {
     "name": "BROWSER_MODULE_PROVIDERS"
   },
   {
@@ -141,9 +144,6 @@
     "name": "EMPTY_PAYLOAD"
   },
   {
-    "name": "ENABLED_SSR_FEATURES"
-  },
-  {
     "name": "ENVIRONMENT_INITIALIZER"
   },
   {
@@ -192,6 +192,9 @@
     "name": "HAS_TRANSPLANTED_VIEWS"
   },
   {
+    "name": "HEADERS"
+  },
+  {
     "name": "HTTP_ROOT_INTERCEPTOR_FNS"
   },
   {
@@ -205,6 +208,12 @@
   },
   {
     "name": "HttpResponseBase"
+  },
+  {
+    "name": "HttpStatusCode"
+  },
+  {
+    "name": "HydrationFeatureKind"
   },
   {
     "name": "INJECTOR2"
@@ -402,6 +411,9 @@
     "name": "REMOVE_STYLES_ON_COMPONENT_DESTROY"
   },
   {
+    "name": "RESPONSE_TYPE"
+  },
+  {
     "name": "RefCountOperator"
   },
   {
@@ -424,6 +436,15 @@
   },
   {
     "name": "SKIP_HYDRATION_ATTR_NAME"
+  },
+  {
+    "name": "SKIP_HYDRATION_ATTR_NAME_LOWER_CASE"
+  },
+  {
+    "name": "STATUS"
+  },
+  {
+    "name": "STATUS_TEXT"
   },
   {
     "name": "SafeSubscriber"
@@ -499,6 +520,9 @@
   },
   {
     "name": "TransferState"
+  },
+  {
+    "name": "URL2"
   },
   {
     "name": "USE_VALUE"
@@ -645,9 +669,6 @@
     "name": "collectNativeNodesInLContainer"
   },
   {
-    "name": "commitLViewConsumerIfHasProducers"
-  },
-  {
     "name": "concatStringsWithSpace"
   },
   {
@@ -690,9 +711,6 @@
     "name": "createLView"
   },
   {
-    "name": "createLViewConsumer"
-  },
-  {
     "name": "createNodeInjector"
   },
   {
@@ -726,6 +744,9 @@
     "name": "detectChangesInEmbeddedViews"
   },
   {
+    "name": "detectChangesInView"
+  },
+  {
     "name": "detectChangesInViewIfAttached"
   },
   {
@@ -733,9 +754,6 @@
   },
   {
     "name": "diPublicInInjector"
-  },
-  {
-    "name": "disableStylesheet"
   },
   {
     "name": "empty"
@@ -865,9 +883,6 @@
   },
   {
     "name": "getNullInjector"
-  },
-  {
-    "name": "getOrCreateCurrentLViewConsumer"
   },
   {
     "name": "getOrCreateInjectable"
@@ -1141,9 +1156,6 @@
   },
   {
     "name": "ngZoneApplicationErrorHandlerFactory"
-  },
-  {
-    "name": "nonNegativeNumber"
   },
   {
     "name": "nonNull"

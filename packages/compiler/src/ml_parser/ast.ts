@@ -142,6 +142,25 @@ export class BlockParameter implements BaseNode {
   readonly endSourceSpan: null = null;
 }
 
+export class Block implements BaseNode {
+  constructor(
+      public name: string, public parameters: BlockParameter[], public children: Node[],
+      public sourceSpan: ParseSourceSpan, public nameSpan: ParseSourceSpan,
+      public startSourceSpan: ParseSourceSpan, public endSourceSpan: ParseSourceSpan|null = null) {}
+
+  visit(visitor: Visitor, context: any) {
+    return visitor.visitBlock(this, context);
+  }
+}
+
+export class BlockParameter implements BaseNode {
+  constructor(public expression: string, public sourceSpan: ParseSourceSpan) {}
+
+  visit(visitor: Visitor, context: any): any {
+    return visitor.visitBlockParameter(this, context);
+  }
+}
+
 export interface Visitor {
   // Returning a truthy value from `visit()` will prevent `visitAll()` from the call to the typed
   // method and result returned will become the result included in `visitAll()`s result array.

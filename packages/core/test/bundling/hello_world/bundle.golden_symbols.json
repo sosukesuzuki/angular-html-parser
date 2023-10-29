@@ -450,9 +450,6 @@
     "name": "collectNativeNodesInLContainer"
   },
   {
-    "name": "commitLViewConsumerIfHasProducers"
-  },
-  {
     "name": "concatStringsWithSpace"
   },
   {
@@ -495,9 +492,6 @@
     "name": "createLView"
   },
   {
-    "name": "createLViewConsumer"
-  },
-  {
     "name": "createNodeInjector"
   },
   {
@@ -526,6 +520,9 @@
   },
   {
     "name": "detectChangesInEmbeddedViews"
+  },
+  {
+    "name": "detectChangesInView"
   },
   {
     "name": "detectChangesInViewIfAttached"
@@ -634,9 +631,6 @@
   },
   {
     "name": "getNullInjector"
-  },
-  {
-    "name": "getOrCreateCurrentLViewConsumer"
   },
   {
     "name": "getOrCreateInjectable"
