@@ -77,8 +77,7 @@
           ],
           "failureMessage": "Incorrect factory"
         }
-      ],
-      "skipForTemplatePipeline": true
+      ]
     },
     {
       "description": "should chain multiple listeners on the same element",
@@ -299,8 +298,7 @@
           ],
           "failureMessage": "Incorrect template"
         }
-      ],
-      "skipForTemplatePipeline": true
+      ]
     }
   ]
 }
